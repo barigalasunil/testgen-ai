@@ -7,7 +7,7 @@ export async function POST(req: Request) {
         console.log("PROMPT:", prompt);
         console.log("MODEL:", model);
 
-        const ollamaRes = await fetch("http://localhost:11434/api/generate", {
+        const ollamaRes = await fetch("http://127.0.0.1:11434/api/generate", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -38,8 +38,9 @@ export async function POST(req: Request) {
     } catch (error) {
         console.error("API ERROR:", error);
 
+        const errorMessage = error instanceof Error ? error.message : String(error);
         return NextResponse.json({
-            result: "API ERROR",
+            result: `API ERROR: ${errorMessage}. Ensure Ollama is running and the model is downloaded.`,
         });
     }
 }
