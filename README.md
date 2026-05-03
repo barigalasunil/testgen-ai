@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
+  <img src="https://img.shields.io/badge/Status-Active-success.svg" alt="Status" />
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" />
+</div>
 
-## Getting Started
+<h1 align="center">testGen-AI</h1>
 
-First, run the development server:
+<p align="center">
+  <strong>The open-source, local-first Test Case generator running natively on your machine.</strong>
+</p>
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🌟 Overview
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**testGen-AI** is a lightning-fast, highly intuitive AI application modeled to flawlessly replicate the fluid and responsive ChatGPT interface. It empowers software Quality Assurance teams and project managers by automatically digesting standard product prompts—or Jira tickets—and instantly generating rigorously formatted test cases that align with enterprise industry standards.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Driven entirely by a **Local Large Language Model (LLM)** via Ollama, **testGen-AI** guarantees absolute privacy: zero proprietary code, trade secrets, or client data is ever transmitted out of your localized environment.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## ✨ Core Capabilities
 
-To learn more about Next.js, take a look at the following resources:
+### 🔒 100% Local & Secure Data Processing
+Your data stays entirely invisible to the cloud. Utilizing localized models like `phi3:mini`, generations complete natively on your own hardware ensuring zero telemetry, zero subscription fees, and complete offline efficiency. 
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 🎨 Stunning, Fluid ChatGPT-Inspired Interface
+Crafted with extreme attention to detail using TailwindCSS v4 and Framer Motion, it features a fluid, distraction-free environment:
+* **Intuitive Side Navigation:** Familiar "New Chat" logic mapped securely against persistent memory threading. 
+* **Dynamic Content Regeneration:** Seamlessly fetch alternative outputs from the Local LLM in-place without ruining your current chat flow thread.
+* **Micro-Interactions:** From fluidly expanding input areas to custom scaled Jira modal overlays and conversational context switching.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 📋 Enterprise-Grade Excel Exports
+Engineered precisely for production pipelines. Outputs natively guard against typical LLM 'hallucinations', ensuring generated responses strictly output:
+`ID -> Title -> Description -> Steps -> Expected Result -> Priority`
+With one click, flawlessly parse entire suites directly into a standard `.xlsx` workbook—entirely skipping painful copy-pasting processes.
 
-## Deploy on Vercel
+### 🔗 Deep Jira Integrations 
+Tired of typing endless context? The dynamic native toolbar allows you to map your unique Atlassian domain, Jira email, and API Token securely inside local settings. Simply toggle the standard "Jira URL" mode, securely paste a complex ticket, and watch standard test cases stream out!
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 💡 RAG Feedback Telemetry
+Testing frameworks require iterations. Integrated "RAG Helpful" components allow contextual local tagging of generated responses, dynamically enabling local iteration tracking natively within the web client.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 🛠️ Architecture Stack
+
+**testGen-AI** relies on a lightweight internal architecture stacked together strictly for velocity and responsiveness:
+
+- **Frontend Environment**: Next.js 16 (App Router + Turbopack)
+- **Typing Ecosystem**: TypeScript
+- **Styling Architecture**: TailwindCSS v4 + Radix-UI Base
+- **Animation Engine**: Framer Motion
+- **Dataset Manipulation**: SheetJS (`xlsx`)
+- **Intelligence Core**: Local Ollama Ecosystem (w/ dynamic multi-model fetching)
+- **Session Layer**: Synchronized Browser `localStorage` History mapping
+
+---
+
+> _"Zero cloud bills, complete workflow isolation, rapid test engineering."_
