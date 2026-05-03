@@ -11,7 +11,7 @@ export function AI_Prompt() {
 
     const handleSend = async () => {
         if (!value.trim()) return;
-        
+
         console.log("SEND CLICKED");
         console.log("CALLING API...");
 
@@ -41,13 +41,13 @@ export function AI_Prompt() {
 
     return (
         <div className="w-full max-w-3xl mx-auto flex flex-col gap-6">
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="relative group rounded-3xl bg-card border border-border overflow-hidden shadow-2xl hover:shadow-primary/20 transition-all duration-500 hover:-translate-y-1"
             >
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-xl" />
-                
+
                 <div className="relative flex flex-col p-3">
                     <textarea
                         value={value}
@@ -61,7 +61,7 @@ export function AI_Prompt() {
                             <Sparkles className="w-5 h-5 text-primary animate-pulse" />
                             <span className="hidden sm:inline">Powered by local AI</span>
                         </div>
-                        
+
                         <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
