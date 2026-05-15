@@ -2,18 +2,28 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Menu, X, Plus, Bot, Download, Copy, User, Settings, ChevronDown, Link as LinkIcon, RefreshCw, ThumbsUp, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Send, Menu, X, Plus, Bot, Download, Copy, User, Settings, ChevronDown, Link as LinkIcon, RefreshCw, ThumbsUp, MoreHorizontal, Pencil, Trash, Zap, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+
+// --- Generation Status ---
+type GenerationStatus = "idle" | "sending" | "model_running" | "parsing" | "done" | "error";
+
+const STATUS_CONFIG: Record<GenerationStatus, { label: string; icon: React.ReactNode; color: string }> = {
+    idle:          { label: "Ready",              icon: null,                                                             color: "text-gray-400" },
+    sending:       { label: "Sending prompt…",    icon: <Send className="w-3.5 h-3.5" />,                                color: "text-blue-500" },
+    model_running: { label: "Model thinking…",   icon: <Loader2 className="w-3.5 h-3.5 animate-spin" />,               color: "text-amber-500" },
+    parsing:       { label: "Structuring data…",  icon: <Zap className="w-3.5 h-3.5 animate-pulse" />,                  color: "text-purple-500" },
+    done:          { label: "Done",               icon: <CheckCircle2 className="w-3.5 h-3.5" />,                       color: "text-green-600" },
+    error:         { label: "Failed",             icon: <AlertCircle className="w-3.5 h-3.5" />,                        color: "text-red-500" },
+};
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
 
 // --- Types ---
 type TestCase = {
     id: string;
-    title: string;
-    description?: string;
+    summary: string;
     steps: string;
     expectedResult: string;
-    priority?: string;
 };
 
 type HistoryItem = {
@@ -134,21 +144,19 @@ function TestCaseTable({ data, onCopy, onDownload, onRegenerate }: any) {
                 <table className="w-full text-left text-sm text-gray-800">
                     <thead className="bg-gray-50 text-gray-600">
                         <tr>
-                            <th className="p-3 border-b border-gray-200 font-semibold">ID</th>
-                            <th className="p-3 border-b border-gray-200 font-semibold">Title</th>
-                            <th className="p-3 border-b border-gray-200 font-semibold min-w-[200px]">Steps</th>
+                            <th className="p-3 border-b border-gray-200 font-semibold w-[140px]">Test Case ID</th>
+                            <th className="p-3 border-b border-gray-200 font-semibold min-w-[180px]">Summary</th>
+                            <th className="p-3 border-b border-gray-200 font-semibold min-w-[240px]">Steps to Reproduce</th>
                             <th className="p-3 border-b border-gray-200 font-semibold min-w-[200px]">Expected Result</th>
-                            <th className="p-3 border-b border-gray-200 font-semibold">Priority</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white">
                         {data.testCases.map((tc: any, i: number) => (
                             <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 transition-colors align-top">
-                                <td className="p-3 whitespace-nowrap text-gray-500">{tc.id}</td>
-                                <td className="p-3 font-semibold text-gray-800">{tc.title}</td>
-                                <td className="p-3 whitespace-pre-wrap leading-relaxed text-gray-700">{tc.steps}</td>
-                                <td className="p-3 whitespace-pre-wrap leading-relaxed text-gray-700">{tc.expectedResult}</td>
-                                <td className="p-3 text-gray-500">{tc.priority || "-"}</td>
+                                <td className="p-3 whitespace-nowrap font-mono text-xs text-gray-500">{tc.id}</td>
+                                <td className="p-3 font-semibold text-gray-800">{tc.summary}</td>
+                                <td className="p-3 whitespace-pre-wrap leading-relaxed text-gray-700 text-sm">{tc.steps}</td>
+                                <td className="p-3 whitespace-pre-wrap leading-relaxed text-gray-700 text-sm">{tc.expectedResult}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -158,7 +166,24 @@ function TestCaseTable({ data, onCopy, onDownload, onRegenerate }: any) {
     );
 }
 
-function ChatMessage({ role, content, isTable, tableData, onCopy, onDownload, onRegenerate, isLoading }: any) {
+function StatusBadge({ status }: { status: GenerationStatus }) {
+    const cfg = STATUS_CONFIG[status];
+    return (
+        <motion.div
+            key={status}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2 }}
+            className={`flex items-center gap-2 text-[13px] font-medium ${cfg.color}`}
+        >
+            {cfg.icon}
+            <span>{cfg.label}</span>
+        </motion.div>
+    );
+}
+
+function ChatMessage({ role, content, isTable, tableData, onCopy, onDownload, onRegenerate, isLoading, generationStatus }: any) {
     const isAssistant = role === "assistant";
     return (
         <div className={cn("w-full py-6 text-gray-800 border-b border-gray-100", isAssistant ? "bg-[#f7f7f8]" : "bg-white")}>
@@ -176,10 +201,15 @@ function ChatMessage({ role, content, isTable, tableData, onCopy, onDownload, on
                 </div>
                 <div className="flex-1 overflow-hidden min-w-0 flex flex-col justify-start min-h-[30px]">
                     {isLoading ? (
-                        <div className="flex items-center gap-1.5 h-7">
-                            <div className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />
-                            <div className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" style={{ animationDelay: "150ms" }} />
-                            <div className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" style={{ animationDelay: "300ms" }} />
+                        <div className="flex flex-col gap-2">
+                            <AnimatePresence mode="wait">
+                                <StatusBadge status={generationStatus || "sending"} />
+                            </AnimatePresence>
+                            <div className="flex items-center gap-1.5 mt-1">
+                                <div className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "0ms" }} />
+                                <div className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "150ms" }} />
+                                <div className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "300ms" }} />
+                            </div>
                         </div>
                     ) : isTable ? (
                         <TestCaseTable data={tableData} onCopy={onCopy} onDownload={onDownload} onRegenerate={onRegenerate} />
@@ -192,7 +222,7 @@ function ChatMessage({ role, content, isTable, tableData, onCopy, onDownload, on
     );
 }
 
-function InputBox({ value, onChange, onSend, disabled, inputRef, models, selectedModel, setSelectedModel, isJiraMode, setIsJiraMode }: any) {
+function InputBox({ value, onChange, onSend, disabled, inputRef, models, selectedModel, setSelectedModel, isJiraMode, setIsJiraMode, jiraId, setJiraId }: any) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
     const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -209,7 +239,8 @@ function InputBox({ value, onChange, onSend, disabled, inputRef, models, selecte
                 
                 {/* Toolbar */}
                 <div className="flex justify-between items-center px-1 mb-1">
-                   {/* Model Selector */}
+                   {/* Model Selector + Jira ID */}
+                   <div className="flex items-center gap-2">
                    <div className="relative">
                        <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm transition-colors font-medium">
                            <Bot className="w-4 h-4 text-[#10A37F]" />
@@ -230,6 +261,19 @@ function InputBox({ value, onChange, onSend, disabled, inputRef, models, selecte
                                </motion.div>
                            )}
                        </AnimatePresence>
+                   </div>
+                   {/* Jira ID Input */}
+                   <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-full shadow-sm px-3 py-1.5">
+                       <LinkIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                       <input
+                           type="text"
+                           value={jiraId}
+                           onChange={(e) => setJiraId(e.target.value.toUpperCase())}
+                           placeholder="JIRA-ID"
+                           className="text-sm font-mono font-medium text-gray-700 placeholder-gray-400 bg-transparent outline-none w-[96px]"
+                           spellCheck={false}
+                       />
+                   </div>
                    </div>
 
                    {/* Jira Toggle */}
@@ -289,6 +333,8 @@ export function MainApp() {
     const [models, setModels] = useState<string[]>([]);
     const [selectedModel, setSelectedModel] = useState("phi3:mini");
     const [isJiraMode, setIsJiraMode] = useState(false);
+    const [jiraId, setJiraId] = useState("");
+    const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("idle");
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -311,10 +357,13 @@ export function MainApp() {
             .then(data => {
                 if (data.models && data.models.length > 0) {
                     setModels(data.models);
+                    console.log("[testgen][INFO] Models loaded:", data.models);
                     if (!data.models.includes(selectedModel)) setSelectedModel(data.models[0]);
+                } else {
+                    console.warn("[testgen][WARN] No models returned from Ollama. Is it running?");
                 }
             })
-            .catch(err => console.error("Failed to fetch models", err));
+            .catch(err => console.error("[testgen][ERROR] Failed to fetch models:", err));
     }, []);
 
     const scrollToBottom = () => {
@@ -337,9 +386,13 @@ export function MainApp() {
 
         const currentPrompt = textToSubmit;
         setGeneratingPrompt(currentPrompt);
+        setGenerationStatus("sending");
         setLoading(true);
         setValue("");
         if (textareaRef.current) textareaRef.current.style.height = "52px";
+
+        console.group("%c[testgen] Generation Started", "color:#3b82f6;font-weight:bold");
+        console.log("%c[1/4] SENDING   ", "color:#3b82f6;font-weight:bold", "→ Prompt dispatched | model:", selectedModel, "| jiraId:", jiraId || "(none)", "| chars:", currentPrompt.length, "| regenerate:", isRegenerate);
 
         let targetId = Date.now().toString();
 
@@ -351,12 +404,24 @@ export function MainApp() {
         }
 
         try {
+            setGenerationStatus("model_running");
+            console.log("%c[2/4] MODEL RUNNING", "color:#f59e0b;font-weight:bold", "→ Waiting for Ollama response... (this may take a while)");
             const res = await fetch("/api/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: currentPrompt, model: selectedModel }),
+                body: JSON.stringify({ prompt: currentPrompt, model: selectedModel, jiraId }),
             });
+            console.log("%c[3/4] PARSING   ", "color:#a855f7;font-weight:bold", "→ Response received | HTTP status:", res.status, "| Parsing JSON...");
+            setGenerationStatus("parsing");
             const data = await res.json();
+
+            if (data.error) {
+                setGenerationStatus("error");
+                console.error("%c[4/4] ERROR     ", "color:#ef4444;font-weight:bold", "→ Backend returned error:", data.result);
+            } else {
+                setGenerationStatus("done");
+                console.log("%c[4/4] DONE      ", "color:#22c55e;font-weight:bold", "→ Generated", data.result?.testCases?.length ?? 0, "test case rows.");
+            }
 
             setHistory(prev => {
                 let newHistory;
@@ -369,7 +434,9 @@ export function MainApp() {
                 return newHistory;
             });
         } catch (error) {
+            setGenerationStatus("error");
             const msg = "Network Error: " + (error as Error).message;
+            console.error("%c[4/4] FAILED    ", "color:#ef4444;font-weight:bold", "→ Network/connection error:", (error as Error).message);
             setHistory(prev => {
                 let newHistory;
                 if (isRegenerate && activeId) {
@@ -382,6 +449,7 @@ export function MainApp() {
             });
         } finally {
             setLoading(false);
+            console.groupEnd();
         }
     };
 
@@ -422,29 +490,29 @@ export function MainApp() {
     // Helpers
     const copyTableData = () => {
         if (!currentThread?.result) return;
-        const text = currentThread.result.testCases.map(tc => 
-            `ID: ${tc.id}\nTitle: ${tc.title}\nSteps: ${tc.steps}\nExpected: ${tc.expectedResult}\nPriority: ${tc.priority || "N/A"}`
-        ).join("\n\n---\n\n");
+        const text = currentThread.result.testCases.map((tc: any) => 
+            `${tc.id}\nSummary: ${tc.summary}\n\nSteps:\n${tc.steps}\n\nExpected Result:\n${tc.expectedResult}`
+        ).join("\n\n" + "─".repeat(60) + "\n\n");
         navigator.clipboard.writeText(text);
     };
 
     const downloadExcelData = () => {
         if (!currentThread?.result?.testCases) return;
-        
-        // Strictly map to prevent hallucinated arbitrary keys from ruining Excel columns
+        const effectiveJiraId = jiraId.trim() || "testcases";
         const strictData = currentThread.result.testCases.map((tc: any) => ({
-             "ID": tc.id || "",
-             "Title": tc.title || "",
-             "Description": tc.description || "",
-             "Steps": tc.steps || "",
-             "Expected Result": tc.expectedResult || "",
-             "Priority": tc.priority || ""
+             "Test Case ID":     tc.id            || "",
+             "Summary":          tc.summary       || "",
+             "Steps to Reproduce": tc.steps       || "",
+             "Expected Result":  tc.expectedResult|| "",
         }));
 
         const worksheet = XLSX.utils.json_to_sheet(strictData);
+        // Auto-fit column widths based on content
+        const colWidths = [{ wch: 22 }, { wch: 40 }, { wch: 60 }, { wch: 50 }];
+        worksheet["!cols"] = colWidths;
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "TestCases");
-        XLSX.writeFile(workbook, "testcases.xlsx");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "UAT Test Cases");
+        XLSX.writeFile(workbook, `${effectiveJiraId}_UAT_TestCases.xlsx`);
     };
 
     return (
@@ -546,8 +614,11 @@ export function MainApp() {
                             {loading && activeId && !currentThread && (
                                 <>
                                     <ChatMessage role="user" content={generatingPrompt} />
-                                    <ChatMessage role="assistant" isLoading />
+                                    <ChatMessage role="assistant" isLoading generationStatus={generationStatus} />
                                 </>
+                            )}
+                            {currentThread && loading && (
+                                <ChatMessage role="assistant" isLoading generationStatus={generationStatus} />
                             )}
                             
                             <div ref={messagesEndRef} className="h-4" />
@@ -567,6 +638,8 @@ export function MainApp() {
                     setSelectedModel={setSelectedModel}
                     isJiraMode={isJiraMode}
                     setIsJiraMode={setIsJiraMode}
+                    jiraId={jiraId}
+                    setJiraId={setJiraId}
                 />
 
             </div>
