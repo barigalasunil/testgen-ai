@@ -29,6 +29,7 @@ type TestCase = {
 type HistoryItem = {
     id: string;
     prompt: string;
+    title?: string;
     result: { testCases: TestCase[] } | null;
     error: string | null;
     timestamp: number;
@@ -125,21 +126,6 @@ function TestCaseTable({ data, onCopy, onDownload, onRegenerate }: any) {
 
     return (
         <div className="w-full mt-2">
-            <div className="flex items-center gap-3 mb-4 flex-wrap">
-                <button onClick={onCopy} className="flex items-center gap-2 text-xs bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-md transition-colors text-gray-700 shadow-sm">
-                    <Copy className="w-3.5 h-3.5" /> Copy Data
-                </button>
-                <button onClick={onDownload} className="flex items-center gap-2 text-xs bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-md transition-colors text-gray-700 shadow-sm">
-                    <Download className="w-3.5 h-3.5" /> Download Excel
-                </button>
-                <div className="w-px h-5 bg-gray-300 mx-1"></div>
-                <button title="Reload Result" onClick={onRegenerate} className="flex items-center justify-center bg-white border border-gray-200 hover:bg-gray-50 w-8 h-8 rounded-md transition-colors text-gray-700 shadow-sm">
-                    <RefreshCw className="w-4 h-4" />
-                </button>
-                <button title="RAG Helpful" onClick={() => setLiked(!liked)} className={cn("flex items-center justify-center border border-gray-200 w-8 h-8 rounded-md transition-colors shadow-sm", liked ? "bg-green-100 text-green-700 border-green-200" : "bg-white hover:bg-gray-50 text-gray-700")}>
-                    <ThumbsUp className={cn("w-4 h-4", liked ? "fill-green-600" : "")} />
-                </button>
-            </div>
             <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
                 <table className="w-full text-left text-sm text-gray-800">
                     <thead className="bg-gray-50 text-gray-600">
@@ -162,6 +148,21 @@ function TestCaseTable({ data, onCopy, onDownload, onRegenerate }: any) {
                     </tbody>
                 </table>
             </div>
+            <div className="flex items-center gap-3 mt-4 flex-wrap">
+                <button onClick={onCopy} className="flex items-center gap-2 text-xs bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-md transition-colors text-gray-700 shadow-sm">
+                    <Copy className="w-3.5 h-3.5" /> Copy Data
+                </button>
+                <button onClick={onDownload} className="flex items-center gap-2 text-xs bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-md transition-colors text-gray-700 shadow-sm">
+                    <Download className="w-3.5 h-3.5" /> Download Excel
+                </button>
+                <div className="w-px h-5 bg-gray-300 mx-1"></div>
+                <button title="Reload Result" onClick={onRegenerate} className="flex items-center justify-center bg-white border border-gray-200 hover:bg-gray-50 w-8 h-8 rounded-md transition-colors text-gray-700 shadow-sm">
+                    <RefreshCw className="w-4 h-4" />
+                </button>
+                <button title="RAG Helpful" onClick={() => setLiked(!liked)} className={cn("flex items-center justify-center border border-gray-200 w-8 h-8 rounded-md transition-colors shadow-sm", liked ? "bg-green-100 text-green-700 border-green-200" : "bg-white hover:bg-gray-50 text-gray-700")}>
+                    <ThumbsUp className={cn("w-4 h-4", liked ? "fill-green-600" : "")} />
+                </button>
+            </div>
         </div>
     );
 }
@@ -183,7 +184,7 @@ function StatusBadge({ status }: { status: GenerationStatus }) {
     );
 }
 
-function ChatMessage({ role, content, isTable, tableData, onCopy, onDownload, onRegenerate, isLoading, generationStatus }: any) {
+function ChatMessage({ role, content, isTable, tableData, onCopy, onDownload, onRegenerate, isLoading, generationStatus, error, selectedModel }: any) {
     const isAssistant = role === "assistant";
     return (
         <div className={cn("w-full py-6 text-gray-800 border-b border-gray-100", isAssistant ? "bg-[#f7f7f8]" : "bg-white")}>
@@ -214,7 +215,23 @@ function ChatMessage({ role, content, isTable, tableData, onCopy, onDownload, on
                     ) : isTable ? (
                         <TestCaseTable data={tableData} onCopy={onCopy} onDownload={onDownload} onRegenerate={onRegenerate} />
                     ) : (
-                        <div className="whitespace-pre-wrap leading-7 text-[15px]">{content}</div>
+                        <div className="flex flex-col gap-4">
+                            <div className={cn("whitespace-pre-wrap leading-7 text-[15px]", error ? "text-red-600 font-medium" : "")}>
+                                {error && <AlertCircle className="w-4 h-4 inline mr-2 -mt-0.5" />}
+                                {content}
+                            </div>
+                            {error && onRegenerate && (
+                                <div className="flex items-center gap-3">
+                                    <button 
+                                        onClick={onRegenerate} 
+                                        className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors shadow-sm text-sm font-semibold"
+                                    >
+                                        <RefreshCw className="w-4 h-4" />
+                                        Retry with {selectedModel}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
@@ -394,12 +411,9 @@ export function MainApp() {
         console.group("%c[testgen] Generation Started", "color:#3b82f6;font-weight:bold");
         console.log("%c[1/4] SENDING   ", "color:#3b82f6;font-weight:bold", "→ Prompt dispatched | model:", selectedModel, "| jiraId:", jiraId || "(none)", "| chars:", currentPrompt.length, "| regenerate:", isRegenerate);
 
-        let targetId = Date.now().toString();
-
-        if (isRegenerate && activeId) {
-            targetId = activeId;
-            setHistory(prev => prev.map(h => h.id === targetId ? { ...h, result: null, error: null } : h));
-        } else {
+        let targetId = activeId || Date.now().toString();
+        
+        if (!activeId) {
             setActiveId(targetId);
         }
 
@@ -424,11 +438,31 @@ export function MainApp() {
             }
 
             setHistory(prev => {
+                const isExisting = prev.some(h => h.id === targetId);
+                const titleToUse = jiraId.trim() ? jiraId.trim().toUpperCase() : (currentPrompt.length > 30 ? currentPrompt.substring(0, 30) + "..." : currentPrompt);
+                
                 let newHistory;
-                if (isRegenerate && activeId) {
-                    newHistory = prev.map(h => h.id === targetId ? { ...h, result: data.error ? null : data.result, error: data.error ? data.result : null } : h);
+                if (isExisting) {
+                    const existingItem = prev.find(h => h.id === targetId)!;
+                    const updatedItem = { 
+                        ...existingItem, 
+                        prompt: isRegenerate ? existingItem.prompt : currentPrompt,
+                        title: existingItem.title && existingItem.title !== existingItem.prompt ? existingItem.title : titleToUse,
+                        result: data.error ? null : data.result, 
+                        error: data.error ? data.result : null,
+                        timestamp: Date.now() // Update timestamp to move to top
+                    };
+                    // Filter out the old version and prepend the updated one
+                    newHistory = [updatedItem, ...prev.filter(h => h.id !== targetId)];
                 } else {
-                    newHistory = [{ id: targetId, prompt: currentPrompt, result: data.error ? null : data.result, error: data.error ? data.result : null, timestamp: Date.now() }, ...prev];
+                    newHistory = [{ 
+                        id: targetId, 
+                        prompt: currentPrompt, 
+                        title: titleToUse,
+                        result: data.error ? null : data.result, 
+                        error: data.error ? data.result : null, 
+                        timestamp: Date.now() 
+                    }, ...prev];
                 }
                 localStorage.setItem("testgen-history", JSON.stringify(newHistory));
                 return newHistory;
@@ -596,7 +630,13 @@ export function MainApp() {
                                 <>
                                     <ChatMessage role="user" content={currentThread.prompt} />
                                     {currentThread.error ? (
-                                        <ChatMessage role="assistant" content={currentThread.error} />
+                                        <ChatMessage 
+                                            role="assistant" 
+                                            content={currentThread.error} 
+                                            error 
+                                            onRegenerate={() => handleSend(currentThread.prompt, true)} 
+                                            selectedModel={selectedModel}
+                                        />
                                     ) : currentThread.result ? (
                                         <ChatMessage 
                                             role="assistant" 

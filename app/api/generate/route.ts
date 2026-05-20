@@ -20,35 +20,22 @@ export async function POST(req: Request) {
 
         console.log("[testgen][INFO] Generation requested | model:", safeModel, "| jiraId:", safeJiraId);
 
-        const systemPrompt = `You are a QA Engineer.
+        const systemPrompt = `You are a Senior QA Engineer.
+Generate exactly 10 UAT test cases in valid JSON format for the Jira story provided.
 
-Generate 10 UAT test cases for the Jira story below.
+Requirements:
+- Cover Functional, Negative, Positive, and Edge cases.
+- Max 4 concise steps per test case.
+- ID Format: ${safeJiraId}_UAT_TC001 to TC010.
 
-Cover:
-- Functional scenarios
-- Negative scenarios
-- Positive scenarios
-- Edge cases
-
-Rules:
-- Keep steps concise
-- Maximum 4 steps per test case
-- Avoid duplicates
-- Professional language
-- Number test cases sequentially
-
-Test Case ID Format: ${safeJiraId}_UAT_TC001, ${safeJiraId}_UAT_TC002, ... ${safeJiraId}_UAT_TC010
-
-You MUST return ONLY valid JSON. No markdown, no explanation, no code fences.
-Return a single JSON object with a "testCases" array. Each element must have exactly these keys:
-
+Output MUST be a single JSON object:
 {
   "testCases": [
     {
-      "id": "${safeJiraId}_UAT_TC001",
-      "summary": "Short title of what is being tested",
-      "steps": "1. Step one\\n2. Step two\\n3. Step three",
-      "expectedResult": "Clear measurable outcome."
+      "id": "String",
+      "summary": "String",
+      "steps": "1. Step\\n2. Step",
+      "expectedResult": "String"
     }
   ]
 }
@@ -57,10 +44,10 @@ Jira Story:
 ${prompt}`;
 
         const ollamaUrl = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
-        console.log("[testgen][INFO] Calling Ollama at:", ollamaUrl, "| model:", safeModel);
+        console.log("[testgen][INFO] Calling Ollama at:", ollamaUrl, "| model:", safeModel, "| prompt length:", systemPrompt.length);
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5-min timeout
+        const timeout = setTimeout(() => controller.abort(), 10 * 60 * 1000); // 10-min timeout
 
         let ollamaRes: Response;
         try {
@@ -72,18 +59,27 @@ ${prompt}`;
                     prompt: systemPrompt,
                     stream: false,
                     format: "json",
+                    options: {
+                        num_ctx: 4096, // Reduced from 8192 to save VRAM/Memory
+                        num_predict: 2048,
+                        temperature: 0.1,
+                    }
                 }),
                 signal: controller.signal,
+                cache: "no-store",
             });
         } finally {
             clearTimeout(timeout);
         }
 
         if (!ollamaRes.ok) {
-            console.error("[testgen][ERROR] Ollama returned non-OK status:", ollamaRes.status);
+            console.error("[testgen][ERROR] Ollama returned non-OK status:", ollamaRes.status, "| model:", safeModel);
+            const errorMsg = ollamaRes.status === 404 
+                ? `Model '${safeModel}' not found in Ollama. Please download it or select a different model.` 
+                : `Ollama returned an error (${ollamaRes.status}). Ensure the model is loaded and you have enough VRAM/Memory.`;
             return NextResponse.json({
                 error: true,
-                result: "The AI model returned an error. Please check the model is loaded and try again.",
+                result: errorMsg,
                 statusCode: ollamaRes.status,
             });
         }
@@ -116,16 +112,16 @@ ${prompt}`;
 
     } catch (error) {
         if ((error as any)?.name === "AbortError") {
-            console.error("[testgen][ERROR] Request timed out after 5 minutes.");
+            console.error("[testgen][ERROR] Request timed out after 10 minutes.");
             return NextResponse.json({
                 error: true,
-                result: "The request timed out. The model is taking too long. Try a lighter model or a shorter prompt.",
+                result: "The request timed out. The model is taking too long for this large prompt. Try a more powerful GPU or wait a bit longer.",
             });
         }
         console.error("[testgen][ERROR] Unexpected failure:", (error as Error).message);
         return NextResponse.json({
             error: true,
-            result: "An unexpected error occurred. Please ensure Ollama is running and a model is downloaded.",
+            result: `Connection Error: ${(error as Error).message}. Ensure Ollama is running at ${process.env.OLLAMA_URL || "http://127.0.0.1:11434"} and the model is downloaded.`,
         });
     }
 }
