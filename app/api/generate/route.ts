@@ -33,12 +33,33 @@ export async function POST(req: Request) {
             stream: false
         });
 
-        // 3. Parse and validate
-        const parsedData = responseParser.parse(response.response);
+        // 3. Parse, normalize and validate
+        let parsedData;
+        try {
+            parsedData = responseParser.parse(response.response);
+        } catch (e) {
+            console.error("Response parsing failed, returning raw response", e);
+            // Return a safe fallback so UI can show raw content instead of crashing
+            return NextResponse.json({ error: false, result: { raw: response.response } });
+        }
+
+        // Ensure every test case has only primitive/string fields
+        const sanitized = {
+            testCases: (parsedData.testCases || []).map((tc: any) => ({
+                testCaseId: String(tc.testCaseId || tc.id || ""),
+                title: String(tc.title || ""),
+                testType: String(tc.testType || "Functional"),
+                priority: String(tc.priority || "Medium"),
+                preconditions: String(tc.preconditions || ""),
+                testData: String(tc.testData || ""),
+                steps: String(tc.steps || ""),
+                expectedResult: String(tc.expectedResult || ""),
+            }))
+        };
 
         return NextResponse.json({
             error: false,
-            result: parsedData,
+            result: sanitized,
         });
 
     } catch (error) {

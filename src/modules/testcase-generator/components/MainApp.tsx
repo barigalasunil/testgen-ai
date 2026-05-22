@@ -82,23 +82,46 @@ export function MainApp() {
             setActiveId(targetId);
         }
 
-        try {
-            const data = await generateTestCases(
-                currentPrompt, 
-                selectedModel, 
-                "functional", 
-                platformType,
-                customPrompt,
-                acceptanceCriteria
-            );
+            try {
+                const data = await generateTestCases(
+                    currentPrompt,
+                    selectedModel,
+                    "functional",
+                    platformType,
+                    customPrompt,
+                    acceptanceCriteria
+                );
 
-            setHistory(prev => {
-                let newHistory;
-                if (isRegenerate && activeId) {
-                    newHistory = prev.map(h => h.id === targetId ? { ...h, result: data.error ? null : data.result, error: data.error ? data.result : null } : h);
-                } else {
-                    newHistory = [{ id: targetId, prompt: currentPrompt, result: data.error ? null : data.result, error: data.error ? data.result : null, timestamp: Date.now() }, ...prev];
-                }
+                const parsedResult =
+                    data &&
+                    !data.error &&
+                    data.result &&
+                    typeof data.result === 'object' &&
+                    Array.isArray((data.result as any).testCases)
+                        ? data.result
+                        : null;
+                const parsedError = data && data.error ? String(data.result || data.error) : null;
+
+                setHistory(prev => {
+                    let newHistory;
+                    if (isRegenerate && activeId) {
+                        newHistory = prev.map(h =>
+                            h.id === targetId
+                                ? { ...h, result: parsedResult, error: parsedError }
+                                : h
+                        );
+                    } else {
+                        newHistory = [
+                            {
+                                id: targetId,
+                                prompt: currentPrompt,
+                                result: parsedResult,
+                                error: parsedError,
+                                timestamp: Date.now(),
+                            },
+                            ...prev,
+                        ];
+                    }
                 localStorage.setItem("testgen-history", JSON.stringify(newHistory));
                 return newHistory;
             });

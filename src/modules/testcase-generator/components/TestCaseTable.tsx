@@ -9,7 +9,7 @@ import { exportExcel, exportCsv, exportJson } from "@/src/services/export/export
 interface TestCaseTableProps {
     data: { testCases: TestCase[] };
     jiraStoryId?: string;
-    platformType: 'web' | 'mobile' | 'api';
+    platformType?: 'web' | 'mobile' | 'api';
     onCopy: () => void;
     onRegenerate: () => void;
 }
@@ -53,7 +53,7 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
             const response = await fetch('/api/automation/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ testCases: data.testCases, platform: platformType }),
+                body: JSON.stringify({ testCases: data.testCases, platform: platformType || null }),
             });
             const payload = await response.json();
 
@@ -89,6 +89,18 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
     const handleCopy = () => {
         onCopy();
         showToast("Copied to clipboard!");
+    };
+
+    const renderValue = (value: any) => {
+        if (value === null || typeof value === 'undefined') return "";
+        if (typeof value === 'object') {
+            try {
+                return <pre className="whitespace-pre-wrap text-[13px] font-mono">{JSON.stringify(value, null, 2)}</pre>;
+            } catch (e) {
+                return String(value);
+            }
+        }
+        return String(value);
     };
 
     if (!data || !data.testCases || data.testCases.length === 0) {
@@ -243,8 +255,8 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
                             <tr key={i} className="border-b border-gray-50 hover:bg-[#f8faff]/60 transition-colors align-top">
                                 <td className="p-4 whitespace-nowrap text-gray-400 font-mono text-xs font-medium">{tc.testCaseId}</td>
                                 <td className="p-4">
-                                    <div className="font-semibold text-gray-800 mb-1">{tc.title}</div>
-                                    <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold uppercase">{tc.testType}</span>
+                                    <div className="font-semibold text-gray-800 mb-1">{renderValue(tc.title)}</div>
+                                    <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold uppercase">{renderValue(tc.testType)}</span>
                                 </td>
                                 <td className="p-4">
                                     <span className={cn(
@@ -259,13 +271,13 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
                                     {tc.preconditions && tc.preconditions !== "None" && (
                                         <div className="mb-2 p-2 bg-amber-50 rounded text-xs border border-amber-100">
                                             <span className="font-bold text-amber-500 block mb-0.5 uppercase text-[9px]">Preconditions:</span>
-                                            {tc.preconditions}
+                                            {renderValue(tc.preconditions)}
                                         </div>
                                     )}
-                                    {tc.steps}
+                                    {renderValue(tc.steps)}
                                 </td>
-                                <td className="p-4 text-emerald-700 font-medium leading-relaxed text-[13px] whitespace-pre-wrap">{tc.expectedResult}</td>
-                                <td className="p-4 text-gray-500 text-xs italic bg-gray-50/30">{tc.testData && tc.testData !== "N/A" ? tc.testData : "—"}</td>
+                                <td className="p-4 text-emerald-700 font-medium leading-relaxed text-[13px] whitespace-pre-wrap">{renderValue(tc.expectedResult)}</td>
+                                <td className="p-4 text-gray-500 text-xs italic bg-gray-50/30">{(tc.testData && tc.testData !== "N/A") ? renderValue(tc.testData) : "—"}</td>
                             </tr>
                         ))}
                     </tbody>

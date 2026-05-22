@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, ChevronDown, Link as LinkIcon, Settings, Tag } from "lucide-react";
+import { Send, Bot, ChevronDown, Link as LinkIcon, Settings as SettingsIcon, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface InputBoxProps {
@@ -121,8 +121,8 @@ export function InputBox({
                        {/* Platform Selector */}
                        <div className="relative">
                           <button onClick={() => setIsPlatformDropdownOpen(!isPlatformDropdownOpen)} className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm transition-colors font-medium">
-                              <Settings className="w-3.5 h-3.5 text-blue-500" />
-                              {platformType.charAt(0).toUpperCase() + platformType.slice(1)}
+                              <SettingsIcon className="w-3.5 h-3.5 text-blue-500" />
+                              {platformType ? platformType.charAt(0).toUpperCase() + platformType.slice(1) : "Platform"}
                               <ChevronDown className="w-3.5 h-3.5" />
                           </button>
                           <AnimatePresence>

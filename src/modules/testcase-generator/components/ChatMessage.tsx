@@ -5,13 +5,21 @@ import { cn } from "@/lib/utils";
 import { TestCaseTable } from "./TestCaseTable";
 import { TestCase } from "../types";
 
+interface TestCaseResult {
+    testCases: TestCase[];
+}
+
+function isTestCaseResult(data: any): data is TestCaseResult {
+    return data && typeof data === 'object' && Array.isArray(data.testCases);
+}
+
 interface ChatMessageProps {
     role: "user" | "assistant";
     content?: string;
     isTable?: boolean;
     tableData?: { testCases: TestCase[] };
     jiraStoryId?: string;
-    platformType: "web" | "mobile" | "api";
+    platformType?: "web" | "mobile" | "api";
     onCopy?: () => void;
     onRegenerate?: () => void;
     isLoading?: boolean;
@@ -51,13 +59,20 @@ export function ChatMessage({
                             <div className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" style={{ animationDelay: "300ms" }} />
                         </div>
                     ) : isTable && tableData ? (
-                        <TestCaseTable 
-                            data={tableData} 
-                            jiraStoryId={jiraStoryId}
-                            platformType={platformType}
-                            onCopy={onCopy || (() => {})} 
-                            onRegenerate={onRegenerate || (() => {})} 
-                        />
+                        isTestCaseResult(tableData) ? (
+                            <TestCaseTable 
+                                data={tableData} 
+                                jiraStoryId={jiraStoryId}
+                                platformType={platformType}
+                                onCopy={onCopy || (() => {})} 
+                                onRegenerate={onRegenerate || (() => {})} 
+                            />
+                        ) : (
+                            <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+                                <div className="font-semibold">Unexpected response format</div>
+                                <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap text-xs text-slate-700">{JSON.stringify(tableData, null, 2)}</pre>
+                            </div>
+                        )
                     ) : (
                         <div className="whitespace-pre-wrap leading-7 text-[15px]">{content}</div>
                     )}
