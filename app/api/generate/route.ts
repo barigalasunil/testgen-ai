@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { SYSTEM_PROMPT } from "@/src/modules/testcase-generator/prompts";
 
 export async function POST(req: Request) {
     try {
@@ -7,25 +8,7 @@ export async function POST(req: Request) {
         console.log("PROMPT:", prompt);
         console.log("MODEL:", model);
 
-        const systemPrompt = `You are an expert software QA engineer. 
-Based on the following request, generate a professional, industry-standard list of test cases. 
-You MUST return ONLY valid JSON in the exact following format without hallucinating any extra keys:
-{
-  "testCases": [
-    {
-      "id": "TC-01",
-      "title": "Short title of test case",
-      "description": "Description of what is being tested",
-      "steps": "Step 1\\nStep 2...",
-      "expectedResult": "Expected outcome",
-      "priority": "High"
-    }
-  ]
-}
-
-Priority must be one of: High, Medium, Low.
-Do not include markdown blocks like \`\`\`json. Return ONLY the raw JSON object.
-Request: ${prompt}`;
+        const systemPrompt = SYSTEM_PROMPT(prompt);
 
         const ollamaRes = await fetch("http://127.0.0.1:11434/api/generate", {
             method: "POST",
