@@ -1,0 +1,4 @@
+Generate Playwright API test code using request fixtures.
+Use TypeScript and Playwright best practices for API assertions.
+Keep the generated code reusable and maintainable with clear request/response validation.
+Do not include browser-specific actions when the target platform is API.

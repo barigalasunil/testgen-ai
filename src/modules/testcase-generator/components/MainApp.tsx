@@ -6,6 +6,7 @@ import { Menu, X, Bot, Settings } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
 import { InputBox } from "./InputBox";
+import { AutomationDashboard } from "./AutomationDashboard";
 import { generateTestCases, fetchModels } from "../services";
 import { HistoryItem } from "../types";
 
@@ -216,6 +217,10 @@ export function MainApp() {
                     </div>
                 </header>
 
+                <div className="px-4 md:px-6 pt-4">
+                    <AutomationDashboard />
+                </div>
+
                 <div className="flex-1 overflow-y-auto w-full scroll-smooth flex flex-col pb-40 text-sm md:text-base">
                     
                     {!currentThread && !loading ? (
@@ -239,6 +244,7 @@ export function MainApp() {
                                             isTable 
                                             tableData={currentThread.result} 
                                             jiraStoryId={jiraStoryId}
+                                            platformType={platformType}
                                             onCopy={copyTableData} 
                                             onRegenerate={() => handleSend(currentThread.prompt, true)}
                                         />

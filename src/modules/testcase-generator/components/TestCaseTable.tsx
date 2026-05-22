@@ -9,14 +9,19 @@ import { exportExcel, exportCsv, exportJson } from "@/src/services/export/export
 interface TestCaseTableProps {
     data: { testCases: TestCase[] };
     jiraStoryId?: string;
+    platformType: 'web' | 'mobile' | 'api';
     onCopy: () => void;
     onRegenerate: () => void;
 }
 
-export function TestCaseTable({ data, jiraStoryId, onCopy, onRegenerate }: TestCaseTableProps) {
+export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegenerate }: TestCaseTableProps) {
     const [liked, setLiked] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+    const [scriptCode, setScriptCode] = useState<string | null>(null);
+    const [scriptFileName, setScriptFileName] = useState<string | null>(null);
+    const [showScriptModal, setShowScriptModal] = useState(false);
 
     const showToast = (message: string) => {
         setToast(message);
@@ -38,6 +43,47 @@ export function TestCaseTable({ data, jiraStoryId, onCopy, onRegenerate }: TestC
         } finally {
             setIsExporting(false);
         }
+    };
+
+    const handleGenerateScript = async () => {
+        if (!data?.testCases?.length) return;
+        setIsGeneratingScript(true);
+
+        try {
+            const response = await fetch('/api/automation/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ testCases: data.testCases, platform: platformType }),
+            });
+            const payload = await response.json();
+
+            if (!response.ok || payload.error) {
+                throw new Error(payload.message || 'Script generation failed');
+            }
+
+            setScriptCode(payload.code || '');
+            setScriptFileName(payload.fileName || 'generated.spec.ts');
+            setShowScriptModal(true);
+            showToast(`Generated script: ${payload.fileName}`);
+        } catch (error) {
+            showToast(`Script generation failed: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+            setIsGeneratingScript(false);
+        }
+    };
+
+    const handleDownloadScript = () => {
+        if (!scriptCode || !scriptFileName) return;
+        const blob = new Blob([scriptCode], { type: 'text/typescript;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = scriptFileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast(`Downloaded ${scriptFileName}`);
     };
 
     const handleCopy = () => {
@@ -95,6 +141,15 @@ export function TestCaseTable({ data, jiraStoryId, onCopy, onRegenerate }: TestC
                     </button>
                 </div>
 
+                <button
+                    onClick={handleGenerateScript}
+                    disabled={isGeneratingScript}
+                    className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 px-2.5 py-1.5 rounded-md transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <FileText className="w-3.5 h-3.5" />
+                    {isGeneratingScript ? 'Generating…' : 'Generate Script'}
+                </button>
+
                 <div className="w-px h-5 bg-gray-200"></div>
 
                 {/* Copy */}
@@ -133,6 +188,42 @@ export function TestCaseTable({ data, jiraStoryId, onCopy, onRegenerate }: TestC
                     {data.testCases.length} test case{data.testCases.length !== 1 ? "s" : ""} generated
                 </span>
             </div>
+
+            {showScriptModal && scriptCode && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="max-w-3xl w-full overflow-hidden rounded-3xl bg-white shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                            <div>
+                                <h3 className="text-sm font-semibold text-slate-900">Generated Playwright Script</h3>
+                                <p className="text-xs text-slate-500">{scriptFileName}</p>
+                            </div>
+                            <button onClick={() => setShowScriptModal(false)} className="text-slate-500 hover:text-slate-900">Close</button>
+                        </div>
+                        <div className="max-h-[60vh] overflow-auto bg-slate-950 p-4 text-[13px] text-slate-100">
+                            <pre className="whitespace-pre-wrap break-words font-mono">{scriptCode}</pre>
+                        </div>
+                        <div className="flex flex-wrap gap-2 border-t border-gray-200 bg-slate-50 px-5 py-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(scriptCode);
+                                    showToast('Script copied to clipboard');
+                                }}
+                                className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 border border-gray-200 hover:bg-slate-100"
+                            >
+                                Copy Code
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDownloadScript}
+                                className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                            >
+                                Download Script
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Table */}
             <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm bg-white">

@@ -1,0 +1,5 @@
+Generate Playwright web automation code for a browser application.
+Use reusable selectors, page object style helpers, and assertions on page state.
+Use comments only for selector placeholders and high-level test steps.
+Prefer simple selectors such as data-test attributes, text content, or CSS classes.
+Focus on login, add-to-cart, checkout, and order confirmation flows when relevant.
