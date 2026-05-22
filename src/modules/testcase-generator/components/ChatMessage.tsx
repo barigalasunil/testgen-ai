@@ -10,8 +10,8 @@ interface ChatMessageProps {
     content?: string;
     isTable?: boolean;
     tableData?: { testCases: TestCase[] };
+    jiraStoryId?: string;
     onCopy?: () => void;
-    onDownload?: () => void;
     onRegenerate?: () => void;
     isLoading?: boolean;
 }
@@ -21,8 +21,8 @@ export function ChatMessage({
     content, 
     isTable, 
     tableData, 
+    jiraStoryId,
     onCopy, 
-    onDownload, 
     onRegenerate, 
     isLoading 
 }: ChatMessageProps) {
@@ -51,8 +51,8 @@ export function ChatMessage({
                     ) : isTable && tableData ? (
                         <TestCaseTable 
                             data={tableData} 
+                            jiraStoryId={jiraStoryId}
                             onCopy={onCopy || (() => {})} 
-                            onDownload={onDownload || (() => {})} 
                             onRegenerate={onRegenerate || (() => {})} 
                         />
                     ) : (

@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Bot, Settings } from "lucide-react";
-import * as XLSX from "xlsx";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
 import { InputBox } from "./InputBox";
@@ -26,6 +25,7 @@ export function MainApp() {
     const [platformType, setPlatformType] = useState<"web" | "mobile" | "api">("web");
     const [customPrompt, setCustomPrompt] = useState("");
     const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
+    const [jiraStoryId, setJiraStoryId] = useState("");
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -82,7 +82,6 @@ export function MainApp() {
         }
 
         try {
-            // Updated service call with all enterprise parameters
             const data = await generateTestCases(
                 currentPrompt, 
                 selectedModel, 
@@ -155,29 +154,9 @@ export function MainApp() {
     const copyTableData = () => {
         if (!currentThread?.result) return;
         const text = currentThread.result.testCases.map(tc => 
-            `ID: ${tc.testCaseId}\nTitle: ${tc.title}\nType: ${tc.testType}\nPriority: ${tc.priority}\nSteps: ${tc.steps}\nExpected: ${tc.expectedResult}`
+            `ID: ${tc.testCaseId}\nTitle: ${tc.title}\nType: ${tc.testType}\nPriority: ${tc.priority}\nPreconditions: ${tc.preconditions}\nTest Data: ${tc.testData}\nSteps: ${tc.steps}\nExpected: ${tc.expectedResult}`
         ).join("\n\n---\n\n");
         navigator.clipboard.writeText(text);
-    };
-
-    const downloadExcelData = () => {
-        if (!currentThread?.result?.testCases) return;
-        
-        const strictData = currentThread.result.testCases.map((tc) => ({
-             "Test Case ID": tc.testCaseId || "",
-             "Title": tc.title || "",
-             "Test Type": tc.testType || "",
-             "Priority": tc.priority || "",
-             "Preconditions": tc.preconditions || "",
-             "Test Data": tc.testData || "",
-             "Steps": tc.steps || "",
-             "Expected Result": tc.expectedResult || ""
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(strictData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "TestCases");
-        XLSX.writeFile(workbook, "testcases_enterprise.xlsx");
     };
 
     return (
@@ -259,8 +238,8 @@ export function MainApp() {
                                             role="assistant" 
                                             isTable 
                                             tableData={currentThread.result} 
+                                            jiraStoryId={jiraStoryId}
                                             onCopy={copyTableData} 
-                                            onDownload={downloadExcelData} 
                                             onRegenerate={() => handleSend(currentThread.prompt, true)}
                                         />
                                     ) : null}
@@ -296,6 +275,8 @@ export function MainApp() {
                     setCustomPrompt={setCustomPrompt}
                     acceptanceCriteria={acceptanceCriteria}
                     setAcceptanceCriteria={setAcceptanceCriteria}
+                    jiraStoryId={jiraStoryId}
+                    setJiraStoryId={setJiraStoryId}
                 />
 
             </div>

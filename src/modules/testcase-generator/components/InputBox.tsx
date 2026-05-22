@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, ChevronDown, Link as LinkIcon, Settings } from "lucide-react";
+import { Send, Bot, ChevronDown, Link as LinkIcon, Settings, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface InputBoxProps {
@@ -22,6 +22,8 @@ interface InputBoxProps {
     setCustomPrompt: (val: string) => void;
     acceptanceCriteria: string;
     setAcceptanceCriteria: (val: string) => void;
+    jiraStoryId: string;
+    setJiraStoryId: (val: string) => void;
 }
 
 export function InputBox({ 
@@ -40,7 +42,9 @@ export function InputBox({
     customPrompt,
     setCustomPrompt,
     acceptanceCriteria,
-    setAcceptanceCriteria
+    setAcceptanceCriteria,
+    jiraStoryId,
+    setJiraStoryId
 }: InputBoxProps) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isPlatformDropdownOpen, setIsPlatformDropdownOpen] = useState(false);
@@ -61,8 +65,9 @@ export function InputBox({
                 {/* Advanced Options */}
                 <AnimatePresence>
                     {showAdvanced && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col gap-2 mb-2 bg-gray-50/50 p-3 rounded-xl border border-gray-100">
-                            <h3 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Enterprise Configuration</h3>
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col gap-3 mb-2 bg-gray-50/50 p-3 rounded-xl border border-gray-100">
+                            <h3 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Configuration</h3>
+                            
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div className="flex flex-col gap-1">
                                     <label className="text-[10px] font-semibold text-gray-500 ml-1">Acceptance Criteria</label>
@@ -89,7 +94,7 @@ export function InputBox({
 
                 {/* Toolbar */}
                 <div className="flex justify-between items-center px-1 mb-1">
-                   <div className="flex gap-2 items-center">
+                   <div className="flex gap-2 items-center flex-wrap">
                        {/* Model Selector */}
                        <div className="relative">
                            <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm transition-colors font-medium">
@@ -133,6 +138,18 @@ export function InputBox({
                           </AnimatePresence>
                       </div>
 
+                      {/* Jira Story ID */}
+                      <div className="flex items-center min-w-[180px] bg-white border border-gray-200 rounded-full px-3 py-1.5 shadow-sm">
+                          <Tag className="w-3.5 h-3.5 text-blue-500" />
+                          <input
+                              type="text"
+                              placeholder="Jira Story ID"
+                              value={jiraStoryId}
+                              onChange={(e) => setJiraStoryId(e.target.value)}
+                              className="flex-1 bg-transparent border-none outline-none text-sm text-gray-700 placeholder:text-gray-400 font-mono"
+                          />
+                      </div>
+
                       {/* Advanced Toggle */}
                       <button 
                         onClick={() => setShowAdvanced(!showAdvanced)} 
@@ -141,8 +158,16 @@ export function InputBox({
                             showAdvanced ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-200" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50 shadow-sm"
                         )}
                     >
-                        {showAdvanced ? "Hide Options" : "Advanced Options"}
+                        {showAdvanced ? "Hide Options" : "Advanced"}
                     </button>
+
+                    {/* Jira Story ID badge (inline preview when set & panel hidden) */}
+                    {jiraStoryId.trim() && !showAdvanced && (
+                        <span className="flex items-center gap-1.5 text-[11px] bg-blue-50 text-blue-600 border border-blue-200 px-2.5 py-1 rounded-full font-bold">
+                            <Tag className="w-3 h-3" />
+                            {jiraStoryId.trim()}
+                        </span>
+                    )}
                    </div>
 
                    {/* Jira Toggle */}
