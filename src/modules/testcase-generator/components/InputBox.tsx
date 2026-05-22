@@ -180,7 +180,7 @@ export function InputBox({
                     </button>
                 </div>
                 <div className="text-center text-[10px] text-gray-400 mt-2 font-sans uppercase tracking-widest">
-                    Enterprise Generation Engine • Platform Aware • AI Verified
+                    TCGen-Buddy • Platform Aware • AI Verified
                 </div>
             </div>
         </div>

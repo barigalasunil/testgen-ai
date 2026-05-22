@@ -233,7 +233,7 @@ export function MainApp() {
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 mr-2 hover:bg-gray-100 rounded-md text-gray-500 md:hidden">
                             <Menu className="w-5 h-5" />
                         </button>
-                        <h1 className="font-semibold text-[15px] sm:text-base text-gray-800">testGen-AI Enterprise</h1>
+                        <h1 className="font-semibold text-[15px] sm:text-base text-gray-800">TCGen-Buddy</h1>
                     </div>
                 </header>
 
@@ -244,7 +244,7 @@ export function MainApp() {
                             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-6">
                                 <Bot className="w-8 h-8 text-gray-400" />
                             </div>
-                            <h2 className="text-2xl font-bold text-gray-800 mb-2">Enterprise QA Generation</h2>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">TCGen-Buddy</h2>
                             <p className="text-gray-500">Generate platform-aware UAT test cases for Web, Mobile, or API.</p>
                         </motion.div>
                     ) : (
