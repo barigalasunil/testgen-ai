@@ -1,0 +1,6 @@
+Platform: API
+- HTTP Status codes (2xx, 4xx, 5xx)
+- Payload & Schema validation
+- Authentication & Auth headers
+- Rate limiting & Performance (SLA)
+- Error response structures

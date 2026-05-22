@@ -1,0 +1,6 @@
+Platform: WEB
+- UI validation & Responsive behavior
+- Browser compatibility (Chrome/Firefox/Safari)
+- Navigation & URL patterns
+- Accessibility & SEO best practices
+- Form interactions & field constraints

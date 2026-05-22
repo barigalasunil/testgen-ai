@@ -1,0 +1,6 @@
+Test Type: FUNCTIONAL
+Generate:
+- Happy path scenarios where everything works as expected.
+- Core business workflow validations.
+- End-to-end flows covering the main user journey.
+- Feature functionality testing according to descriptions.

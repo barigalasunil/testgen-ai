@@ -1,0 +1,3 @@
+Focus on BOUNDARY VALUE analysis. Verify system behavior at the edges of allowed input ranges (e.g., minimum, maximum, just above/below limits). 
+Check for off-by-one errors and limit handling.
+Request: {{prompt}}

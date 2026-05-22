@@ -1,0 +1,8 @@
+Coverage requirements:
+- Functional (happy path)
+- Negative (error handling)
+- Boundary (limit testing)
+- Integration (E2E flows)
+- Real-world business journeys
+- Data-driven scenarios
+- Validation of UI/UX and stability

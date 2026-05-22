@@ -1,0 +1,21 @@
+Return ONLY a valid JSON object with the following structure:
+{
+  "testCases": [
+    {
+      "testCaseId": "TC-001",
+      "title": "Clear descriptive title",
+      "testType": "Functional/Negative/Boundary",
+      "priority": "High/Medium/Low",
+      "preconditions": "Requirements before testing",
+      "testData": "Input values/files needed",
+      "steps": "1. Action one\n2. Action two",
+      "expectedResult": "Expected outcome"
+    }
+  ]
+}
+
+Rules:
+- DO NOT include markdown code blocks.
+- Return raw JSON only.
+- Be concise and professional.
+- Ensure IDs are sequential.

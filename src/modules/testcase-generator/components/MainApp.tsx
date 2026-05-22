@@ -23,6 +23,9 @@ export function MainApp() {
     const [models, setModels] = useState<string[]>([]);
     const [selectedModel, setSelectedModel] = useState("phi3:mini");
     const [isJiraMode, setIsJiraMode] = useState(false);
+    const [platformType, setPlatformType] = useState<"web" | "mobile" | "api">("web");
+    const [customPrompt, setCustomPrompt] = useState("");
+    const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -79,7 +82,15 @@ export function MainApp() {
         }
 
         try {
-            const data = await generateTestCases(currentPrompt, selectedModel);
+            // Updated service call with all enterprise parameters
+            const data = await generateTestCases(
+                currentPrompt, 
+                selectedModel, 
+                "functional", 
+                platformType,
+                customPrompt,
+                acceptanceCriteria
+            );
 
             setHistory(prev => {
                 let newHistory;
@@ -139,14 +150,12 @@ export function MainApp() {
         }
     };
 
-    // Derived states
     const currentThread = history.find(h => h.id === activeId);
 
-    // Helpers
     const copyTableData = () => {
         if (!currentThread?.result) return;
         const text = currentThread.result.testCases.map(tc => 
-            `ID: ${tc.id}\nTitle: ${tc.title}\nSteps: ${tc.steps}\nExpected: ${tc.expectedResult}\nPriority: ${tc.priority || "N/A"}`
+            `ID: ${tc.testCaseId}\nTitle: ${tc.title}\nType: ${tc.testType}\nPriority: ${tc.priority}\nSteps: ${tc.steps}\nExpected: ${tc.expectedResult}`
         ).join("\n\n---\n\n");
         navigator.clipboard.writeText(text);
     };
@@ -154,26 +163,26 @@ export function MainApp() {
     const downloadExcelData = () => {
         if (!currentThread?.result?.testCases) return;
         
-        // Strictly map to prevent hallucinated arbitrary keys from ruining Excel columns
         const strictData = currentThread.result.testCases.map((tc) => ({
-             "ID": tc.id || "",
+             "Test Case ID": tc.testCaseId || "",
              "Title": tc.title || "",
-             "Description": tc.description || "",
+             "Test Type": tc.testType || "",
+             "Priority": tc.priority || "",
+             "Preconditions": tc.preconditions || "",
+             "Test Data": tc.testData || "",
              "Steps": tc.steps || "",
-             "Expected Result": tc.expectedResult || "",
-             "Priority": tc.priority || ""
+             "Expected Result": tc.expectedResult || ""
         }));
 
         const worksheet = XLSX.utils.json_to_sheet(strictData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "TestCases");
-        XLSX.writeFile(workbook, "testcases.xlsx");
+        XLSX.writeFile(workbook, "testcases_enterprise.xlsx");
     };
 
     return (
         <div className="flex h-screen bg-white text-gray-800 overflow-hidden font-sans w-full">
             
-            {/* Sidebar Component */}
             <Sidebar 
                 history={history} 
                 activeId={activeId} 
@@ -187,7 +196,6 @@ export function MainApp() {
                 onDelete={handleDelete}
             />
 
-            {/* Settings Modal */}
             <AnimatePresence>
                 {isSettingsOpen && (
                     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -218,35 +226,29 @@ export function MainApp() {
                 )}
             </AnimatePresence>
 
-            {/* Main Area */}
             <div className="flex-1 flex flex-col h-full relative w-full overflow-hidden">
                 
-                {/* Header (Mobile / Standard) */}
                 <header className="h-14 border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 bg-white z-10 shrink-0 shadow-sm w-full">
                     <div className="flex items-center">
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 mr-2 hover:bg-gray-100 rounded-md text-gray-500 md:hidden">
                             <Menu className="w-5 h-5" />
                         </button>
-                        <h1 className="font-semibold text-[15px] sm:text-base text-gray-800">testGen-AI</h1>
+                        <h1 className="font-semibold text-[15px] sm:text-base text-gray-800">testGen-AI Enterprise</h1>
                     </div>
                 </header>
 
-                {/* Content Stream */}
                 <div className="flex-1 overflow-y-auto w-full scroll-smooth flex flex-col pb-40 text-sm md:text-base">
                     
                     {!currentThread && !loading ? (
-                        /* Empty State */
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex-1 flex flex-col items-center justify-center text-center px-4 w-full h-full">
                             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-6">
                                 <Bot className="w-8 h-8 text-gray-400" />
                             </div>
-                            <h2 className="text-2xl font-bold text-gray-800 mb-2">How can I help you today?</h2>
-                            <p className="text-gray-500">Describe your feature to instantly generate test cases.</p>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">Enterprise QA Generation</h2>
+                            <p className="text-gray-500">Generate platform-aware UAT test cases for Web, Mobile, or API.</p>
                         </motion.div>
                     ) : (
-                        /* Chat Stream */
                         <div className="w-full flex flex-col">
-                            {/* If we have a completed thread, render it */}
                             {currentThread && (
                                 <>
                                     <ChatMessage role="user" content={currentThread.prompt} />
@@ -265,7 +267,6 @@ export function MainApp() {
                                 </>
                             )}
 
-                            {/* If loading and not attached to a visible completed thread yet, show loading bubbles */}
                             {loading && activeId && !currentThread && (
                                 <>
                                     <ChatMessage role="user" content={generatingPrompt} />
@@ -278,7 +279,6 @@ export function MainApp() {
                     )}
                 </div>
 
-                {/* Input Area Component */}
                 <InputBox 
                     value={value} 
                     onChange={setValue} 
@@ -290,6 +290,12 @@ export function MainApp() {
                     setSelectedModel={setSelectedModel}
                     isJiraMode={isJiraMode}
                     setIsJiraMode={setIsJiraMode}
+                    platformType={platformType}
+                    setPlatformType={setPlatformType}
+                    customPrompt={customPrompt}
+                    setCustomPrompt={setCustomPrompt}
+                    acceptanceCriteria={acceptanceCriteria}
+                    setAcceptanceCriteria={setAcceptanceCriteria}
                 />
 
             </div>

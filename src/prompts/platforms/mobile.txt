@@ -1,0 +1,6 @@
+Platform: MOBILE
+- Device compatibility (iOS/Android)
+- Orientation handling & Touch gestures
+- Network interruptions & Latency
+- Mobile responsiveness & Small screens
+- Battery & App lifecycle states

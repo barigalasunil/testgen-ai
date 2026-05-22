@@ -1,0 +1,8 @@
+Test Type: BOUNDARY
+Generate:
+- Min/max value validations for numeric and date fields.
+- Edge conditions (just above/below limits).
+- Threshold limits for list sizes or pagination.
+- Field length validations (max characters, min length).
+- Unusual combinations of boundary values.
+- Extreme conditions and resource limits.

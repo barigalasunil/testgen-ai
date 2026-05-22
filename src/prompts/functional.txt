@@ -1,0 +1,3 @@
+Focus on FUNCTIONAL testing. Verify that the feature works as intended according to requirements. 
+Check happy paths and typical user workflows.
+Request: {{prompt}}

@@ -1,48 +1,40 @@
 import { NextResponse } from "next/server";
-import { SYSTEM_PROMPT } from "@/src/modules/testcase-generator/prompts";
+import { ollamaService } from "@/src/services/ai/ollama.service";
+import { promptBuilder, TestType, PlatformType } from "@/src/services/ai/prompt-builder";
+import { responseParser } from "@/src/services/ai/response-parser";
 
 export async function POST(req: Request) {
     try {
-        const { prompt, model } = await req.json();
+        const { 
+            prompt, 
+            model, 
+            type = "functional", 
+            platformType = "web",
+            customPrompt,
+            acceptanceCriteria 
+        } = await req.json();
 
-        console.log("PROMPT:", prompt);
-        console.log("MODEL:", model);
+        console.log("GENERATION REQUEST:", { prompt, model, type, platformType });
 
-        const systemPrompt = SYSTEM_PROMPT(prompt);
+        // 1. Build the modular prompt
+        const fullPrompt = promptBuilder.buildPrompt(
+            prompt, 
+            type as TestType, 
+            platformType as PlatformType,
+            customPrompt,
+            acceptanceCriteria
+        );
 
-        const ollamaRes = await fetch("http://127.0.0.1:11434/api/generate", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                model: model || "phi3:mini",
-                prompt: systemPrompt,
-                stream: false,
-                format: "json",
-            }),
+        // 2. Generate response using Ollama
+        const response = await ollamaService.generate({
+            model: model || "phi3:mini",
+            prompt: fullPrompt,
+            format: "json",
+            stream: false
         });
 
-        if (!ollamaRes.ok) {
-            const errorText = await ollamaRes.text();
-            console.error("OLLAMA ERROR:", ollamaRes.status, errorText);
-            return NextResponse.json({
-                error: true,
-                result: `Ollama Error: ${ollamaRes.status} ${errorText}`,
-            });
-        }
-
-        const data = await ollamaRes.json();
-        console.log("OLLAMA RAW RESPONSE:", data);
-
-        let parsedData = null;
-        try {
-            parsedData = JSON.parse(data.response);
-        } catch (e) {
-            console.log("Failed to parse Ollama response:", e);
-            // fallback
-            return NextResponse.json({ error: true, result: "Response was not structured properly. Try again. Raw: " + data.response });
-        }
+        // 3. Parse and validate
+        const parsedData = responseParser.parse(response.response);
 
         return NextResponse.json({
             error: false,

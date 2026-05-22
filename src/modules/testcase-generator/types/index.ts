@@ -1,10 +1,12 @@
 export type TestCase = {
-    id: string;
+    testCaseId: string;
     title: string;
-    description?: string;
+    testType: string;
+    priority: "High" | "Medium" | "Low";
+    preconditions: string;
+    testData: string;
     steps: string;
     expectedResult: string;
-    priority?: string;
 };
 
 export type HistoryItem = {

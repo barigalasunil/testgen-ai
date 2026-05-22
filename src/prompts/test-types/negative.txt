@@ -1,0 +1,7 @@
+Test Type: NEGATIVE
+Generate:
+- Invalid inputs and data format violations.
+- Empty values and missing mandatory fields.
+- Unauthorized access attempts and permission failures.
+- Error handling messaging and system stability under failure.
+- Robustness validations against unexpected user actions.
