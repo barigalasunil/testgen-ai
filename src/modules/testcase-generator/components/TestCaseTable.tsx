@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Download, RefreshCw, ThumbsUp, AlertCircle, FileJson, FileSpreadsheet, FileText, CheckCircle2 } from "lucide-react";
+import { Copy, RefreshCw, ThumbsUp, AlertCircle, FileJson, FileSpreadsheet, FileText, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TestCase } from "../types";
 import { exportExcel, exportCsv, exportJson } from "@/src/services/export/export.service";
@@ -39,7 +39,7 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
             else if (type === "csv") filename = exportCsv(data.testCases, jiraStoryId);
             else if (type === "json") filename = exportJson(data.testCases, jiraStoryId);
             showToast(`Exported: ${filename}`);
-        } catch (e) {
+        } catch {
             showToast("Export failed. Please try again.");
         } finally {
             setIsExporting(false);
@@ -54,7 +54,7 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
             const response = await fetch('/api/automation/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ testCases: data.testCases, platform: platformType || null }),
+                body: JSON.stringify({ testCases: data.testCases, platform: platformType || null, jiraStoryId }),
             });
             const payload = await response.json();
 
@@ -97,12 +97,12 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
         showToast("Copied to clipboard!");
     };
 
-    const renderValue = (value: any) => {
+    const renderValue = (value: unknown) => {
         if (value === null || typeof value === 'undefined') return "";
         if (typeof value === 'object') {
             try {
                 return <pre className="whitespace-pre-wrap text-[13px] font-mono">{JSON.stringify(value, null, 2)}</pre>;
-            } catch (e) {
+            } catch {
                 return String(value);
             }
         }
@@ -238,13 +238,15 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
                     >
                         <FileJson className="w-3.5 h-3.5" /> JSON
                     </button>
+                    <div className="w-px h-6 bg-gray-200" />
                     <button
                         onClick={handleGenerateScript}
                         disabled={isGeneratingScript}
+                        title={platformType === 'web' ? 'Generate Playwright Script' : platformType === 'api' ? 'Generate REST API Test' : 'Generate Mobile Test'}
                         className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 px-3 py-2 rounded-2xl transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FileText className="w-3.5 h-3.5" />
-                        {isGeneratingScript ? 'Generating…' : 'Generate Script'}
+                        {isGeneratingScript ? 'Generating…' : platformType === 'web' ? 'Playwright' : platformType === 'api' ? 'REST API' : 'Mobile'}
                     </button>
                     <button
                         onClick={handleCopy}

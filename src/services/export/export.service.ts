@@ -1,30 +1,13 @@
 import * as XLSX from "xlsx";
 import { TestCase } from "@/src/modules/testcase-generator/types";
+import { buildArtifactFilename } from "./artifact-filename";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function sanitizeFilename(value: string): string {
-    return value
-        .trim()
-        .replace(/[^a-zA-Z0-9\-_]/g, "_")
-        .replace(/_+/g, "_")
-        .replace(/^_+|_+$/g, "");
-}
-
-function getDateSuffix(): string {
-    const now = new Date();
-    const dd = String(now.getDate()).padStart(2, "0");
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const yy = String(now.getFullYear()).slice(2);
-    return `${dd}-${mm}-${yy}`;
-}
-
 function buildFilename(jiraStoryId: string | undefined, extension: string): string {
-    const prefix = jiraStoryId?.trim() || "TCGen-Buddy";
-    const sanitized = sanitizeFilename(prefix || "TCGen-Buddy");
-    return `${sanitized}_UAT_TCs_${getDateSuffix()}.${extension}`;
+    return buildArtifactFilename(jiraStoryId, "TCs", extension);
 }
 
 function normalizeValue(value: unknown): string {
@@ -63,7 +46,7 @@ export function exportExcel(testCases: TestCase[], jiraStoryId?: string): string
     const colWidths = Object.keys(rows[0] || {}).map((key) => ({
         wch: Math.max(
             key.length,
-            ...rows.map((r) => getMaxLineLength(normalizeValue((r as any)[key]))),
+            ...rows.map((r) => getMaxLineLength(normalizeValue((r as Record<string, unknown>)[key]))),
             14
         ),
     }));
@@ -93,7 +76,7 @@ export function exportCsv(testCases: TestCase[], jiraStoryId?: string): string {
     const csvContent =
         headers.map(escape).join(",") +
         "\n" +
-        rows.map((row) => headers.map((h) => escape((row as any)[h])).join(",")).join("\n");
+        rows.map((row) => headers.map((h) => escape((row as Record<string, unknown>)[h])).join(",")).join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const filename = buildFilename(jiraStoryId, "csv");

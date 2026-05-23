@@ -5,17 +5,14 @@ import { scriptPromptBuilder } from './prompt-builder';
 import { parseGeneratedScript } from '../utils/response-parser';
 import { ScriptGenerationResult, ScriptPlatform } from '../types';
 import { TestCase } from '@/src/modules/testcase-generator/types';
+import { buildArtifactFilename } from '@/src/services/export/artifact-filename';
 
-function resolveFileName(testCases: TestCase[], platform: ScriptPlatform): string {
-  const titles = testCases.map((tc) => tc.title.toLowerCase()).join(' ');
-  if (titles.includes('login')) return 'login.spec.ts';
-  if (titles.includes('checkout') || titles.includes('order')) return 'checkout.spec.ts';
-  if (titles.includes('cart')) return 'cart.spec.ts';
-  return 'generated.spec.ts';
+function resolveFileName(jiraStoryId?: string): string {
+  return buildArtifactFilename(jiraStoryId, 'Playwright', 'ts');
 }
 
 export class ScriptGeneratorService {
-  async generateScript(testCases: TestCase[], platform: ScriptPlatform): Promise<ScriptGenerationResult> {
+  async generateScript(testCases: TestCase[], platform: ScriptPlatform, jiraStoryId?: string): Promise<ScriptGenerationResult> {
     const prompt = scriptPromptBuilder.buildPrompt(testCases, platform);
     const response = await ollamaService.generate({
       model: 'phi3:mini',
@@ -25,7 +22,7 @@ export class ScriptGeneratorService {
     });
 
     const code = parseGeneratedScript(response.response);
-    const fileName = resolveFileName(testCases, platform);
+    const fileName = resolveFileName(jiraStoryId);
 
     return { fileName, code };
   }
