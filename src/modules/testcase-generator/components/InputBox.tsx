@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, ChevronDown, Link as LinkIcon, Settings as SettingsIcon, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,27 @@ export function InputBox({
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isPlatformDropdownOpen, setIsPlatformDropdownOpen] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
+    const advRef = useRef<HTMLDivElement | null>(null);
+    const toggleRef = useRef<HTMLButtonElement | null>(null);
+
+    useEffect(() => {
+        if (!showAdvanced) return;
+        function handleDown(e: MouseEvent) {
+            const target = e.target as Node;
+            if (advRef.current && advRef.current.contains(target)) return;
+            if (toggleRef.current && toggleRef.current.contains(target)) return;
+            setShowAdvanced(false);
+        }
+        function handleKey(e: KeyboardEvent) {
+            if (e.key === 'Escape') setShowAdvanced(false);
+        }
+        document.addEventListener('mousedown', handleDown);
+        document.addEventListener('keydown', handleKey);
+        return () => {
+            document.removeEventListener('mousedown', handleDown);
+            document.removeEventListener('keydown', handleKey);
+        };
+    }, [showAdvanced]);
 
     const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         onChange(e.target.value);
@@ -59,13 +80,13 @@ export function InputBox({
     };
 
     return (
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-6 pb-6 z-10 w-full">
-            <div className="max-w-4xl mx-auto px-4 md:px-6 w-full flex flex-col gap-2">
+        <div className="w-full">
+            <div className="max-w-5xl mx-auto w-full flex flex-col gap-3">
                 
                 {/* Advanced Options */}
                 <AnimatePresence>
                     {showAdvanced && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col gap-3 mb-2 bg-gray-50/50 p-3 rounded-xl border border-gray-100">
+                        <motion.div ref={advRef} initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col gap-3 mb-2 bg-gray-50/50 p-3 rounded-xl border border-gray-100">
                             <h3 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1">Configuration</h3>
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -152,7 +173,9 @@ export function InputBox({
 
                       {/* Advanced Toggle */}
                       <button 
+                        ref={toggleRef}
                         onClick={() => setShowAdvanced(!showAdvanced)} 
+                        aria-expanded={showAdvanced}
                         className={cn(
                             "flex items-center gap-2 text-[11px] px-3 py-1.5 rounded-full border transition-all font-bold tracking-wide uppercase",
                             showAdvanced ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-200" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50 shadow-sm"

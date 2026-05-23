@@ -1,16 +1,14 @@
 "use client";
 
 import { useState } from 'react';
-import { Play, ShieldCheck, CheckCircle2, AlertCircle, Clock3, FileText } from 'lucide-react';
+import { Play, ShieldCheck, CheckCircle2, Clock3, FileText } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { SuiteExecution, SuiteKey } from '../types';
 
-type SuiteKey = 'smoke' | 'sanity' | 'regression';
-
-type SuiteState = {
-  status: 'idle' | 'running' | 'completed' | 'failed';
-  lastRunAt?: string;
-  reportUrl?: string;
-  message?: string;
-  durationMs?: number;
+type AutomationDashboardProps = {
+  automation: Record<SuiteKey, SuiteExecution>;
+  onExecuteSuite: (suite: SuiteKey) => void;
+  compact?: boolean;
 };
 
 type AutomationRunResponse = {
@@ -22,23 +20,23 @@ type AutomationRunResponse = {
   durationMs: number;
   reportUrl: string;
   output?: string;
+  stderr?: string;
   message?: string;
 };
 
 const suites: { key: SuiteKey; label: string; description: string }[] = [
-  { key: 'smoke', label: 'Smoke Suite', description: 'Quick login validation tests.' },
-  { key: 'sanity', label: 'Sanity Suite', description: 'Login and add to cart flow.' },
-  { key: 'regression', label: 'Regression Suite', description: 'Complete checkout purchase flow.' },
+  { key: 'smoke', label: 'Smoke Suite', description: 'Quick validation checks for critical paths.' },
+  { key: 'sanity', label: 'Sanity Suite', description: 'Core flow validations for recent changes.' },
+  { key: 'regression', label: 'Regression Suite', description: 'Comprehensive regression coverage for releases.' },
 ];
 
-const initialState: Record<SuiteKey, SuiteState> = {
+const initialState: Record<SuiteKey, SuiteExecution> = {
   smoke: { status: 'idle' },
   sanity: { status: 'idle' },
   regression: { status: 'idle' },
 };
 
-export function AutomationDashboard() {
-  const [suiteStates, setSuiteStates] = useState<Record<SuiteKey, SuiteState>>(initialState);
+export function AutomationDashboard({ automation = initialState, onExecuteSuite, compact = false }: AutomationDashboardProps) {
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (message: string) => {
@@ -47,57 +45,8 @@ export function AutomationDashboard() {
   };
 
   const executeSuite = async (suite: SuiteKey) => {
-    setSuiteStates((prev) => ({
-      ...prev,
-      [suite]: { ...prev[suite], status: 'running', message: undefined },
-    }));
-
-    try {
-      const response = await fetch('/api/automation/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ suite }),
-      });
-      const payload = (await response.json()) as AutomationRunResponse;
-
-      if (!response.ok || payload.error) {
-        setSuiteStates((prev) => ({
-          ...prev,
-          [suite]: {
-            status: 'failed',
-            lastRunAt: new Date().toISOString(),
-            reportUrl: payload.reportUrl,
-            message: payload.message || payload.output || 'Automation failed.',
-            durationMs: payload.durationMs,
-          },
-        }));
-        showToast(`Suite ${suite} failed`);
-        return;
-      }
-
-      setSuiteStates((prev) => ({
-        ...prev,
-        [suite]: {
-          status: 'completed',
-          lastRunAt: payload.finishedAt,
-          reportUrl: payload.reportUrl,
-          message: 'Execution succeeded.',
-          durationMs: payload.durationMs,
-        },
-      }));
-      showToast(`Suite ${suite} completed`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setSuiteStates((prev) => ({
-        ...prev,
-        [suite]: {
-          status: 'failed',
-          lastRunAt: new Date().toISOString(),
-          message,
-        },
-      }));
-      showToast(`Suite ${suite} failed`);
-    }
+    showToast(`Running ${suite} suite...`);
+    onExecuteSuite(suite);
   };
 
   const formatTimestamp = (timestamp?: string) => {
@@ -105,22 +54,31 @@ export function AutomationDashboard() {
     return new Date(timestamp).toLocaleString();
   };
 
-  return (
-    <div className="mb-6 rounded-3xl border border-gray-200 bg-slate-50 p-5 shadow-sm">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+    return (
+    <div className={cn(
+      "relative rounded-3xl border border-gray-200 bg-slate-50 shadow-sm",
+      compact ? "p-4" : "mb-6 p-5"
+    )}>
+      <div className={cn(
+        "flex flex-col gap-3 mb-4",
+        compact ? "" : "md:flex-row md:items-center md:justify-between"
+      )}>
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Automation Execution Dashboard</h2>
-          <p className="text-sm text-slate-500">Run SauceDemo suites and open the latest Playwright reports.</p>
+          <h2 className={cn("font-semibold text-slate-900", compact ? "text-base" : "text-lg")}>Automation Execution Dashboard</h2>
+          <p className="text-sm text-slate-500">Execute automation suites and inspect execution reports.</p>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium text-slate-600 border border-slate-200 shadow-sm">
+        <div className={cn(
+          "inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium text-slate-600 border border-slate-200 shadow-sm",
+          compact ? "justify-start" : ""
+        )}>
           <ShieldCheck className="w-4 h-4 text-slate-400" />
           Backend execution via API
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className={cn("grid gap-4", compact ? "grid-cols-1" : "md:grid-cols-3")}>
         {suites.map((suite) => {
-          const state = suiteStates[suite.key];
+          const state = automation[suite.key];
           const isRunning = state.status === 'running';
 
           return (
@@ -186,7 +144,7 @@ export function AutomationDashboard() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl">
+        <div className="absolute bottom-4 right-4 z-50 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl">
           {toast}
         </div>
       )}

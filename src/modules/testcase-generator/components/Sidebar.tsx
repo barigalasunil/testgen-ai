@@ -43,7 +43,7 @@ export function Sidebar({
 
     return (
         <div className={cn(
-            "fixed md:static inset-y-0 left-0 z-40 bg-[#f9f9f9] border-r border-gray-200 w-[260px] flex flex-col transition-transform duration-300 ease-in-out shrink-0",
+            "fixed md:static inset-y-0 left-0 z-40 bg-[#f9f9f9] border-r border-gray-200 w-[240px] flex flex-col transition-transform duration-300 ease-in-out shrink-0",
             isOpen ? "translate-x-0" : "-translate-x-full hidden md:flex md:translate-x-0"
         )}>
             <div className="p-2 flex gap-2 h-14 items-center mt-1">
@@ -102,7 +102,7 @@ export function Sidebar({
             
             <div className="p-2 border-t border-gray-200">
                 <button onClick={onOpenSettings} className="w-full flex items-center gap-3 rounded-md p-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium">
-                    <Settings className="w-4 h-4 text-gray-500" /> Settings
+                    <Settings className="w-4 h-4 text-gray-500" /> Jira Integration
                 </button>
             </div>
         </div>

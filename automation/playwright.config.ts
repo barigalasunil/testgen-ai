@@ -1,11 +1,16 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
+
+const reportDir = process.env.PW_REPORT_DIR
+  ? path.resolve(process.env.PW_REPORT_DIR)
+  : path.resolve('./public/automation-reports');
 
 export default defineConfig({
   testDir: './tests',
   outputDir: './reports',
   reporter: [
     ['list'],
-    ['html', { outputFolder: './reports/html', open: 'never' }],
+    ['html', { outputFolder: reportDir, open: 'never' }],
   ],
   retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,

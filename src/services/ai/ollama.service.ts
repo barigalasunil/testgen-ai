@@ -54,6 +54,15 @@ export class OllamaService {
         const data = await response.json();
         return data.models.map((m: any) => m.name);
     }
+
+    async health(): Promise<void> {
+        const response = await fetch(`${this.baseUrl}/api/tags`);
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Ollama unavailable: ${response.status} ${errorText}`);
+        }
+        await response.json();
+    }
 }
 
 export const ollamaService = new OllamaService();

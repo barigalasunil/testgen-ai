@@ -12,6 +12,7 @@ interface TestCaseTableProps {
     platformType?: 'web' | 'mobile' | 'api';
     onCopy: () => void;
     onRegenerate: () => void;
+    onScriptGenerated?: (code: string, fileName: string) => void;
 }
 
 export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegenerate }: TestCaseTableProps) {
@@ -61,10 +62,15 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
                 throw new Error(payload.message || 'Script generation failed');
             }
 
-            setScriptCode(payload.code || '');
-            setScriptFileName(payload.fileName || 'generated.spec.ts');
+            const code = payload.code || '';
+            const fileName = payload.fileName || 'generated.spec.ts';
+            setScriptCode(code);
+            setScriptFileName(fileName);
             setShowScriptModal(true);
-            showToast(`Generated script: ${payload.fileName}`);
+            showToast(`Generated script: ${fileName}`);
+            if (onScriptGenerated) {
+                onScriptGenerated(code, fileName);
+            }
         } catch (error) {
             showToast(`Script generation failed: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
@@ -122,84 +128,6 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
                     <span className="truncate">{toast}</span>
                 </div>
             )}
-
-            {/* Action Bar */}
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-                {/* Export group */}
-                <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1">
-                    <button
-                        onClick={() => handleExport("excel")}
-                        title="Export Excel (.xlsx)"
-                        disabled={isExporting}
-                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-green-50 hover:border-green-300 hover:text-green-700 px-2.5 py-1.5 rounded-md transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
-                    </button>
-                    <button
-                        onClick={() => handleExport("csv")}
-                        title="Export CSV (.csv)"
-                        disabled={isExporting}
-                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 px-2.5 py-1.5 rounded-md transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <FileText className="w-3.5 h-3.5" /> CSV
-                    </button>
-                    <button
-                        onClick={() => handleExport("json")}
-                        title="Export JSON (.json)"
-                        disabled={isExporting}
-                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 px-2.5 py-1.5 rounded-md transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <FileJson className="w-3.5 h-3.5" /> JSON
-                    </button>
-                </div>
-
-                <button
-                    onClick={handleGenerateScript}
-                    disabled={isGeneratingScript}
-                    className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 px-2.5 py-1.5 rounded-md transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <FileText className="w-3.5 h-3.5" />
-                    {isGeneratingScript ? 'Generating…' : 'Generate Script'}
-                </button>
-
-                <div className="w-px h-5 bg-gray-200"></div>
-
-                {/* Copy */}
-                <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-gray-50 px-2.5 py-1.5 rounded-md transition-colors text-gray-700 shadow-sm font-medium"
-                >
-                    <Copy className="w-3.5 h-3.5" /> Copy
-                </button>
-
-                <div className="w-px h-5 bg-gray-200"></div>
-
-                {/* Regenerate */}
-                <button
-                    title="Regenerate"
-                    onClick={onRegenerate}
-                    className="flex items-center justify-center bg-white border border-gray-200 hover:bg-gray-50 w-8 h-8 rounded-md transition-colors text-gray-700 shadow-sm"
-                >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-
-                {/* Thumbs up */}
-                <button
-                    title="Helpful"
-                    onClick={() => setLiked(!liked)}
-                    className={cn(
-                        "flex items-center justify-center border border-gray-200 w-8 h-8 rounded-md transition-colors shadow-sm",
-                        liked ? "bg-green-50 text-green-600 border-green-200" : "bg-white hover:bg-gray-50 text-gray-700"
-                    )}
-                >
-                    <ThumbsUp className={cn("w-3.5 h-3.5", liked ? "fill-green-600" : "")} />
-                </button>
-
-                {/* Count badge */}
-                <span className="ml-auto text-[11px] text-gray-400 font-medium">
-                    {data.testCases.length} test case{data.testCases.length !== 1 ? "s" : ""} generated
-                </span>
-            </div>
 
             {showScriptModal && scriptCode && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -282,6 +210,69 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
                         ))}
                     </tbody>
                 </table>
+            </div>
+
+            <div className="mt-4 rounded-3xl border border-gray-200 bg-slate-50 p-4 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        onClick={() => handleExport("excel")}
+                        title="Export Excel (.xlsx)"
+                        disabled={isExporting}
+                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-green-50 hover:border-green-300 hover:text-green-700 px-3 py-2 rounded-2xl transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+                    </button>
+                    <button
+                        onClick={() => handleExport("csv")}
+                        title="Export CSV (.csv)"
+                        disabled={isExporting}
+                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 px-3 py-2 rounded-2xl transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <FileText className="w-3.5 h-3.5" /> CSV
+                    </button>
+                    <button
+                        onClick={() => handleExport("json")}
+                        title="Export JSON (.json)"
+                        disabled={isExporting}
+                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 px-3 py-2 rounded-2xl transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <FileJson className="w-3.5 h-3.5" /> JSON
+                    </button>
+                    <button
+                        onClick={handleGenerateScript}
+                        disabled={isGeneratingScript}
+                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 px-3 py-2 rounded-2xl transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <FileText className="w-3.5 h-3.5" />
+                        {isGeneratingScript ? 'Generating…' : 'Generate Script'}
+                    </button>
+                    <button
+                        onClick={handleCopy}
+                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-2xl transition-colors text-gray-700 shadow-sm font-medium"
+                    >
+                        <Copy className="w-3.5 h-3.5" /> Copy
+                    </button>
+                    <button
+                        title="Regenerate"
+                        onClick={onRegenerate}
+                        className="flex items-center justify-center bg-white border border-gray-200 hover:bg-gray-50 w-9 h-9 rounded-2xl transition-colors text-gray-700 shadow-sm"
+                    >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                        title="Helpful"
+                        onClick={() => setLiked(!liked)}
+                        className={cn(
+                            "flex items-center justify-center border border-gray-200 w-9 h-9 rounded-2xl transition-colors shadow-sm",
+                            liked ? "bg-green-50 text-green-600 border-green-200" : "bg-white hover:bg-gray-50 text-gray-700"
+                        )}
+                    >
+                        <ThumbsUp className={cn("w-3.5 h-3.5", liked ? "fill-green-600" : "")} />
+                    </button>
+                    <span className="ml-auto text-[11px] text-gray-500 font-medium">
+                        {data.testCases.length} test case{data.testCases.length !== 1 ? "s" : ""} generated
+                    </span>
+                </div>
             </div>
         </div>
     );

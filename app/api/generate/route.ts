@@ -39,8 +39,8 @@ export async function POST(req: Request) {
             parsedData = responseParser.parse(response.response);
         } catch (e) {
             console.error("Response parsing failed, returning raw response", e);
-            // Return a safe fallback so UI can show raw content instead of crashing
-            return NextResponse.json({ error: false, result: { raw: response.response } });
+            // Return a safe fallback so UI can show the raw LLM payload as an error.
+            return NextResponse.json({ error: true, result: response.response });
         }
 
         // Ensure every test case has only primitive/string fields
