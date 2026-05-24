@@ -701,9 +701,7 @@ This project is licensed under the **MIT License**. See [LICENSE](LICENSE) file 
 
 ## 📞 Support & Community
 
-- **Issues** — [GitHub Issues](https://github.com/yourusername/tcgen-buddy/issues)
-- **Discussions** — [GitHub Discussions](https://github.com/yourusername/tcgen-buddy/discussions)
-- **Email** — support@tcgenbuddy.dev
+- **Email** — suneel.barigala@gmail.com
 
 ---
 
