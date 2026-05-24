@@ -94,6 +94,14 @@ export function MainApp() {
     const [resultTab, setResultTab] = useState<'testCases' | 'scripts' | 'logs'>('testCases');
     const [ollamaStatus, setOllamaStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
     const [activityIndex, setActivityIndex] = useState(0);
+    const handleStoryLoaded = (story: { summary: string; description: string; storyId: string }) => {
+    setValue(
+        `Generate test cases for this Jira story:\n\nSummary: ${story.summary}\n\nDescription: ${story.description}`
+    );
+    if (story.description?.trim()) {
+        setAcceptanceCriteria(story.description.slice(0, 500));
+    }
+    };
 
     // Feature states
     const [models, setModels] = useState<string[]>([]);
@@ -646,7 +654,7 @@ export function MainApp() {
                                 platformType={platformType} setPlatformType={setPlatformType}
                                 customPrompt={customPrompt} setCustomPrompt={setCustomPrompt}
                                 acceptanceCriteria={acceptanceCriteria} setAcceptanceCriteria={setAcceptanceCriteria}
-                                jiraStoryId={jiraStoryId} setJiraStoryId={setJiraStoryId}
+                                jiraStoryId={jiraStoryId} setJiraStoryId={setJiraStoryId} onStoryLoaded={handleStoryLoaded}
                             />
                         </div>
                     </div>

@@ -6,7 +6,6 @@ import { existsSync, mkdirSync } from 'fs';
 const VALID_SUITES = ['smoke', 'sanity', 'regression'] as const;
 type SuiteName = (typeof VALID_SUITES)[number];
 
-// Maps suite name to the grep tag used in test titles
 const SUITE_GREP: Record<SuiteName, string> = {
     smoke: 'SauceDemo Smoke',
     sanity: 'SauceDemo Sanity',
@@ -25,25 +24,18 @@ function getProjectRoot(): string {
     return root;
 }
 
-async function runPlaywrightSuite(suite: SuiteName) {
+async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
     const rootDir = getProjectRoot();
     const reportDir = join(rootDir, 'public', 'automation-reports', suite);
     const automationDir = join(rootDir, 'automation');
     const configPath = join(automationDir, 'playwright.config.ts');
 
-    console.log('[AUTOMATION] Suite:', suite);
-    console.log('[AUTOMATION] Root:', rootDir);
-    console.log('[AUTOMATION] Automation dir:', automationDir);
-    console.log('[AUTOMATION] Config:', configPath);
-    console.log('[AUTOMATION] Report dir:', reportDir);
+    console.log('[AUTOMATION] Suite:', suite, '| Headed:', headed);
 
     if (!existsSync(reportDir)) {
         mkdirSync(reportDir, { recursive: true });
     }
 
-    // ── KEY FIX: use --grep against the describe block name ──
-    // instead of passing a Windows path as a test filter.
-    // Each spec file has test.describe('SauceDemo Smoke', ...) etc.
     const grepPattern = SUITE_GREP[suite];
 
     const args = [
@@ -52,8 +44,6 @@ async function runPlaywrightSuite(suite: SuiteName) {
         '--config', configPath,
         '--grep', grepPattern,
     ];
-
-    console.log('[AUTOMATION] Command: npx', args.join(' '));
 
     return new Promise<{
         success: boolean;
@@ -65,7 +55,6 @@ async function runPlaywrightSuite(suite: SuiteName) {
         const isWindows = process.platform === 'win32';
 
         const child = spawn('npx', args, {
-            // ── Run from the automation folder so relative paths work ──
             cwd: automationDir,
             shell: isWindows,
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -73,6 +62,10 @@ async function runPlaywrightSuite(suite: SuiteName) {
                 ...process.env,
                 SAUCEDEMO_BASE_URL: 'https://www.saucedemo.com',
                 PW_REPORT_DIR: reportDir,
+                // Pass headed flag to playwright.config.ts
+                PW_HEADED: headed ? 'true' : 'false',
+                // Required on Windows for headed Chromium to open
+                DISPLAY: process.env.DISPLAY || '',
             },
         });
 
@@ -118,6 +111,8 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
         const suite = body?.suite as string;
+        // headed flag from dashboard toggle — default false
+        const headed = body?.headed === true;
 
         if (!VALID_SUITES.includes(suite as SuiteName)) {
             return NextResponse.json(
@@ -129,7 +124,7 @@ export async function POST(request: Request) {
         const startedAt = new Date().toISOString();
         const reportUrl = getReportUrl(suite as SuiteName);
 
-        const result = await runPlaywrightSuite(suite as SuiteName);
+        const result = await runPlaywrightSuite(suite as SuiteName, headed);
 
         if (!result.success) {
             return NextResponse.json(

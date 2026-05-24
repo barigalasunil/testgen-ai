@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HistoryItem } from "../types";
@@ -101,6 +102,12 @@ export function Sidebar({
             </div>
             
             <div className="p-2 border-t border-gray-200">
+                <Link
+                    href="/api-testing"
+                    className="w-full flex items-center gap-3 rounded-md p-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium"
+                >
+                    <span className="text-gray-500">⚡</span> API Testing
+                </Link>
                 <button onClick={onOpenSettings} className="w-full flex items-center gap-3 rounded-md p-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium">
                     <Settings className="w-4 h-4 text-gray-500" /> Jira Integration
                 </button>

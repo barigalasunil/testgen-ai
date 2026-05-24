@@ -83,3 +83,18 @@ export async function saveTestCasesToJira(payload: {
     });
     return res.json();
 }
+
+export async function fetchJiraStory(storyId: string) {
+    const credentials = loadJiraCredentials();
+    if (!credentials) {
+        return { success: false, error: 'No Jira credentials saved. Open settings first.' };
+    }
+    const params = new URLSearchParams({
+        storyId,
+        baseUrl: credentials.baseUrl,
+        email: credentials.email,
+        apiToken: credentials.apiToken,
+    });
+    const res = await fetch(`/api/jira/get-story?${params.toString()}`);
+    return res.json();
+}

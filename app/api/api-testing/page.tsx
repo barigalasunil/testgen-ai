@@ -1,0 +1,389 @@
+"use client";
+
+import { useState } from "react";
+import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type TestType = 'restassured' | 'scenarios' | 'playwright';
+type ParsedSpec = {
+    title: string;
+    version: string;
+    description: string;
+    endpointCount: number;
+    endpoints: { method: string; path: string; summary: string }[];
+    rawSpec: string;
+};
+
+const TEST_TYPES: { key: TestType; label: string; description: string }[] = [
+    { key: 'restassured', label: 'RestAssured (Java)', description: 'Generate Java RestAssured test class' },
+    { key: 'scenarios', label: 'Test Scenarios', description: 'Plain English test scenarios table' },
+    { key: 'playwright', label: 'Playwright API (TS)', description: 'TypeScript Playwright API tests' },
+];
+
+const SAMPLE_URLS = [
+    { label: 'Petstore (JSON)', url: 'https://petstore.swagger.io/v2/swagger.json' },
+    { label: 'Petstore v3', url: 'https://petstore3.swagger.io/api/v3/openapi.json' },
+];
+
+export default function ApiTestingPage() {
+    const [swaggerUrl, setSwaggerUrl] = useState('');
+    const [swaggerJson, setSwaggerJson] = useState('');
+    const [inputMode, setInputMode] = useState<'url' | 'paste'>('url');
+    const [testType, setTestType] = useState<TestType>('restassured');
+    const [model, setModel] = useState('mistral:7b');
+    const [parsedSpec, setParsedSpec] = useState<ParsedSpec | null>(null);
+    const [isParsing, setIsParsing] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generatedCode, setGeneratedCode] = useState('');
+    const [error, setError] = useState('');
+    const [toast, setToast] = useState('');
+
+    const showToast = (msg: string) => {
+        setToast(msg);
+        setTimeout(() => setToast(''), 2500);
+    };
+
+    const handleParseSpec = async () => {
+        if (!swaggerUrl.trim()) return;
+        setIsParsing(true);
+        setError('');
+        setParsedSpec(null);
+        try {
+            const res = await fetch('/api/api-testing/parse-swagger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: swaggerUrl }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                setParsedSpec(data);
+            } else {
+                setError(data.error || 'Failed to parse spec');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setIsParsing(false);
+        }
+    };
+
+    const handleGenerate = async () => {
+        setIsGenerating(true);
+        setError('');
+        setGeneratedCode('');
+        try {
+            const res = await fetch('/api/api-testing/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    swaggerUrl: inputMode === 'url' ? swaggerUrl : undefined,
+                    swaggerJson: inputMode === 'paste' ? swaggerJson : undefined,
+                    model,
+                    testType,
+                }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                setGeneratedCode(data.code);
+            } else {
+                setError(data.error || 'Generation failed');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(generatedCode);
+        showToast('Copied to clipboard');
+    };
+
+    const handleDownload = () => {
+        const ext = testType === 'restassured' ? 'java' : testType === 'playwright' ? 'ts' : 'txt';
+        const filename = `api-tests.${ext}`;
+        const blob = new Blob([generatedCode], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(`Downloaded ${filename}`);
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 font-sans">
+            {/* Toast */}
+            {toast && (
+                <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-gray-900 text-white px-4 py-2.5 rounded-xl shadow-xl text-sm">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    {toast}
+                </div>
+            )}
+
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+                <div>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Module 3</p>
+                    <h1 className="text-xl font-bold text-slate-900">API Testing Assistant</h1>
+                    <p className="text-xs text-slate-500 mt-0.5">Generate RestAssured, Playwright, or scenario-based API tests from Swagger/OpenAPI specs</p>
+                </div>
+                <a href="/" className="text-sm text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg">
+                    ← Back to TCGen
+                </a>
+            </div>
+
+            <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+                {/* Left — Input panel */}
+                <div className="flex flex-col gap-4">
+
+                    {/* Input mode toggle */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+                        <h2 className="text-sm font-semibold text-slate-800 mb-3">API Specification Input</h2>
+
+                        <div className="flex gap-2 mb-4">
+                            <button
+                                onClick={() => setInputMode('url')}
+                                className={cn("px-3 py-1.5 rounded-xl text-xs font-semibold transition",
+                                    inputMode === 'url' ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                )}
+                            >
+                                🔗 Swagger URL
+                            </button>
+                            <button
+                                onClick={() => setInputMode('paste')}
+                                className={cn("px-3 py-1.5 rounded-xl text-xs font-semibold transition",
+                                    inputMode === 'paste' ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                )}
+                            >
+                                📋 Paste JSON/YAML
+                            </button>
+                        </div>
+
+                        {inputMode === 'url' ? (
+                            <div className="flex flex-col gap-2">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={swaggerUrl}
+                                        onChange={e => setSwaggerUrl(e.target.value)}
+                                        placeholder="https://petstore.swagger.io/v2/swagger.json"
+                                        className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <button
+                                        onClick={handleParseSpec}
+                                        disabled={isParsing || !swaggerUrl.trim()}
+                                        className="px-4 py-2.5 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap"
+                                    >
+                                        {isParsing ? 'Loading...' : 'Load Spec'}
+                                    </button>
+                                </div>
+                                {/* Sample URLs */}
+                                <div className="flex gap-2 flex-wrap">
+                                    <span className="text-xs text-slate-400">Try:</span>
+                                    {SAMPLE_URLS.map(s => (
+                                        <button key={s.url} onClick={() => setSwaggerUrl(s.url)}
+                                            className="text-xs text-blue-600 hover:underline">
+                                            {s.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <textarea
+                                value={swaggerJson}
+                                onChange={e => setSwaggerJson(e.target.value)}
+                                placeholder='Paste your OpenAPI JSON or YAML spec here...'
+                                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none h-40"
+                            />
+                        )}
+                    </div>
+
+                    {/* Parsed spec preview */}
+                    {parsedSpec && (
+                        <div className="bg-white rounded-2xl border border-emerald-200 p-4 shadow-sm">
+                            <div className="flex items-center gap-2 mb-3">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                <h3 className="text-sm font-semibold text-slate-800">Spec Loaded: {parsedSpec.title}</h3>
+                                <span className="text-xs text-slate-400 ml-auto">v{parsedSpec.version}</span>
+                            </div>
+                            {parsedSpec.description && (
+                                <p className="text-xs text-slate-500 mb-3">{parsedSpec.description.slice(0, 150)}</p>
+                            )}
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full font-semibold">
+                                    {parsedSpec.endpointCount} endpoints
+                                </span>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+                                {parsedSpec.endpoints.map((ep, i) => (
+                                    <div key={i} className="flex items-center gap-2 text-xs py-1 border-b border-slate-50">
+                                        <span className={cn("px-1.5 py-0.5 rounded font-bold font-mono text-[10px] min-w-[44px] text-center",
+                                            ep.method === 'GET' ? 'bg-green-100 text-green-700' :
+                                            ep.method === 'POST' ? 'bg-blue-100 text-blue-700' :
+                                            ep.method === 'PUT' ? 'bg-amber-100 text-amber-700' :
+                                            ep.method === 'DELETE' ? 'bg-red-100 text-red-700' :
+                                            'bg-slate-100 text-slate-700'
+                                        )}>
+                                            {ep.method}
+                                        </span>
+                                        <span className="font-mono text-slate-600">{ep.path}</span>
+                                        {ep.summary && <span className="text-slate-400 truncate">{ep.summary}</span>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Test type selector */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+                        <h2 className="text-sm font-semibold text-slate-800 mb-3">Test Output Type</h2>
+                        <div className="flex flex-col gap-2">
+                            {TEST_TYPES.map(t => (
+                                <button
+                                    key={t.key}
+                                    onClick={() => setTestType(t.key)}
+                                    className={cn("flex items-start gap-3 p-3 rounded-xl border text-left transition",
+                                        testType === t.key
+                                            ? "border-blue-500 bg-blue-50"
+                                            : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                                    )}
+                                >
+                                    <div className={cn("w-4 h-4 rounded-full border-2 mt-0.5 shrink-0",
+                                        testType === t.key ? "border-blue-500 bg-blue-500" : "border-slate-300"
+                                    )} />
+                                    <div>
+                                        <p className={cn("text-sm font-semibold", testType === t.key ? "text-blue-700" : "text-slate-700")}>
+                                            {t.label}
+                                        </p>
+                                        <p className="text-xs text-slate-400 mt-0.5">{t.description}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Model + Generate */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+                        <h2 className="text-sm font-semibold text-slate-800 mb-3">AI Model</h2>
+                        <div className="flex gap-2">
+                            {['mistral:7b', 'phi3:mini', 'gemma4:e4b'].map(m => (
+                                <button key={m} onClick={() => setModel(m)}
+                                    className={cn("px-3 py-1.5 rounded-xl text-xs font-semibold border transition",
+                                        model === m ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                    )}>
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={handleGenerate}
+                        disabled={isGenerating || (!swaggerUrl.trim() && !swaggerJson.trim())}
+                        className="w-full py-3 rounded-2xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                                Generating tests...
+                            </>
+                        ) : (
+                            '⚡ Generate API Tests'
+                        )}
+                    </button>
+
+                    {error && (
+                        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            {error}
+                        </div>
+                    )}
+                </div>
+
+                {/* Right — Generated code */}
+                <div className="flex flex-col gap-4">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col" style={{ minHeight: '600px' }}>
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+                            <div>
+                                <h2 className="text-sm font-semibold text-slate-800">Generated Test Code</h2>
+                                <p className="text-xs text-slate-400">
+                                    {generatedCode
+                                        ? `${generatedCode.split('\n').length} lines · ${testType}`
+                                        : 'Output will appear here'}
+                                </p>
+                            </div>
+                            {generatedCode && (
+                                <div className="flex gap-2">
+                                    <button onClick={handleCopy}
+                                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
+                                        <Copy className="w-3.5 h-3.5" /> Copy
+                                    </button>
+                                    <button onClick={handleDownload}
+                                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800">
+                                        <Download className="w-3.5 h-3.5" /> Download
+                                    </button>
+                                    <button onClick={handleGenerate} disabled={isGenerating}
+                                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
+                                        <RefreshCw className="w-3.5 h-3.5" /> Retry
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex-1 bg-slate-950 rounded-b-2xl overflow-auto">
+                            {generatedCode ? (
+                                <pre className="p-4 text-xs text-slate-100 font-mono whitespace-pre-wrap leading-relaxed">
+                                    {generatedCode}
+                                </pre>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 p-8">
+                                    <div className="text-4xl">⚡</div>
+                                    <p className="text-sm text-center">
+                                        {isGenerating
+                                            ? 'AI is analyzing your API spec and generating tests...'
+                                            : 'Enter a Swagger URL or paste your OpenAPI spec, then click Generate'}
+                                    </p>
+                                    {isGenerating && (
+                                        <div className="flex gap-1">
+                                            {[0, 150, 300].map(d => (
+                                                <span key={d} className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: `${d}ms` }} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Quick reference */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Sample Swagger URLs to test with</h3>
+                        <div className="flex flex-col gap-2">
+                            {[
+                                { name: 'Swagger Petstore v2', url: 'https://petstore.swagger.io/v2/swagger.json', desc: 'Classic REST API example' },
+                                { name: 'Swagger Petstore v3', url: 'https://petstore3.swagger.io/api/v3/openapi.json', desc: 'OpenAPI 3.0 example' },
+                            ].map(api => (
+                                <div key={api.url} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 hover:border-slate-200 hover:bg-slate-50 transition">
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-700">{api.name}</p>
+                                        <p className="text-xs text-slate-400">{api.desc}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => { setSwaggerUrl(api.url); setInputMode('url'); }}
+                                        className="text-xs text-blue-600 hover:underline ml-3 whitespace-nowrap"
+                                    >
+                                        Use this ↗
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
