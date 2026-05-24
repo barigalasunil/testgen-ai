@@ -7,13 +7,39 @@ function splitCsvLine(line: string): string[] {
 }
 
 export function parseCsv<T extends Record<string, string>>(relativePath: string): T[] {
-  const fullPath = resolve(__dirname, relativePath);
+  // Only use the filename — strip any directory prefix
+  const fileName = relativePath.replace(/^.*[\\/]/, '');
+
+  // Try both possible locations depending on what cwd Playwright uses
+  const candidates = [
+    resolve(process.cwd(), 'data', fileName),                // cwd = automation/
+    resolve(process.cwd(), 'automation', 'data', fileName),  // cwd = project root
+  ];
+
+  let fullPath = '';
+  for (const candidate of candidates) {
+    try {
+      readFileSync(candidate);
+      fullPath = candidate;
+      break;
+    } catch {
+      // not here, try next
+    }
+  }
+
+  if (!fullPath) {
+    throw new Error(
+      `[CSV PARSER] Could not find "${fileName}" in any of:\n` +
+      candidates.map(c => `  - ${c}`).join('\n')
+    );
+  }
+
+  console.log('[CSV PARSER] Found at:', fullPath);
+
   const rawFile = readFileSync(fullPath, 'utf-8').trim();
   const lines = rawFile.split(/\r?\n/).filter(Boolean);
 
-  if (lines.length === 0) {
-    return [];
-  }
+  if (lines.length === 0) return [];
 
   const headers = splitCsvLine(lines.shift()!);
   return lines.map((line) => {

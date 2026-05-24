@@ -1,194 +1,150 @@
-import { TestCase } from "@/src/modules/testcase-generator/types";
+type RawTestCase = {
+  testCaseId?: string;
+  id?: string;
+  title?: string;
+  testType?: string;
+  type?: string;
+  priority?: string;
+  preconditions?: string;
+  precondition?: string;
+  testData?: string | object;
+  data?: string | object;
+  steps?: string | string[];
+  expectedResult?: string;
+  expected?: string;
+};
 
-export interface GenerationResult {
-    testCases: TestCase[];
-}
+type ParsedOutput = {
+  testCases: {
+    testCaseId: string;
+    title: string;
+    testType: string;
+    priority: string;
+    preconditions: string;
+    testData: string;
+    steps: string;
+    expectedResult: string;
+  }[];
+};
 
-function removeCodeFence(raw: string) {
+class ResponseParser {
+  parse(raw: string): ParsedOutput {
+    // Strip markdown code fences if present
     let cleaned = raw.trim();
-    if (cleaned.startsWith("```")) {
-        cleaned = cleaned.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-    }
-    return cleaned.trim();
-}
+    cleaned = cleaned
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```\s*$/i, '')
+      .trim();
 
-function normalizeField(v: any): string {
-    if (v === null || typeof v === "undefined") return "";
-    if (typeof v === "string") return v;
-    if (typeof v === "number" || typeof v === "boolean") return String(v);
-    if (Array.isArray(v)) return v.map(item => normalizeField(item)).join("\n");
-    if (typeof v === "object") {
-        const keys = Object.keys(v);
-        const allPrimitive = keys.every(k => ["string", "number", "boolean"].includes(typeof v[k]));
-        if (allPrimitive) {
-            return keys.map(k => `${k}: ${String(v[k])}`).join("\n");
-        }
-        try {
-            return JSON.stringify(v, null, 2);
-        } catch {
-            return String(v);
-        }
-    }
-    return String(v);
-}
+    // Remove all trailing newlines/whitespace
+    cleaned = cleaned.trimEnd();
 
-function isLikelyTestCaseObject(value: any) {
-    return (
-        value &&
-        typeof value === "object" &&
-        !Array.isArray(value) &&
-        (typeof value.testCaseId === "string" || typeof value.title === "string" || typeof value.name === "string")
-    );
-}
+    let parsed: any;
 
-function tryParseJson(text: string) {
     try {
-        return JSON.parse(text);
+      parsed = JSON.parse(cleaned);
     } catch {
-        return null;
-    }
-}
-
-function extractBalancedChunks(text: string): string[] {
-    const chunks: string[] = [];
-    const stack: string[] = [];
-    const startStack: number[] = [];
-    let inString = false;
-    let escape = false;
-
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-
-        if (escape) {
-            escape = false;
-            continue;
-        }
-
-        if (char === "\\") {
-            escape = true;
-            continue;
-        }
-
-        if (char === '"') {
-            inString = !inString;
-            continue;
-        }
-
-        if (inString) {
-            continue;
-        }
-
-        if (char === "{" || char === "[") {
-            stack.push(char);
-            startStack.push(i);
-            continue;
-        }
-
-        const lastOpen = stack[stack.length - 1];
-        if (char === "}" && lastOpen === "{") {
-            stack.pop();
-            const startIndex = startStack.pop();
-            if (startIndex !== undefined) {
-                chunks.push(text.substring(startIndex, i + 1));
-            }
-            continue;
-        }
-
-        if (char === "]" && lastOpen === "[") {
-            stack.pop();
-            const startIndex = startStack.pop();
-            if (startIndex !== undefined) {
-                chunks.push(text.substring(startIndex, i + 1));
-            }
-            continue;
-        }
+      // LLM truncated the response — try to recover partial JSON
+      parsed = this.recoverPartialJson(cleaned);
     }
 
-    return chunks;
-}
+    const rawCases: RawTestCase[] =
+      parsed.testCases || parsed.test_cases || parsed.cases || [];
 
-function findBestJsonCandidate(rawResponse: string) {
-    const cleaned = removeCodeFence(rawResponse);
-    const candidates = extractBalancedChunks(cleaned);
-
-    for (const candidate of candidates) {
-        const parsed = tryParseJson(candidate);
-        if (!parsed) continue;
-
-        if (Array.isArray(parsed)) {
-            return parsed;
-        }
-
-        if (parsed && typeof parsed === "object") {
-            if (Array.isArray((parsed as any).testCases)) {
-                return parsed;
-            }
-            if (isLikelyTestCaseObject(parsed)) {
-                return parsed;
-            }
-        }
+    if (!Array.isArray(rawCases) || rawCases.length === 0) {
+      throw new Error('No test cases array found in parsed response');
     }
 
-    const recoveredTestCases: any[] = [];
-    for (const candidate of candidates) {
-        const parsed = tryParseJson(candidate);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            if (isLikelyTestCaseObject(parsed)) {
-                recoveredTestCases.push(parsed);
-            } else if (Array.isArray((parsed as any).testCases)) {
-                return parsed;
-            }
-        } else if (Array.isArray(parsed) && parsed.every(isLikelyTestCaseObject)) {
-            return parsed;
+    const testCases = rawCases.map((tc, index) => {
+      const num = String(index + 1).padStart(3, '0');
+      return {
+        testCaseId: String(tc.testCaseId || tc.id || `TC-${num}`),
+        title: String(tc.title || `Test Case ${num}`),
+        testType: String(tc.testType || tc.type || 'Functional'),
+        priority: this.normalizePriority(tc.priority),
+        preconditions: String(tc.preconditions || tc.precondition || 'None'),
+        testData: this.normalizeTestData(tc.testData || tc.data),
+        steps: this.normalizeSteps(tc.steps),
+        expectedResult: String(tc.expectedResult || tc.expected || ''),
+      };
+    });
+
+    return { testCases };
+  }
+
+  // Handles testData as object OR string
+  private normalizeTestData(raw?: string | object): string {
+    if (!raw) return 'N/A';
+    if (typeof raw === 'string') return raw.trim() || 'N/A';
+    // LLM returned an object like { username: "x", password: "y" }
+    // Convert to readable key: value format
+    return Object.entries(raw)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(' | ');
+  }
+
+  // Handles steps as array OR string
+  private normalizeSteps(raw?: string | string[]): string {
+    if (!raw) return '';
+    if (Array.isArray(raw)) {
+      return raw
+        .map((s, i) => {
+          const step = String(s).trim();
+          // If step already starts with a number, keep it, else add one
+          return /^\d+\./.test(step) ? step : `${i + 1}. ${step}`;
+        })
+        .join('\n');
+    }
+    return String(raw).trim();
+  }
+
+  // Recover as many complete test cases as possible from a truncated response
+  private recoverPartialJson(raw: string): any {
+    // Find the testCases array start
+    const arrayStart = raw.indexOf('"testCases"');
+    if (arrayStart === -1) throw new Error('Cannot recover: no testCases key found');
+
+    // Collect all complete objects inside the array
+    // A complete object ends with } followed by , or ]
+    const completeCases: any[] = [];
+    const objRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)?\}/g;
+
+    // Find the array content
+    const arrayOpen = raw.indexOf('[', arrayStart);
+    if (arrayOpen === -1) throw new Error('Cannot recover: no array found');
+
+    const arrayContent = raw.slice(arrayOpen);
+    let match;
+
+    while ((match = objRegex.exec(arrayContent)) !== null) {
+      try {
+        const obj = JSON.parse(match[0]);
+        if (obj.title || obj.testCaseId) {
+          completeCases.push(obj);
         }
+      } catch {
+        // Skip malformed partial objects
+      }
     }
 
-    if (recoveredTestCases.length > 0) {
-        return recoveredTestCases;
+    if (completeCases.length === 0) {
+      throw new Error('Cannot recover any complete test cases from truncated response');
     }
 
-    return null;
-}
+    console.warn(
+      `[ResponseParser] Recovered ${completeCases.length} complete test case(s) from truncated LLM response`
+    );
 
-export class ResponseParser {
-    parse(rawResponse: string): GenerationResult {
-        const cleanResponse = removeCodeFence(rawResponse);
-        let parsed: any = tryParseJson(cleanResponse);
+    return { testCases: completeCases };
+  }
 
-        if (!parsed) {
-            parsed = findBestJsonCandidate(cleanResponse);
-        }
-
-        if (!parsed) {
-            throw new Error("Failed to parse AI response: unable to recover JSON payload");
-        }
-
-        const rawCases = Array.isArray(parsed)
-            ? parsed
-            : Array.isArray(parsed.testCases)
-                ? parsed.testCases
-                : [];
-
-        if (!Array.isArray(rawCases) || rawCases.length === 0) {
-            throw new Error("Invalid response format: missing testCases array");
-        }
-
-        const validatedTestCases = rawCases.map((tc: any, index: number) => {
-            const rawTitle = tc.title || tc.name || tc.summary || tc.description || `Untitled`;
-            return {
-                testCaseId: tc.testCaseId || tc.id || tc.unique_id || `TC-${String(index + 1).padStart(3, "0")}`,
-                title: normalizeField(rawTitle),
-                testType: normalizeField(tc.testType || tc.type || tc.category || "Functional"),
-                priority: normalizeField(tc.priority || tc.criticality_udf || "Medium"),
-                preconditions: normalizeField(tc.preconditions || tc.prerequisites_udf || tc.precondition || "None"),
-                testData: normalizeField(tc.testData || tc.testdata_udf || tc.test_data || "N/A"),
-                steps: normalizeField(tc.steps || tc.step_description || tc.actions || tc.procedure || ""),
-                expectedResult: normalizeField(tc.expectedResult || tc.expected_result || tc.expected || tc.outcome || ""),
-            } as TestCase;
-        });
-
-        return { testCases: validatedTestCases };
-    }
+  private normalizePriority(raw?: string): 'High' | 'Medium' | 'Low' {
+    const val = (raw || '').toLowerCase().trim();
+    if (val === 'high') return 'High';
+    if (val === 'low') return 'Low';
+    return 'Medium';
+  }
 }
 
 export const responseParser = new ResponseParser();

@@ -1,53 +1,39 @@
-import fs from "fs";
-import path from "path";
+import { buildSystemPromptForType } from '@/src/modules/testcase-generator/prompts';
 
-export type TestType = "functional" | "negative" | "boundary";
-export type PlatformType = "web" | "mobile" | "api";
+export type TestType = 'functional' | 'negative' | 'boundary';
+export type PlatformType = 'web' | 'mobile' | 'api';
 
-export class PromptBuilder {
-    private promptsDir: string;
+const PLATFORM_CONTEXT: Record<PlatformType, string> = {
+  web: 'Target platform: Web browser (Chrome). Focus on UI interactions, form inputs, navigation, and visual feedback.',
+  mobile: 'Target platform: Mobile browser. Consider touch interactions, small screen layout, and mobile-specific behavior.',
+  api: 'Target platform: REST API. Focus on request/response validation, status codes, headers, and payload structure.',
+};
 
-    constructor() {
-        this.promptsDir = path.join(process.cwd(), "src", "prompts");
+class PromptBuilder {
+  buildPrompt(
+    userPrompt: string,
+    type: TestType = 'functional',
+    platformType: PlatformType = 'web',
+    customPrompt?: string,
+    acceptanceCriteria?: string
+  ): string {
+    const systemSection = buildSystemPromptForType(type);
+    const platformSection = PLATFORM_CONTEXT[platformType];
+
+    let fullPrompt = `${systemSection}\n\nPLATFORM: ${platformSection}`;
+
+    if (acceptanceCriteria?.trim()) {
+      fullPrompt += `\n\nACCEPTANCE CRITERIA TO COVER:\n${acceptanceCriteria.trim()}`;
     }
 
-    private loadTemplate(filename: string): string {
-        const filePath = path.join(this.promptsDir, filename);
-        try {
-            return fs.readFileSync(filePath, "utf-8");
-        } catch (error) {
-            console.error(`Failed to load template: ${filename}`, error);
-            return ""; // Return empty if optional template fails
-        }
+    if (customPrompt?.trim()) {
+      fullPrompt += `\n\nADDITIONAL INSTRUCTIONS:\n${customPrompt.trim()}`;
     }
 
-    buildPrompt(
-        userPrompt: string, 
-        type: TestType = "functional", 
-        platform: PlatformType = "web",
-        customPrompt?: string,
-        acceptanceCriteria?: string
-    ): string {
-        const system = this.loadTemplate("system.txt");
-        const coverage = this.loadTemplate("coverage-rules.txt");
-        const platformPrompt = this.loadTemplate(`platforms/${platform}.txt`);
-        const testTypePrompt = this.loadTemplate(`test-types/${type}.txt`);
-        const outputFormat = this.loadTemplate("output-format.txt");
+    fullPrompt += `\n\nFEATURE / REQUIREMENT TO TEST:\n${userPrompt}`;
 
-        let combinedPrompt = `${system}\n\n${coverage}\n\n${platformPrompt}\n\n${testTypePrompt}\n\n${outputFormat}`;
-
-        if (customPrompt) {
-            combinedPrompt += `\n\nAdditional Custom Instructions:\n${customPrompt}`;
-        }
-
-        combinedPrompt += `\n\nUser Story / Request:\n${userPrompt}`;
-
-        if (acceptanceCriteria) {
-            combinedPrompt += `\n\nAcceptance Criteria:\n${acceptanceCriteria}`;
-        }
-
-        return combinedPrompt;
-    }
+    return fullPrompt;
+  }
 }
 
 export const promptBuilder = new PromptBuilder();

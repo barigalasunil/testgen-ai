@@ -2,7 +2,7 @@ import { test } from '../../fixtures/standard-fixtures';
 import { parseCsv } from '../../utils/csv-parser';
 
 const loginRecords = parseCsv<{ username: string; password: string; expectedResult: string }>(
-  '../data/login-data.csv'
+  'login-data.csv'
 );
 const validUser = loginRecords.find((record) => record.expectedResult === 'success');
 
@@ -11,7 +11,7 @@ if (!validUser) {
 }
 
 const checkoutRecords = parseCsv<{ firstName: string; lastName: string; postalCode: string; expectedMessage: string }>(
-  '../data/checkout-data.csv'
+  'checkout-data.csv'
 );
 
 test.describe('SauceDemo Regression', () => {

@@ -2,7 +2,7 @@ import { test, expect } from '../../fixtures/standard-fixtures';
 import { parseCsv } from '../../utils/csv-parser';
 
 const loginRecords = parseCsv<{ username: string; password: string; expectedResult: string }>(
-  '../data/login-data.csv'
+  'login-data.csv'
 );
 
 test.describe('SauceDemo Smoke', () => {
