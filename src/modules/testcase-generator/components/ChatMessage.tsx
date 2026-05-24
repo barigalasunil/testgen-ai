@@ -22,8 +22,8 @@ interface ChatMessageProps {
     platformType?: "web" | "mobile" | "api";
     onCopy?: () => void;
     onRegenerate?: () => void;
-    isLoading?: boolean;
     onOpenJira?: (testCase: TestCase) => void;
+    isLoading?: boolean;
 }
 
 export function ChatMessage({ 

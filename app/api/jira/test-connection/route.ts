@@ -17,7 +17,8 @@ export async function GET(request: Request) {
 
     const auth = Buffer.from(`${email}:${apiToken}`).toString('base64');
 
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/rest/api/3/myself`, {
+    const normalizedUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+    const res = await fetch(`${normalizedUrl.replace(/\/$/, '')}/rest/api/3/myself`, {
       headers: {
         Authorization: `Basic ${auth}`,
         Accept: 'application/json',

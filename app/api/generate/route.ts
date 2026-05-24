@@ -4,12 +4,27 @@ import { promptBuilder, TestType, PlatformType } from "@/src/services/ai/prompt-
 import { responseParser } from "@/src/services/ai/response-parser";
 
 const MODEL_CONFIG: Record<string, { num_predict: number; temperature: number; top_p: number }> = {
-    "phi3:mini": { num_predict: 3000, temperature: 0.2, top_p: 0.9 },
-    "mistral:7b": { num_predict: 6000, temperature: 0.3, top_p: 0.95 },
-    "gemma4:e4b": { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
+    "phi3:mini": { num_predict: 1400, temperature: 0.2, top_p: 0.9 },
+    "mistral:7b": { num_predict: 2400, temperature: 0.3, top_p: 0.95 },
+    "gemma4:e4b": { num_predict: 2400, temperature: 0.25, top_p: 0.92 },
 };
 
-const DEFAULT_CONFIG = { num_predict: 4096, temperature: 0.3, top_p: 0.95 };
+const DEFAULT_CONFIG = { num_predict: 2000, temperature: 0.3, top_p: 0.95 };
+
+type ParsedTestCase = {
+    testCaseId?: string;
+    title?: string;
+    testType?: string;
+    priority?: string;
+    preconditions?: string;
+    testData?: string;
+    steps?: string;
+    expectedResult?: string;
+};
+
+type ParsedTestCases = {
+    testCases?: ParsedTestCase[];
+};
 
 function getModelConfig(model: string) {
     const key = Object.keys(MODEL_CONFIG).find(
@@ -67,14 +82,14 @@ export async function POST(req: Request) {
             return NextResponse.json(
                 {
                     error: true,
-                    result: `Could not reach Ollama. Make sure it is running and "${selectedModel}" is downloaded.\n\nRun: ollama pull ${selectedModel}`,
+                    result: `Ollama request failed for "${selectedModel}".\n\nDetails: ${msg}\n\nCheck that Ollama is running, the model is downloaded, and OLLAMA_BASE_URL is correct.`,
                 },
                 { status: 503 }
             );
         }
 
         // 3. Parse
-        let parsedData;
+        let parsedData: ParsedTestCases;
         try {
             parsedData = responseParser.parse(rawResponse);
         } catch (parseError) {
@@ -93,7 +108,7 @@ export async function POST(req: Request) {
         // 4. Sanitize + filter incomplete cases
         const sanitized = {
             testCases: (parsedData.testCases || [])
-                .map((tc: any, index: number) => {
+                .map((tc: ParsedTestCase, index: number) => {
                     const num = String(index + 1).padStart(3, "0");
                     return {
                         testCaseId: String(tc.testCaseId || `TC-${num}`),

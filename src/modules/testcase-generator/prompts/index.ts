@@ -26,7 +26,8 @@ Rules:
 - testData: specific values to use (usernames, passwords, field values)
 - steps: numbered steps, each on a new line using \\n
 - expectedResult: specific, measurable outcome
-- Generate minimum 6 test cases, maximum 12
+- Generate minimum 4 test cases, maximum 6
+- Keep each field concise so the full JSON response can complete on local models
 - Use real SauceDemo data where relevant: usernames are standard_user, locked_out_user, problem_user, performance_glitch_user. Password is secret_sauce`;
 
 export const FUNCTIONAL_CONTEXT = `Focus on FUNCTIONAL testing — verify features work as intended.

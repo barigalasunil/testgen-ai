@@ -4,6 +4,7 @@ export interface OllamaRequest {
     stream?: boolean;
     format?: string;
     options?: Record<string, unknown>;
+    timeoutMs?: number;
 }
 
 export interface OllamaResponse {
@@ -22,12 +23,12 @@ export class OllamaService {
     private baseUrl: string;
     private activeController: AbortController | null = null;
 
-    constructor(baseUrl: string = "http://127.0.0.1:11434") {
+    constructor(baseUrl: string = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434") {
         this.baseUrl = baseUrl;
     }
 
     async generate(request: OllamaRequest): Promise<OllamaResponse> {
-        // Cancel any previous hanging request before starting new one
+        // Cancel any previous hanging request before starting new one.
         if (this.activeController) {
             this.activeController.abort();
             this.activeController = null;
@@ -36,17 +37,20 @@ export class OllamaService {
         const controller = new AbortController();
         this.activeController = controller;
 
-        // 3 minute timeout — enough for slow models like phi3:mini
+        // Local models can need several minutes to produce full test-case JSON.
+        const timeoutMs = request.timeoutMs ?? 10 * 60 * 1000;
         const timeoutId = setTimeout(() => {
             controller.abort();
-        }, 3 * 60 * 1000);
+        }, timeoutMs);
 
         try {
+            const ollamaRequest = { ...request };
+            delete ollamaRequest.timeoutMs;
             const response = await fetch(`${this.baseUrl}/api/generate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    ...request,
+                    ...ollamaRequest,
                     stream: request.stream ?? false,
                     format: request.format ?? "json",
                 }),
@@ -59,10 +63,9 @@ export class OllamaService {
             }
 
             return await response.json() as OllamaResponse;
-
         } catch (err: unknown) {
             if (err instanceof Error && err.name === "AbortError") {
-                throw new Error("Request cancelled — previous request was still running. Please try again.");
+                throw new Error(`Ollama generation timed out after ${Math.round(timeoutMs / 1000)} seconds. Try a smaller model, reduce the prompt, or increase the timeout.`);
             }
             throw err;
         } finally {
@@ -75,7 +78,7 @@ export class OllamaService {
 
     async listModels(): Promise<string[]> {
         const response = await fetch(`${this.baseUrl}/api/tags`, {
-            signal: AbortSignal.timeout(5000), // 5s timeout for model listing
+            signal: AbortSignal.timeout(5000),
         });
         if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
         const data = await response.json() as { models: { name: string }[] };

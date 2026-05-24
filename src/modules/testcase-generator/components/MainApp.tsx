@@ -6,13 +6,16 @@ import { X, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
-import JiraModal from "./JiraModal";
-import * as jiraService from "@/src/services/jira/jira.service";
 import { InputBox } from "./InputBox";
 import { AutomationDashboard } from "./AutomationDashboard";
+import JiraModal from "./JiraModal";
 import { generateTestCases, fetchModels } from "../services";
 import { HistoryItem, SuiteKey, TestCase } from "../types";
-import { saveJiraCredentials, loadJiraCredentials, testConnection } from '@/src/services/jira/jira.service';
+import {
+    saveJiraCredentials,
+    loadJiraCredentials,
+    testConnection,
+} from "@/src/services/jira/jira.service";
 
 type AutomationRunResponse = {
     error: boolean;
@@ -53,32 +56,21 @@ function hasRawResponse(value: unknown): value is { raw: string } {
     );
 }
 
-// ─── NEW: Generate a smart workspace name from the prompt ───────────────────
 function generateWorkspaceName(prompt: string): string {
     const cleaned = prompt.trim().toLowerCase();
-
-    // Strip common filler words
     const stopWords = ['test', 'testing', 'check', 'verify', 'validate', 'for', 'the', 'a', 'an', 'of', 'and', 'in', 'on', 'with', 'using'];
-    
-    // Extract meaningful keywords
     const words = cleaned
         .replace(/[^a-z0-9\s]/g, ' ')
         .split(/\s+/)
         .filter(w => w.length > 2 && !stopWords.includes(w));
-
     if (words.length === 0) {
         return `Workspace – ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
-
-    // Take first 3 meaningful words and title-case them
-    const name = words
+    return words
         .slice(0, 3)
         .map(w => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
-
-    return name;
 }
-// ────────────────────────────────────────────────────────────────────────────
 
 const GENERATION_STEPS = [
     'Generating functional scenarios...',
@@ -98,7 +90,8 @@ export function MainApp() {
     const [resultTab, setResultTab] = useState<'testCases' | 'scripts' | 'logs'>('testCases');
     const [ollamaStatus, setOllamaStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
     const [activityIndex, setActivityIndex] = useState(0);
-    
+
+    // Feature states
     const [models, setModels] = useState<string[]>([]);
     const [selectedModel, setSelectedModel] = useState("mistral:7b");
     const [isJiraMode, setIsJiraMode] = useState(false);
@@ -106,61 +99,27 @@ export function MainApp() {
     const [customPrompt, setCustomPrompt] = useState("");
     const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
     const [jiraStoryId, setJiraStoryId] = useState("");
+
+    // Jira modal states
     const [jiraModalOpen, setJiraModalOpen] = useState(false);
     const [jiraTargetCase, setJiraTargetCase] = useState<TestCase | null>(null);
-    const [savedJiraCreds, setSavedJiraCreds] = useState<jiraService.JiraCredentials | null>(null);
-    const [jiraBaseUrlInput, setJiraBaseUrlInput] = useState('');
-    const [jiraEmailInput, setJiraEmailInput] = useState('');
-    const [jiraApiTokenInput, setJiraApiTokenInput] = useState('');
-    const [jiraProjectKeyInput, setJiraProjectKeyInput] = useState('TCGB');
-    const [jiraTestStatus, setJiraTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
 
-    const [jiraFields, setJiraFields] = useState({ baseUrl: '', email: '', apiToken: '', projectKey: 'TCGB' });
+    // Jira settings states
+    const [jiraFields, setJiraFields] = useState({
+        baseUrl: '',
+        email: '',
+        apiToken: '',
+        projectKey: 'TCGB',
+    });
     const [jiraConnStatus, setJiraConnStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
     const [jiraConnMsg, setJiraConnMsg] = useState('');
-
-    useEffect(() => {
-        if (!isSettingsOpen) return;
-        const creds = jiraService.loadJiraCredentials();
-        if (creds) {
-            setSavedJiraCreds(creds);
-            setJiraBaseUrlInput(creds.baseUrl || '');
-            setJiraEmailInput(creds.email || '');
-            setJiraApiTokenInput(creds.apiToken || '');
-            setJiraProjectKeyInput(creds.projectKey || 'TCGB');
-        }
-    }, [isSettingsOpen]);
-
-    const handleSaveJira = () => {
-        const creds: jiraService.JiraCredentials = {
-            baseUrl: jiraBaseUrlInput,
-            email: jiraEmailInput,
-            apiToken: jiraApiTokenInput,
-            projectKey: jiraProjectKeyInput,
-        };
-        jiraService.saveJiraCredentials(creds);
-        setSavedJiraCreds(creds);
-        setIsSettingsOpen(false);
-    };
-
-    const handleTestJira = async () => {
-        setJiraTestStatus('testing');
-        try {
-            const res = await jiraService.testConnection();
-            if (res && res.success) setJiraTestStatus('ok');
-            else setJiraTestStatus('fail');
-        } catch {
-            setJiraTestStatus('fail');
-        }
-    };
+    const [jiraConnTesting, setJiraConnTesting] = useState(false);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    // Load sessions + models + jira creds on mount
     useEffect(() => {
-        const savedCreds = loadJiraCredentials(); // import from jira.service
-        if (savedCreds) setJiraFields(savedCreds);
-        
         const saved = localStorage.getItem("testgen-sessions");
         if (saved) {
             try {
@@ -172,6 +131,10 @@ export function MainApp() {
                 }
             } catch { }
         }
+
+        // Load saved Jira credentials
+        const savedCreds = loadJiraCredentials();
+        if (savedCreds) setJiraFields(savedCreds);
 
         fetchModels()
             .then(data => {
@@ -231,7 +194,13 @@ export function MainApp() {
     }, [loading]);
 
     const progressLabel = GENERATION_STEPS[activityIndex];
-    const statusLabel = ollamaStatus === 'connected' ? 'Ollama Connected' : ollamaStatus === 'connecting' ? 'Connecting...' : 'Ollama Offline';
+
+    const statusLabel = ollamaStatus === 'connected'
+        ? 'Ollama Connected'
+        : ollamaStatus === 'connecting'
+            ? 'Connecting...'
+            : 'Ollama Offline';
+
     const statusColor = ollamaStatus === 'connected'
         ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
         : ollamaStatus === 'offline'
@@ -253,16 +222,13 @@ export function MainApp() {
 
         const targetId = activeId ?? Date.now().toString();
         const now = new Date().toISOString();
-
-        // ─── NEW: Use smart name from prompt ────────────────────────────────
         const smartName = generateWorkspaceName(currentPrompt);
-        // ────────────────────────────────────────────────────────────────────
 
         if (!activeId) {
             setActiveId(targetId);
             setSessions(prev => [{
                 id: targetId,
-                title: smartName, // ← was `Workspace ${prev.length + 1}`
+                title: smartName,
                 prompt: currentPrompt,
                 platform: platformType,
                 result: null,
@@ -290,7 +256,10 @@ export function MainApp() {
                 platformType, customPrompt, acceptanceCriteria
             ) as GenerateApiResponse;
 
-            const parsedResult = data && !data.error && isParsedTestCaseResult(data.result) ? data.result : null;
+            const parsedResult = data && !data.error && isParsedTestCaseResult(data.result)
+                ? data.result
+                : null;
+
             let parsedError: string | null = null;
             if (data && data.error) {
                 parsedError = String(data.result || data.error);
@@ -317,19 +286,22 @@ export function MainApp() {
 
     const handleNewChat = () => {
         const id = Date.now().toString();
-        const newSession: HistoryItem = {
+        setSessions(prev => [{
             id,
-            title: `New Workspace`,
+            title: 'New Workspace',
             prompt: "",
             platform: 'web',
             result: null,
             error: null,
-            automation: { smoke: { status: 'idle' }, sanity: { status: 'idle' }, regression: { status: 'idle' } },
+            automation: {
+                smoke: { status: 'idle' },
+                sanity: { status: 'idle' },
+                regression: { status: 'idle' },
+            },
             reports: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-        };
-        setSessions(prev => [newSession, ...prev]);
+        }, ...prev]);
         setActiveId(id);
         setValue("");
         if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -361,6 +333,38 @@ export function MainApp() {
             `ID: ${tc.testCaseId}\nTitle: ${tc.title}\nType: ${tc.testType}\nPriority: ${tc.priority}\nPreconditions: ${tc.preconditions}\nTest Data: ${tc.testData}\nSteps: ${tc.steps}\nExpected: ${tc.expectedResult}`
         ).join("\n\n---\n\n");
         navigator.clipboard.writeText(text);
+    };
+
+    // Jira handlers
+    const handleOpenJira = (testCase: TestCase) => {
+        setJiraTargetCase(testCase);
+        setJiraModalOpen(true);
+    };
+
+    const handleTestJiraConnection = async () => {
+        setJiraConnTesting(true);
+        setJiraConnStatus('idle');
+        try {
+            const result = await testConnection(jiraFields);
+            if (result.success) {
+                setJiraConnStatus('ok');
+                setJiraConnMsg(`✓ Connected as ${result.displayName}`);
+            } else {
+                setJiraConnStatus('fail');
+                setJiraConnMsg(`✕ ${result.error}`);
+            }
+        } catch (err) {
+            setJiraConnStatus('fail');
+            setJiraConnMsg(`✕ Connection failed`);
+        } finally {
+            setJiraConnTesting(false);
+        }
+    };
+
+    const handleSaveJiraCredentials = () => {
+        saveJiraCredentials(jiraFields);
+        setIsSettingsOpen(false);
+        setJiraConnStatus('idle');
     };
 
     const handleExecuteSuite = async (suite: SuiteKey) => {
@@ -412,7 +416,12 @@ export function MainApp() {
                         ...s,
                         automation: {
                             ...s.automation,
-                            [suite]: { ...s.automation[suite], status: 'failed', lastRunAt: finishedAt, message: error instanceof Error ? error.message : String(error) },
+                            [suite]: {
+                                ...s.automation[suite],
+                                status: 'failed',
+                                lastRunAt: finishedAt,
+                                message: error instanceof Error ? error.message : String(error),
+                            },
                         },
                         updatedAt: finishedAt,
                     }
@@ -420,12 +429,6 @@ export function MainApp() {
             ));
         }
     };
-
-    const handleOpenJira = (testCase: TestCase) => {
-        setJiraTargetCase(testCase);
-        setJiraModalOpen(true);
-    };
-
 
     return (
         <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans">
@@ -443,6 +446,7 @@ export function MainApp() {
             />
 
             <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+                {/* Header */}
                 <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2 shadow-sm z-10">
                     <div>
                         <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">AI QA Copilot</p>
@@ -457,17 +461,19 @@ export function MainApp() {
                     </div>
                 </div>
 
-                {/* ─── FIX: stable flex row that never collapses the aside ─── */}
+                {/* Body */}
                 <div className="flex flex-1 min-h-0 overflow-hidden">
 
-                    {/* Left: chat area */}
+                    {/* Chat area */}
                     <div className="flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden">
                         <section className="flex-1 min-h-0 overflow-y-auto px-4 py-4 lg:px-6">
                             <div className="mx-auto flex max-w-6xl flex-col gap-4 pb-6">
                                 {currentThread?.prompt ? (
-                                    <ChatMessage role="user" content={currentThread.prompt} onOpenJira={handleOpenJira} />
+                                    <ChatMessage role="user" content={currentThread.prompt} />
                                 ) : (
-                                    <div className="min-h-[220px]" />
+                                    <div className="min-h-[220px] flex items-center justify-center text-slate-400 text-sm">
+                                        Describe a feature to generate test cases...
+                                    </div>
                                 )}
 
                                 {currentThread && (currentThread.result || currentThread.error) && (
@@ -475,14 +481,18 @@ export function MainApp() {
                                         <div className="flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div className="flex items-center gap-3 text-xs text-slate-500">
                                                 <span className="font-medium capitalize text-slate-700">{currentThread.platform}</span>
-                                                <span className={cn('rounded-full px-2.5 py-1 font-medium', currentThread.error ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700')}>
+                                                <span className={cn('rounded-full px-2.5 py-1 font-medium',
+                                                    currentThread.error ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                                                )}>
                                                     {currentThread.error ? 'Error' : 'Ready'}
                                                 </span>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 {(['testCases', 'scripts', 'logs'] as const).map((tab) => (
                                                     <button key={tab} onClick={() => setResultTab(tab)}
-                                                        className={cn('rounded-full px-3 py-1.5 text-xs font-semibold transition', resultTab === tab ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100')}>
+                                                        className={cn('rounded-full px-3 py-1.5 text-xs font-semibold transition',
+                                                            resultTab === tab ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                                        )}>
                                                         {tab === 'testCases' ? 'Test Cases' : tab === 'scripts' ? 'Scripts' : 'Logs'}
                                                     </button>
                                                 ))}
@@ -490,20 +500,44 @@ export function MainApp() {
                                         </div>
 
                                         {resultTab === 'testCases' && currentThread.result && (
-                                            <ChatMessage role="assistant" isTable tableData={currentThread.result}
-                                                jiraStoryId={jiraStoryId} platformType={currentThread.platform}
-                                                onCopy={copyTableData} onRegenerate={() => handleSend(currentThread.prompt)} onOpenJira={handleOpenJira} />
+                                            <ChatMessage
+                                                role="assistant"
+                                                isTable
+                                                tableData={currentThread.result}
+                                                jiraStoryId={jiraStoryId}
+                                                platformType={currentThread.platform}
+                                                onCopy={copyTableData}
+                                                onRegenerate={() => handleSend(currentThread.prompt)}
+                                                onOpenJira={handleOpenJira}
+                                            />
                                         )}
+
                                         {resultTab === 'scripts' && (
                                             <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
                                                 <p className="text-slate-500 text-xs">Generate scripts from the Test Cases tab.</p>
                                             </div>
                                         )}
+
                                         {resultTab === 'logs' && (
                                             <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                                                {currentThread.error
-                                                    ? <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-xs text-slate-700 border border-slate-200 overflow-auto max-h-96">{currentThread.error}</pre>
-                                                    : <p className="text-slate-500 text-sm">No errors were captured.</p>}
+                                                {currentThread.error ? (
+                                                    <div className="space-y-3">
+                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                            <p className="text-sm text-slate-600">An error occurred while generating test cases. You can retry using the same prompt and model.</p>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => currentThread.prompt && handleSend(currentThread.prompt)}
+                                                                disabled={loading || !currentThread.prompt}
+                                                                className="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                                            >
+                                                                Retry
+                                                            </button>
+                                                        </div>
+                                                        <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-xs text-slate-700 border border-slate-200 overflow-auto max-h-96">{currentThread.error}</pre>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-slate-500 text-sm">No errors were captured.</p>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -512,14 +546,19 @@ export function MainApp() {
                             </div>
                         </section>
 
+                        {/* Input bar */}
                         <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-slate-50/95 backdrop-blur-sm px-4 py-4 shadow-inner">
                             {loading && (
                                 <div className="mx-auto mb-3 flex max-w-5xl items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">
                                     <div className="flex items-center gap-1.5">
-                                        {[0, 150, 300].map(d => <span key={d} className="h-2 w-2 rounded-full bg-slate-400 animate-pulse" style={{ animationDelay: `${d}ms` }} />)}
+                                        {[0, 150, 300].map(d => (
+                                            <span key={d} className="h-2 w-2 rounded-full bg-slate-400 animate-pulse" style={{ animationDelay: `${d}ms` }} />
+                                        ))}
                                     </div>
                                     <span className="font-medium">{progressLabel}</span>
-                                    {generatingPrompt && <span className="ml-auto hidden max-w-[40%] truncate text-xs text-slate-400 sm:block">{generatingPrompt}</span>}
+                                    {generatingPrompt && (
+                                        <span className="ml-auto hidden max-w-[40%] truncate text-xs text-slate-400 sm:block">{generatingPrompt}</span>
+                                    )}
                                 </div>
                             )}
                             <InputBox
@@ -535,7 +574,7 @@ export function MainApp() {
                         </div>
                     </div>
 
-                    {/* ─── FIX: aside with flex-shrink-0 so it never collapses ─── */}
+                    {/* Automation sidebar */}
                     <aside className="hidden xl:flex h-full w-[340px] min-w-[340px] max-w-[340px] flex-shrink-0 flex-col overflow-y-auto overflow-x-hidden border-l border-slate-200 bg-white p-3">
                         <AutomationDashboard
                             automation={currentThread?.automation}
@@ -543,21 +582,35 @@ export function MainApp() {
                             compact
                         />
                     </aside>
-
                 </div>
             </main>
 
-            <JiraModal isOpen={jiraModalOpen} onClose={() => setJiraModalOpen(false)} testCase={jiraTargetCase} />
+            {/* Jira Modal */}
+            <JiraModal
+                isOpen={jiraModalOpen}
+                onClose={() => setJiraModalOpen(false)}
+                testCase={jiraTargetCase}
+            />
 
+            {/* Settings Modal */}
             <AnimatePresence>
                 {isSettingsOpen && (
                     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                            className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md overflow-hidden">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md overflow-hidden"
+                        >
                             <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                                <h2 className="font-semibold text-gray-800 flex items-center gap-2"><Settings className="w-4 h-4" /> Jira Integration Settings</h2>
-                                <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-gray-900"><X className="w-4 h-4" /></button>
+                                <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                                    <Settings className="w-4 h-4" /> Jira Integration Settings
+                                </h2>
+                                <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-gray-900">
+                                    <X className="w-4 h-4" />
+                                </button>
                             </div>
+
                             <div className="p-5 flex flex-col gap-4">
                                 {[
                                     { label: "Jira Base URL", key: "baseUrl", type: "text", placeholder: "https://yourcompany.atlassian.net" },
@@ -566,25 +619,39 @@ export function MainApp() {
                                     { label: "Project Key", key: "projectKey", type: "text", placeholder: "TCGB" },
                                 ].map(field => (
                                     <div key={field.key}>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-                                    <input
-                                        type={field.type}
-                                        placeholder={field.placeholder}
-                                        value={jiraFields[field.key as keyof typeof jiraFields]}
-                                        onChange={e => setJiraFields(prev => ({ ...prev, [field.key]: e.target.value }))}
-                                        className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#10A37F]/50"
-                                    />
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+                                        <input
+                                            type={field.type}
+                                            placeholder={field.placeholder}
+                                            value={jiraFields[field.key as keyof typeof jiraFields]}
+                                            onChange={e => setJiraFields(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                            className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#10A37F]/50"
+                                        />
                                     </div>
                                 ))}
+
                                 {jiraConnStatus !== 'idle' && (
-                                    <div className={`rounded-md px-3 py-2 text-sm ${jiraConnStatus === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                                    {jiraConnMsg}
+                                    <div className={cn(
+                                        'rounded-md px-3 py-2 text-sm font-medium',
+                                        jiraConnStatus === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
+                                    )}>
+                                        {jiraConnMsg}
                                     </div>
                                 )}
-                                </div>
-                            <div className="p-4 border-t border-gray-200 flex justify-end">
-                                <button onClick={handleSaveJira}
-                                    className="bg-[#10A37F] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-600 transition-colors">
+                            </div>
+
+                            <div className="p-4 border-t border-gray-200 flex justify-between items-center">
+                                <button
+                                    onClick={handleTestJiraConnection}
+                                    disabled={jiraConnTesting}
+                                    className="border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    {jiraConnTesting ? 'Testing...' : 'Test Connection'}
+                                </button>
+                                <button
+                                    onClick={handleSaveJiraCredentials}
+                                    className="bg-[#10A37F] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-600 transition-colors"
+                                >
                                     Save Credentials
                                 </button>
                             </div>
