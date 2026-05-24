@@ -21,6 +21,27 @@ export type SuiteExecution = {
     stderr?: string;
 };
 
+export type AiGenerationMeta = {
+    model?: string;
+    requestedModel?: string;
+    activeModel?: string | null;
+    fallbackUsed?: boolean;
+    message?: string;
+    attempts?: {
+        model: string;
+        status: 'success' | 'failed' | 'skipped';
+        reason?: string;
+    }[];
+};
+
+export type AiGenerationOptions = {
+    model: string;
+    platformType: 'web' | 'mobile' | 'api';
+    customPrompt?: string;
+    acceptanceCriteria?: string;
+    jiraStoryId?: string;
+};
+
 export type ConversationSession = {
     id: string;
     title?: string;
@@ -28,6 +49,8 @@ export type ConversationSession = {
     platform: 'web' | 'mobile' | 'api';
     result: { testCases: TestCase[] } | null;
     error: string | null;
+    aiMeta?: AiGenerationMeta;
+    aiOptions?: AiGenerationOptions;
     generatedScript?: string;
     scriptFileName?: string;
     automation: Record<SuiteKey, SuiteExecution>;

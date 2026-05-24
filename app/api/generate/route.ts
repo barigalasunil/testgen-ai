@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
-import { OllamaService } from "@/src/services/ai/ollama.service";
 import { promptBuilder, TestType, PlatformType } from "@/src/services/ai/prompt-builder";
 import { responseParser } from "@/src/services/ai/response-parser";
-
-const MODEL_CONFIG: Record<string, { num_predict: number; temperature: number; top_p: number }> = {
-    "phi3:mini": { num_predict: 1400, temperature: 0.2, top_p: 0.9 },
-    "mistral:7b": { num_predict: 2400, temperature: 0.3, top_p: 0.95 },
-    "gemma4:e4b": { num_predict: 2400, temperature: 0.25, top_p: 0.92 },
-};
-
-const DEFAULT_CONFIG = { num_predict: 2000, temperature: 0.3, top_p: 0.95 };
+import { AUTO_MODEL } from "@/src/services/ai/modelConfig";
+import { ModelAttempt, ModelManager, ModelManagerError } from "@/src/services/ai/modelManager";
 
 type ParsedTestCase = {
     testCaseId?: string;
@@ -26,19 +19,8 @@ type ParsedTestCases = {
     testCases?: ParsedTestCase[];
 };
 
-function getModelConfig(model: string) {
-    const key = Object.keys(MODEL_CONFIG).find(
-        (k) => model.startsWith(k.split(":")[0])
-    );
-    return key ? MODEL_CONFIG[key] : DEFAULT_CONFIG;
-}
-
 export async function POST(req: Request) {
-    // ── KEY FIX: create a FRESH OllamaService instance per request ──
-    // The exported singleton (ollamaService) holds an AbortController reference
-    // across requests in Next.js dev mode because the module is cached.
-    // A fresh instance per request means no stale controller can cancel it.
-    const ollama = new OllamaService();
+    const modelManager = new ModelManager();
 
     try {
         const {
@@ -50,13 +32,10 @@ export async function POST(req: Request) {
             acceptanceCriteria,
         } = await req.json();
 
-        const selectedModel = model || "mistral:7b";
-        const modelConfig = getModelConfig(selectedModel);
+        const selectedModel = model || AUTO_MODEL;
 
         console.log("GENERATION REQUEST:", { prompt, selectedModel, type, platformType });
-        console.log("MODEL CONFIG:", modelConfig);
 
-        // 1. Build prompt
         const fullPrompt = promptBuilder.buildPrompt(
             prompt,
             type as TestType,
@@ -65,30 +44,46 @@ export async function POST(req: Request) {
             acceptanceCriteria
         );
 
-        // 2. Call Ollama with fresh instance + model config
         let rawResponse: string;
+        let activeModel = selectedModel;
+        let attempts: ModelAttempt[] = [];
+        let fallbackUsed = false;
+        let modelMessage = `Using: ${selectedModel}`;
+
         try {
-            const response = await ollama.generate({
+            const generation = await modelManager.generate({
                 model: selectedModel,
                 prompt: fullPrompt,
                 format: "json",
                 stream: false,
-                options: modelConfig,
             });
-            rawResponse = response.response;
+            rawResponse = generation.response.response;
+            activeModel = generation.model;
+            attempts = generation.attempts;
+            fallbackUsed = generation.fallbackUsed;
+            modelMessage = generation.message;
         } catch (ollamaError) {
             const msg = ollamaError instanceof Error ? ollamaError.message : String(ollamaError);
+            if (ollamaError instanceof ModelManagerError) {
+                attempts = ollamaError.attempts;
+            }
             console.error("OLLAMA ERROR:", msg);
             return NextResponse.json(
                 {
                     error: true,
-                    result: `Ollama request failed for "${selectedModel}".\n\nDetails: ${msg}\n\nCheck that Ollama is running, the model is downloaded, and OLLAMA_BASE_URL is correct.`,
+                    result: msg,
+                    meta: {
+                        requestedModel: selectedModel,
+                        activeModel: null,
+                        mode: selectedModel === AUTO_MODEL ? "auto" : "manual",
+                        attempts,
+                        fallbackUsed,
+                    },
                 },
                 { status: 503 }
             );
         }
 
-        // 3. Parse
         let parsedData: ParsedTestCases;
         try {
             parsedData = responseParser.parse(rawResponse);
@@ -98,14 +93,19 @@ export async function POST(req: Request) {
             return NextResponse.json(
                 {
                     error: true,
-                    result: `The model returned a response that could not be parsed. Try again or switch to mistral:7b.\n\nModel used: ${selectedModel}`,
+                    result: `The model returned a response that could not be parsed. Retry generation or switch models.\n\nModel used: ${activeModel}`,
+                    meta: {
+                        requestedModel: selectedModel,
+                        activeModel,
+                        attempts,
+                        fallbackUsed,
+                        message: modelMessage,
+                    },
                 },
                 { status: 422 }
             );
         }
 
-        // 4. Sanitize
-        // 4. Sanitize + filter incomplete cases
         const sanitized = {
             testCases: (parsedData.testCases || [])
                 .map((tc: ParsedTestCase, index: number) => {
@@ -121,7 +121,6 @@ export async function POST(req: Request) {
                         expectedResult: String(tc.expectedResult || ""),
                     };
                 })
-                // Drop any test case that is missing critical fields
                 .filter((tc) =>
                     tc.title.trim().length > 0 &&
                     tc.steps.trim().length > 0 &&
@@ -131,17 +130,36 @@ export async function POST(req: Request) {
 
         if (sanitized.testCases.length === 0) {
             return NextResponse.json(
-                { error: true, result: `Model responded but generated 0 test cases. Try a more specific prompt or switch models.` },
+                {
+                    error: true,
+                    result: "Model responded but generated 0 complete test cases. Retry generation or switch models.",
+                    meta: {
+                        requestedModel: selectedModel,
+                        activeModel,
+                        attempts,
+                        fallbackUsed,
+                        message: modelMessage,
+                    },
+                },
                 { status: 422 }
             );
         }
 
-        console.log(`SUCCESS: ${sanitized.testCases.length} test cases via ${selectedModel}`);
+        console.log(`SUCCESS: ${sanitized.testCases.length} test cases via ${activeModel}`);
 
         return NextResponse.json({
             error: false,
             result: sanitized,
-            meta: { model: selectedModel, count: sanitized.testCases.length, type, platformType },
+            meta: {
+                model: activeModel,
+                requestedModel: selectedModel,
+                count: sanitized.testCases.length,
+                type,
+                platformType,
+                attempts,
+                fallbackUsed,
+                message: modelMessage,
+            },
         });
 
     } catch (error) {

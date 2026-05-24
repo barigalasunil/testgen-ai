@@ -10,7 +10,7 @@ import { InputBox } from "./InputBox";
 import { AutomationDashboard } from "./AutomationDashboard";
 import JiraModal from "./JiraModal";
 import { generateTestCases, fetchModels } from "../services";
-import { HistoryItem, SuiteKey, TestCase } from "../types";
+import { AiGenerationMeta, AiGenerationOptions, HistoryItem, SuiteKey, TestCase } from "../types";
 import {
     saveJiraCredentials,
     loadJiraCredentials,
@@ -33,6 +33,7 @@ type AutomationRunResponse = {
 type GenerateApiResponse = {
     error?: unknown;
     result?: unknown;
+    meta?: AiGenerationMeta;
 };
 
 type ParsedTestCaseResult = {
@@ -79,6 +80,8 @@ const GENERATION_STEPS = [
     'Formatting export structure...',
 ];
 
+const AUTO_MODEL = "auto";
+
 export function MainApp() {
     const [value, setValue] = useState("");
     const [loading, setLoading] = useState(false);
@@ -87,13 +90,14 @@ export function MainApp() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [generatingPrompt, setGeneratingPrompt] = useState("");
+    const [generationModelStatus, setGenerationModelStatus] = useState("Using: Auto");
     const [resultTab, setResultTab] = useState<'testCases' | 'scripts' | 'logs'>('testCases');
     const [ollamaStatus, setOllamaStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
     const [activityIndex, setActivityIndex] = useState(0);
 
     // Feature states
     const [models, setModels] = useState<string[]>([]);
-    const [selectedModel, setSelectedModel] = useState("mistral:7b");
+    const [selectedModel, setSelectedModel] = useState(AUTO_MODEL);
     const [isJiraMode, setIsJiraMode] = useState(false);
     const [platformType, setPlatformType] = useState<"web" | "mobile" | "api">("web");
     const [customPrompt, setCustomPrompt] = useState("");
@@ -117,6 +121,7 @@ export function MainApp() {
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const restoredSessionIdRef = useRef<string | null>(null);
 
     // Load sessions + models + jira creds on mount
     useEffect(() => {
@@ -141,7 +146,7 @@ export function MainApp() {
                 if (data.models && data.models.length > 0) {
                     setModels(data.models);
                     setSelectedModel(current =>
-                        data.models.includes(current) ? current : data.models[0]
+                        current === AUTO_MODEL || data.models.includes(current) ? current : AUTO_MODEL
                     );
                 }
             })
@@ -161,14 +166,23 @@ export function MainApp() {
 
     const activeSession = sessions.find((s) => s.id === activeId) || null;
     const activeSessionId = activeSession?.id;
-    const activeSessionPlatform = activeSession?.platform;
 
     useEffect(() => {
-        if (activeSessionPlatform) {
-            setPlatformType(activeSessionPlatform);
+        if (!activeSessionId || restoredSessionIdRef.current === activeSessionId) return;
+        restoredSessionIdRef.current = activeSessionId;
+
+        if (activeSession?.aiOptions) {
+            setSelectedModel(activeSession.aiOptions.model);
+            setPlatformType(activeSession.aiOptions.platformType);
+            setCustomPrompt(activeSession.aiOptions.customPrompt || '');
+            setAcceptanceCriteria(activeSession.aiOptions.acceptanceCriteria || '');
+            setJiraStoryId(activeSession.aiOptions.jiraStoryId || '');
+            setValue('');
+        } else if (activeSession?.platform) {
+            setPlatformType(activeSession.platform);
             setValue('');
         }
-    }, [activeSessionId, activeSessionPlatform]);
+    }, [activeSessionId, activeSession]);
 
     useEffect(() => {
         const loadStatus = async () => {
@@ -209,13 +223,26 @@ export function MainApp() {
 
     const currentThread = sessions.find(s => s.id === activeId);
 
-    const handleSend = async (overridePrompt?: string) => {
+    const handleSend = async (overridePrompt?: string, overrideOptions?: Partial<AiGenerationOptions>) => {
         if (loading) return;
         const textToSubmit = typeof overridePrompt === "string" ? overridePrompt : value;
         if (!textToSubmit.trim()) return;
 
         const currentPrompt = textToSubmit;
+        const generationOptions: AiGenerationOptions = {
+            model: overrideOptions?.model ?? selectedModel,
+            platformType: overrideOptions?.platformType ?? platformType,
+            customPrompt: overrideOptions?.customPrompt ?? customPrompt,
+            acceptanceCriteria: overrideOptions?.acceptanceCriteria ?? acceptanceCriteria,
+            jiraStoryId: overrideOptions?.jiraStoryId ?? jiraStoryId,
+        };
+
         setGeneratingPrompt(currentPrompt);
+        setGenerationModelStatus(
+            generationOptions.model === AUTO_MODEL
+                ? "Using: Auto (local fallback enabled)"
+                : `Using: ${generationOptions.model}`
+        );
         setLoading(true);
         setValue("");
         if (textareaRef.current) textareaRef.current.style.height = "52px";
@@ -230,9 +257,14 @@ export function MainApp() {
                 id: targetId,
                 title: smartName,
                 prompt: currentPrompt,
-                platform: platformType,
+                platform: generationOptions.platformType,
                 result: null,
                 error: null,
+                aiOptions: generationOptions,
+                aiMeta: {
+                    requestedModel: generationOptions.model,
+                    message: generationOptions.model === AUTO_MODEL ? "Using: Auto (local fallback enabled)" : `Using: ${generationOptions.model}`,
+                },
                 automation: {
                     smoke: { status: 'idle' },
                     sanity: { status: 'idle' },
@@ -245,16 +277,32 @@ export function MainApp() {
         } else {
             setSessions(prev => prev.map(s =>
                 s.id === targetId
-                    ? { ...s, prompt: currentPrompt, platform: platformType, result: null, error: null, updatedAt: now }
+                    ? {
+                        ...s,
+                        prompt: currentPrompt,
+                        platform: generationOptions.platformType,
+                        result: null,
+                        error: null,
+                        aiOptions: generationOptions,
+                        aiMeta: {
+                            requestedModel: generationOptions.model,
+                            message: generationOptions.model === AUTO_MODEL ? "Using: Auto (local fallback enabled)" : `Using: ${generationOptions.model}`,
+                        },
+                        updatedAt: now
+                    }
                     : s
             ));
         }
 
         try {
             const data = await generateTestCases(
-                currentPrompt, selectedModel, "functional",
-                platformType, customPrompt, acceptanceCriteria
+                currentPrompt, generationOptions.model, "functional",
+                generationOptions.platformType, generationOptions.customPrompt, generationOptions.acceptanceCriteria
             ) as GenerateApiResponse;
+
+            if (data.meta?.message) {
+                setGenerationModelStatus(data.meta.message);
+            }
 
             const parsedResult = data && !data.error && isParsedTestCaseResult(data.result)
                 ? data.result
@@ -269,14 +317,30 @@ export function MainApp() {
 
             setSessions(prev => prev.map(s =>
                 s.id === targetId
-                    ? { ...s, prompt: currentPrompt, platform: platformType, result: parsedResult, error: parsedError, updatedAt: new Date().toISOString() }
+                    ? {
+                        ...s,
+                        prompt: currentPrompt,
+                        platform: generationOptions.platformType,
+                        result: parsedResult,
+                        error: parsedError,
+                        aiOptions: generationOptions,
+                        aiMeta: data.meta,
+                        updatedAt: new Date().toISOString()
+                    }
                     : s
             ));
         } catch (error) {
             const msg = "Network Error: " + (error as Error).message;
             setSessions(prev => prev.map(s =>
                 s.id === targetId
-                    ? { ...s, result: null, error: msg, updatedAt: new Date().toISOString() }
+                    ? {
+                        ...s,
+                        result: null,
+                        error: msg,
+                        aiOptions: generationOptions,
+                        aiMeta: { requestedModel: generationOptions.model, message: "Generation failed. Retry generation to continue." },
+                        updatedAt: new Date().toISOString()
+                    }
                     : s
             ));
         } finally {
@@ -353,7 +417,7 @@ export function MainApp() {
                 setJiraConnStatus('fail');
                 setJiraConnMsg(`✕ ${result.error}`);
             }
-        } catch (err) {
+        } catch {
             setJiraConnStatus('fail');
             setJiraConnMsg(`✕ Connection failed`);
         } finally {
@@ -486,6 +550,16 @@ export function MainApp() {
                                                 )}>
                                                     {currentThread.error ? 'Error' : 'Ready'}
                                                 </span>
+                                                {currentThread.aiMeta?.message && (
+                                                    <span className={cn(
+                                                        'rounded-full border px-2.5 py-1 font-medium',
+                                                        currentThread.aiMeta.fallbackUsed
+                                                            ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                                            : 'border-slate-200 bg-white text-slate-600'
+                                                    )}>
+                                                        {currentThread.aiMeta.message}
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 {(['testCases', 'scripts', 'logs'] as const).map((tab) => (
@@ -504,10 +578,10 @@ export function MainApp() {
                                                 role="assistant"
                                                 isTable
                                                 tableData={currentThread.result}
-                                                jiraStoryId={jiraStoryId}
+                                                jiraStoryId={currentThread.aiOptions?.jiraStoryId || jiraStoryId}
                                                 platformType={currentThread.platform}
                                                 onCopy={copyTableData}
-                                                onRegenerate={() => handleSend(currentThread.prompt)}
+                                                onRegenerate={() => handleSend(currentThread.prompt, currentThread.aiOptions)}
                                                 onOpenJira={handleOpenJira}
                                             />
                                         )}
@@ -523,14 +597,14 @@ export function MainApp() {
                                                 {currentThread.error ? (
                                                     <div className="space-y-3">
                                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                                            <p className="text-sm text-slate-600">An error occurred while generating test cases. You can retry using the same prompt and model.</p>
+                                                            <p className="text-sm text-slate-600">Generation failed. Retry uses the same prompt, model mode, platform, Jira ID, and advanced options.</p>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => currentThread.prompt && handleSend(currentThread.prompt)}
+                                                                onClick={() => currentThread.prompt && handleSend(currentThread.prompt, currentThread.aiOptions)}
                                                                 disabled={loading || !currentThread.prompt}
                                                                 className="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                                                             >
-                                                                Retry
+                                                                Retry Generation
                                                             </button>
                                                         </div>
                                                         <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-xs text-slate-700 border border-slate-200 overflow-auto max-h-96">{currentThread.error}</pre>
@@ -556,6 +630,9 @@ export function MainApp() {
                                         ))}
                                     </div>
                                     <span className="font-medium">{progressLabel}</span>
+                                    <span className="hidden rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-500 sm:inline-flex">
+                                        {generationModelStatus}
+                                    </span>
                                     {generatingPrompt && (
                                         <span className="ml-auto hidden max-w-[40%] truncate text-xs text-slate-400 sm:block">{generatingPrompt}</span>
                                     )}

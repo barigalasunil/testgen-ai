@@ -5,6 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, ChevronDown, Settings as SettingsIcon, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const AUTO_MODEL = "auto";
+const AUTO_MODEL_LABEL = "Auto (Recommended)";
+
 interface InputBoxProps {
     value: string;
     onChange: (val: string) => void;
@@ -77,6 +80,9 @@ export function InputBox({
         }
     };
 
+    const modelOptions = [AUTO_MODEL, ...(models || [])];
+    const selectedModelLabel = selectedModel === AUTO_MODEL ? AUTO_MODEL_LABEL : selectedModel || "Select model";
+
     return (
         <div className="w-full">
             <div className="max-w-5xl mx-auto w-full flex flex-col gap-3">
@@ -127,7 +133,7 @@ export function InputBox({
                                 className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm transition-colors font-medium"
                             >
                                 <Bot className="w-4 h-4 text-[#10A37F]" />
-                                {selectedModel || "Select model"}
+                                {selectedModelLabel}
                                 <ChevronDown className="w-3.5 h-3.5" />
                             </button>
                             <AnimatePresence>
@@ -139,16 +145,16 @@ export function InputBox({
                                         transition={{ duration: 0.15 }}
                                         className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-xl shadow-lg p-2 min-w-[160px] z-50"
                                     >
-                                        {models?.map((m) => (
+                                        {modelOptions.map((m) => (
                                             <button key={m} onClick={() => { setSelectedModel(m); setIsDropdownOpen(false); }}
                                                 className={cn("w-full text-left px-3 py-2 text-sm rounded-md transition-colors",
                                                     m === selectedModel ? "bg-[#10A37F] text-white" : "text-gray-700 hover:bg-gray-100"
                                                 )}>
-                                                {m}
+                                                {m === AUTO_MODEL ? AUTO_MODEL_LABEL : m}
                                             </button>
                                         ))}
                                         {(!models || models.length === 0) && (
-                                            <div className="px-3 py-2 text-sm text-gray-400">No models found</div>
+                                            <div className="px-3 py-2 text-xs text-gray-400">No local models found</div>
                                         )}
                                     </motion.div>
                                 )}
