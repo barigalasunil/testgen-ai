@@ -23,6 +23,7 @@ interface ChatMessageProps {
     onCopy?: () => void;
     onRegenerate?: () => void;
     isLoading?: boolean;
+    onOpenJira?: (testCase: TestCase) => void;
 }
 
 export function ChatMessage({ 
@@ -34,7 +35,8 @@ export function ChatMessage({
     platformType,
     onCopy, 
     onRegenerate, 
-    isLoading 
+    isLoading,
+    onOpenJira,
 }: ChatMessageProps) {
     const isAssistant = role === "assistant";
     return (
@@ -65,7 +67,8 @@ export function ChatMessage({
                                 jiraStoryId={jiraStoryId}
                                 platformType={platformType}
                                 onCopy={onCopy || (() => {})} 
-                                onRegenerate={onRegenerate || (() => {})} 
+                                onRegenerate={onRegenerate || (() => {})}
+                                onOpenJira={onOpenJira}
                             />
                         ) : (
                             <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">

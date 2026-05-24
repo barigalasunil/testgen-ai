@@ -13,9 +13,10 @@ interface TestCaseTableProps {
     onCopy: () => void;
     onRegenerate: () => void;
     onScriptGenerated?: (code: string, fileName: string) => void;
+    onOpenJira?: (testCase: TestCase) => void;
 }
 
-export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegenerate }: TestCaseTableProps) {
+export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegenerate, onOpenJira }: TestCaseTableProps) {
     const [liked, setLiked] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
@@ -176,6 +177,7 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
                             <th className="p-4 border-b border-gray-100 min-w-[260px]">Steps</th>
                             <th className="p-4 border-b border-gray-100 min-w-[200px]">Expected Result</th>
                             <th className="p-4 border-b border-gray-100 min-w-[120px]">Test Data</th>
+                            <th className="p-4 border-b border-gray-100 whitespace-nowrap">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -206,6 +208,11 @@ export function TestCaseTable({ data, jiraStoryId, platformType, onCopy, onRegen
                                 </td>
                                 <td className="p-4 text-emerald-700 font-medium leading-relaxed text-[13px] whitespace-pre-wrap">{renderValue(tc.expectedResult)}</td>
                                 <td className="p-4 text-gray-500 text-xs italic bg-gray-50/30">{(tc.testData && tc.testData !== "N/A") ? renderValue(tc.testData) : "—"}</td>
+                                <td className="p-4">
+                                    <div className="flex gap-2">
+                                        <button onClick={() => onOpenJira && onOpenJira(tc)} className="text-xs px-3 py-1.5 rounded-2xl border border-blue-300 text-blue-600 hover:bg-blue-50">Jira</button>
+                                    </div>
+                                </td>
                             </tr>
                         ))}
                     </tbody>

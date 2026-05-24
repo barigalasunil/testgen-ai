@@ -6,10 +6,13 @@ import { X, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
+import JiraModal from "./JiraModal";
+import * as jiraService from "@/src/services/jira/jira.service";
 import { InputBox } from "./InputBox";
 import { AutomationDashboard } from "./AutomationDashboard";
 import { generateTestCases, fetchModels } from "../services";
 import { HistoryItem, SuiteKey, TestCase } from "../types";
+import { saveJiraCredentials, loadJiraCredentials, testConnection } from '@/src/services/jira/jira.service';
 
 type AutomationRunResponse = {
     error: boolean;
@@ -103,11 +106,61 @@ export function MainApp() {
     const [customPrompt, setCustomPrompt] = useState("");
     const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
     const [jiraStoryId, setJiraStoryId] = useState("");
+    const [jiraModalOpen, setJiraModalOpen] = useState(false);
+    const [jiraTargetCase, setJiraTargetCase] = useState<TestCase | null>(null);
+    const [savedJiraCreds, setSavedJiraCreds] = useState<jiraService.JiraCredentials | null>(null);
+    const [jiraBaseUrlInput, setJiraBaseUrlInput] = useState('');
+    const [jiraEmailInput, setJiraEmailInput] = useState('');
+    const [jiraApiTokenInput, setJiraApiTokenInput] = useState('');
+    const [jiraProjectKeyInput, setJiraProjectKeyInput] = useState('TCGB');
+    const [jiraTestStatus, setJiraTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+
+    const [jiraFields, setJiraFields] = useState({ baseUrl: '', email: '', apiToken: '', projectKey: 'TCGB' });
+    const [jiraConnStatus, setJiraConnStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
+    const [jiraConnMsg, setJiraConnMsg] = useState('');
+
+    useEffect(() => {
+        if (!isSettingsOpen) return;
+        const creds = jiraService.loadJiraCredentials();
+        if (creds) {
+            setSavedJiraCreds(creds);
+            setJiraBaseUrlInput(creds.baseUrl || '');
+            setJiraEmailInput(creds.email || '');
+            setJiraApiTokenInput(creds.apiToken || '');
+            setJiraProjectKeyInput(creds.projectKey || 'TCGB');
+        }
+    }, [isSettingsOpen]);
+
+    const handleSaveJira = () => {
+        const creds: jiraService.JiraCredentials = {
+            baseUrl: jiraBaseUrlInput,
+            email: jiraEmailInput,
+            apiToken: jiraApiTokenInput,
+            projectKey: jiraProjectKeyInput,
+        };
+        jiraService.saveJiraCredentials(creds);
+        setSavedJiraCreds(creds);
+        setIsSettingsOpen(false);
+    };
+
+    const handleTestJira = async () => {
+        setJiraTestStatus('testing');
+        try {
+            const res = await jiraService.testConnection();
+            if (res && res.success) setJiraTestStatus('ok');
+            else setJiraTestStatus('fail');
+        } catch {
+            setJiraTestStatus('fail');
+        }
+    };
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        const savedCreds = loadJiraCredentials(); // import from jira.service
+        if (savedCreds) setJiraFields(savedCreds);
+        
         const saved = localStorage.getItem("testgen-sessions");
         if (saved) {
             try {
@@ -368,6 +421,12 @@ export function MainApp() {
         }
     };
 
+    const handleOpenJira = (testCase: TestCase) => {
+        setJiraTargetCase(testCase);
+        setJiraModalOpen(true);
+    };
+
+
     return (
         <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans">
             <Sidebar
@@ -406,7 +465,7 @@ export function MainApp() {
                         <section className="flex-1 min-h-0 overflow-y-auto px-4 py-4 lg:px-6">
                             <div className="mx-auto flex max-w-6xl flex-col gap-4 pb-6">
                                 {currentThread?.prompt ? (
-                                    <ChatMessage role="user" content={currentThread.prompt} />
+                                    <ChatMessage role="user" content={currentThread.prompt} onOpenJira={handleOpenJira} />
                                 ) : (
                                     <div className="min-h-[220px]" />
                                 )}
@@ -433,7 +492,7 @@ export function MainApp() {
                                         {resultTab === 'testCases' && currentThread.result && (
                                             <ChatMessage role="assistant" isTable tableData={currentThread.result}
                                                 jiraStoryId={jiraStoryId} platformType={currentThread.platform}
-                                                onCopy={copyTableData} onRegenerate={() => handleSend(currentThread.prompt)} />
+                                                onCopy={copyTableData} onRegenerate={() => handleSend(currentThread.prompt)} onOpenJira={handleOpenJira} />
                                         )}
                                         {resultTab === 'scripts' && (
                                             <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
@@ -488,6 +547,8 @@ export function MainApp() {
                 </div>
             </main>
 
+            <JiraModal isOpen={jiraModalOpen} onClose={() => setJiraModalOpen(false)} testCase={jiraTargetCase} />
+
             <AnimatePresence>
                 {isSettingsOpen && (
                     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
@@ -499,20 +560,30 @@ export function MainApp() {
                             </div>
                             <div className="p-5 flex flex-col gap-4">
                                 {[
-                                    { label: "Jira Base URL", type: "text", placeholder: "https://yourdomain.atlassian.net" },
-                                    { label: "Email", type: "text", placeholder: "name@company.com" },
-                                    { label: "API Token", type: "password", placeholder: "••••••••••••••••" },
-                                    { label: "Project Key", type: "text", placeholder: "PROJ" },
+                                    { label: "Jira Base URL", key: "baseUrl", type: "text", placeholder: "https://yourcompany.atlassian.net" },
+                                    { label: "Email", key: "email", type: "text", placeholder: "name@company.com" },
+                                    { label: "API Token", key: "apiToken", type: "password", placeholder: "••••••••••••••••" },
+                                    { label: "Project Key", key: "projectKey", type: "text", placeholder: "TCGB" },
                                 ].map(field => (
-                                    <div key={field.label}>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-                                        <input type={field.type} placeholder={field.placeholder}
-                                            className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#10A37F]/50" />
+                                    <div key={field.key}>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+                                    <input
+                                        type={field.type}
+                                        placeholder={field.placeholder}
+                                        value={jiraFields[field.key as keyof typeof jiraFields]}
+                                        onChange={e => setJiraFields(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                        className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#10A37F]/50"
+                                    />
                                     </div>
                                 ))}
-                            </div>
+                                {jiraConnStatus !== 'idle' && (
+                                    <div className={`rounded-md px-3 py-2 text-sm ${jiraConnStatus === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                    {jiraConnMsg}
+                                    </div>
+                                )}
+                                </div>
                             <div className="p-4 border-t border-gray-200 flex justify-end">
-                                <button onClick={() => setIsSettingsOpen(false)}
+                                <button onClick={handleSaveJira}
                                     className="bg-[#10A37F] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-600 transition-colors">
                                     Save Credentials
                                 </button>
