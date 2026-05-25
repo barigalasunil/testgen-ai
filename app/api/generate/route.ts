@@ -4,13 +4,14 @@ import { promptBuilder, TestType, PlatformType } from "@/src/services/ai/prompt-
 import { responseParser } from "@/src/services/ai/response-parser";
 
 const MODEL_CONFIG: Record<string, { num_predict: number; temperature: number; top_p: number }> = {
-    "phi3:mini":      { num_predict: 3000, temperature: 0.2,  top_p: 0.9  },
-    "mistral:7b":     { num_predict: 6000, temperature: 0.3,  top_p: 0.95 },
-    "gemma4:e4b":     { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
-    "gemma3:12b":     { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
-    "qwen3:1.7b":     { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
-    "granite3.3:2b":  { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
-    "stablelm2":      { num_predict: 2000, temperature: 0.2,  top_p: 0.9  },
+    "phi3:mini":          { num_predict: 3000, temperature: 0.2,  top_p: 0.9  },
+    "mistral:7b":         { num_predict: 6000, temperature: 0.3,  top_p: 0.95 },
+    "gemma4:e4b":         { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
+    "gemma3:12b":         { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
+    "qwen3:1.7b":         { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
+    "qwen3:1.7b-q4_K_M":  { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
+    "granite3.3:2b":      { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
+    "stablelm2":          { num_predict: 2000, temperature: 0.2,  top_p: 0.9  },
 };
 
 const DEFAULT_CONFIG = { num_predict: 4096, temperature: 0.3, top_p: 0.95 };
@@ -25,6 +26,7 @@ function getModelConfig(model: string) {
 async function resolveModel(requested: string): Promise<string> {
     const preferenceOrder = [
         'qwen3:1.7b',
+        'qwen3:1.7b-q4_K_M',
         'granite3.3:2b',
         'phi3:mini',
         'mistral:7b',
@@ -34,7 +36,7 @@ async function resolveModel(requested: string): Promise<string> {
     ];
 
     try {
-        const res = await fetch('http://localhost:11434/api/tags', {
+        const res = await fetch('http://127.0.0.1:11434/api/tags', {
             signal: AbortSignal.timeout(3000),
         });
         if (!res.ok) return requested;
@@ -54,11 +56,13 @@ async function resolveModel(requested: string): Promise<string> {
         const prefixMatch = available.find(m => m.startsWith(prefix));
         if (prefixMatch) return prefixMatch;
 
-        // Auto-fallback to smallest preferred available
+        // Auto-fallback — smallest preferred model
         for (const pref of preferenceOrder) {
-            const found = available.find(m => m.startsWith(pref.split(':')[0]));
+            const found = available.find(m =>
+                m === pref || m.startsWith(pref.split(':')[0])
+            );
             if (found) {
-                console.warn(`[GENERATE] ${requested} not found, falling back to ${found}`);
+                console.warn(`[GENERATE] ${requested} not found, using ${found}`);
                 return found;
             }
         }

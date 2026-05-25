@@ -8,16 +8,23 @@ export async function GET() {
 
         if (!res.ok) {
             console.error('[MODELS] Ollama returned:', res.status);
-            return NextResponse.json({ models: [] }, { status: 500 });
+            return NextResponse.json({ 
+                models: [],
+                error: `Ollama returned status ${res.status}` 
+            }, { status: 503 });
         }
 
         const data = await res.json() as { models: { name: string }[] };
-        const models = data.models.map(m => m.name);
-        console.log('[MODELS] Returning all models:', models);
+        const models = data.models?.map(m => m.name) || [];
+        console.log('[MODELS] Available:', models);
 
-        return NextResponse.json({ models });
+        return NextResponse.json({ models, error: null });
     } catch (error) {
-        console.error('[MODELS] Fetch error:', error);
-        return NextResponse.json({ models: [] }, { status: 500 });
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('[MODELS] Error:', msg);
+        return NextResponse.json({ 
+            models: [],
+            error: `Cannot reach Ollama: ${msg}` 
+        }, { status: 503 });
     }
 }

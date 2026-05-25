@@ -56,22 +56,23 @@ async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
 
         const child = spawn('npx', args, {
             cwd: automationDir,
-            // Always use shell:true on Windows for headed mode to work
-            shell: true,
+            shell: isWindows,
             stdio: ['pipe', 'pipe', 'pipe'],
             env: {
                 ...process.env,
                 SAUCEDEMO_BASE_URL: 'https://www.saucedemo.com',
                 PW_REPORT_DIR: reportDir,
                 PW_HEADED: headed ? 'true' : 'false',
-                // These are needed for Chromium to launch visibly on Windows
+                // Prevent Playwright from using bundled browsers and preserve UI behavior
                 PLAYWRIGHT_BROWSERS_PATH: '0',
-                DISPLAY: '',
             },
-            // detached:false ensures the window attaches to current desktop session
-            detached: false,
-            windowsHide: false,  // ← KEY: this lets the browser window show on Windows
+            detached: isWindows,
+            windowsHide: false,
         });
+
+        if (isWindows) {
+            child.unref();
+        }
 
         let stdout = '';
         let stderr = '';

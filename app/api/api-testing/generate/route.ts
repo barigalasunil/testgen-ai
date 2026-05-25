@@ -2,24 +2,30 @@ import { NextResponse } from 'next/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const OLLAMA_BASE = 'http://127.0.0.1:11434';
+const OLLAMA = 'http://127.0.0.1:11434';
 
-async function getFirstAvailableModel(preferred?: string): Promise<string> {
-    const res = await fetch(`${OLLAMA_BASE}/api/tags`, {
-        signal: AbortSignal.timeout(5000),
-    });
-    const data = await res.json() as { models: { name: string }[] };
-    const names = data.models.map(m => m.name);
-    console.log('[API-TESTING] All models:', names);
+async function getModel(requested?: string): Promise<string> {
+    try {
+        const res = await fetch(`${OLLAMA}/api/tags`, {
+            signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) throw new Error(`Ollama API returned ${res.status}`);
+        const data = await res.json() as { models: { name: string }[] };
+        const names = data.models.map((m: { name: string }) => m.name);
+        console.log('[API-TESTING] Available:', names);
 
-    if (preferred && names.includes(preferred)) return preferred;
+        if (requested && names.includes(requested)) return requested;
 
-    const order = ['qwen3', 'granite', 'phi3', 'mistral', 'gemma4', 'gemma3', 'stablelm'];
-    for (const pref of order) {
-        const found = names.find(n => n.startsWith(pref));
-        if (found) return found;
+        const order = ['qwen3', 'granite', 'phi3', 'mistral', 'gemma4', 'gemma3', 'stablelm'];
+        for (const p of order) {
+            const found = names.find((n: string) => n.startsWith(p));
+            if (found) return found;
+        }
+        return names[0] || 'mistral:7b';
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`Ollama not responding at ${OLLAMA}: ${msg}`);
     }
-    return names[0];
 }
 
 async function readSpec(swaggerUrl?: string, swaggerJson?: string): Promise<string> {
@@ -29,11 +35,11 @@ async function readSpec(swaggerUrl?: string, swaggerJson?: string): Promise<stri
             try {
                 return readFileSync(join(process.cwd(), 'public', url), 'utf-8');
             } catch {
-                throw new Error(`File not found in public/: ${url}`);
+                throw new Error('File not found in public/: ' + url);
             }
         }
         const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-        if (!res.ok) throw new Error(`Cannot fetch spec: HTTP ${res.status}`);
+        if (!res.ok) throw new Error('Cannot fetch spec: HTTP ' + res.status);
         const ct = res.headers.get('content-type') || '';
         if (ct.includes('yaml') || (ct.includes('text') && !ct.includes('json'))) {
             return await res.text();
@@ -47,121 +53,110 @@ async function readSpec(swaggerUrl?: string, swaggerJson?: string): Promise<stri
 function buildPrompt(spec: string, type: string): string {
     const s = spec.length > 4000 ? spec.slice(0, 4000) + '\n...(truncated)' : spec;
 
-    if (type === 'restassured') return `You are a QA engineer. Generate RestAssured Java tests.
+    if (type === 'restassured') {
+        return 'You are a QA engineer. Generate RestAssured Java tests.\n\nAPI SPEC:\n' + s + '\n\nWrite a Java class called ApiTests with @Test methods using given().when().then() syntax and Hamcrest matchers. Cover happy path, invalid input, auth failure. Include all imports.\n\nReturn ONLY Java code.';
+    }
 
-API SPEC:
-${s}
+    if (type === 'scenarios') {
+        return 'You are a QA engineer. Generate API test scenarios.\n\nAPI SPEC:\n' + s + '\n\nWrite one scenario per line:\nTC-001 | METHOD /path | Scenario | Test Data | Expected Result\n\nReturn ONLY the scenario lines.';
+    }
 
-Requirements:
-- Class name: ApiTests
-- @Test on each method
-- given().when().then() syntax
-- Hamcrest matchers
-- Cover happy path, invalid input, auth failure
-- Include all imports
-
-Return ONLY Java code.`;
-
-    if (type === 'scenarios') return `You are a QA engineer. Generate API test scenarios.
-
-API SPEC:
-${s}
-
-Format each line as:
-TC-001 | METHOD /path | Scenario | Test Data | Expected Result
-
-Return ONLY the table rows.`;
-
-    return `You are a QA engineer. Generate Playwright TypeScript API tests.
-
-API SPEC:
-${s}
-
-Use import { test, expect } from '@playwright/test'
-Use request.newContext() for HTTP calls.
-Return ONLY TypeScript code.`;
+    return 'You are a QA engineer. Generate Playwright TypeScript API tests.\n\nAPI SPEC:\n' + s + '\n\nUse import { test, expect } from \'@playwright/test\'. Use request.newContext(). Return ONLY TypeScript code.';
 }
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
+    console.log('[API-TESTING] POST received');
+
     try {
-        const { swaggerUrl, swaggerJson, model, testType } = await request.json();
+        const body = await req.json();
+        const { swaggerUrl, swaggerJson, model, testType } = body;
         const type = testType || 'restassured';
 
-        console.log('[API-TESTING] Request received:', { swaggerUrl, model, type });
+        console.log('[API-TESTING] Input:', { url: swaggerUrl?.slice(0, 50), model, type });
 
-        // Get model
         let selectedModel: string;
         try {
-            selectedModel = await getFirstAvailableModel(model);
-            console.log('[API-TESTING] Using model:', selectedModel);
+            selectedModel = await getModel(model);
+            console.log('[API-TESTING] Model:', selectedModel);
         } catch (e) {
-            return NextResponse.json({
-                success: false,
-                error: `Cannot connect to Ollama at ${OLLAMA_BASE}. Is it running?`
-            }, { status: 503 });
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error('[API-TESTING] Model error:', msg);
+            return NextResponse.json({ success: false, error: 'Cannot reach Ollama: ' + msg }, { status: 503 });
         }
 
-        // Read spec
         let spec: string;
         try {
             spec = await readSpec(swaggerUrl, swaggerJson);
             console.log('[API-TESTING] Spec length:', spec.length);
         } catch (e) {
-            return NextResponse.json({
-                success: false,
-                error: e instanceof Error ? e.message : String(e)
-            }, { status: 400 });
+            const msg = e instanceof Error ? e.message : String(e);
+            return NextResponse.json({ success: false, error: msg }, { status: 400 });
         }
 
-        // Call Ollama — 8 minute timeout
         const prompt = buildPrompt(spec, type);
+        console.log('[API-TESTING] Calling Ollama...');
+
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8 * 60 * 1000);
 
         let code: string;
         try {
-            console.log('[API-TESTING] Calling Ollama...');
-            const res = await fetch(`${OLLAMA_BASE}/api/generate`, {
+            const ollamaRes = await fetch(OLLAMA + '/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     model: selectedModel,
                     prompt,
                     stream: false,
-                    options: { num_predict: 3000, temperature: 0.2 },
+                    options: { num_predict: 3000, temperature: 0.2, top_p: 0.9 },
                 }),
                 signal: controller.signal,
             });
 
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`Ollama error ${res.status}: ${text}`);
+            console.log('[API-TESTING] Ollama status:', ollamaRes.status);
+
+            if (!ollamaRes.ok) {
+                const errText = await ollamaRes.text();
+                throw new Error('Ollama ' + ollamaRes.status + ': ' + errText.slice(0, 200));
             }
 
-            const ollamaData = await res.json();
+            const ollamaData = await ollamaRes.json();
             code = ollamaData.response?.trim() || '';
-            console.log('[API-TESTING] Response length:', code.length);
+            console.log('[API-TESTING] Response chars:', code.length);
 
             if (!code) throw new Error('Model returned empty response. Try again.');
 
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            if (msg.includes('abort') || msg.includes('timeout')) {
+            const isAbort = msg.includes('abort') || msg.includes('signal') || msg.toLowerCase().includes('timeout');
+            const isConnection = msg.includes('fetch') || msg.includes('ECONNREFUSED') || msg.includes('127.0.0.1');
+            console.error('[API-TESTING] Ollama error:', msg);
+            
+            if (isAbort) {
                 return NextResponse.json({
                     success: false,
-                    error: `Model timed out loading. Run this in terminal first:\n\nollama run qwen3:1.7b "hi"\n\nThen try again immediately.`
+                    error: 'Model timed out. Run: ollama run qwen3:1.7b "hi" in terminal first, then retry.',
                 }, { status: 503 });
             }
+            
+            if (isConnection) {
+                return NextResponse.json({
+                    success: false,
+                    error: `Cannot connect to Ollama at ${OLLAMA}. Make sure Ollama is running: ollama serve`,
+                }, { status: 503 });
+            }
+            
             return NextResponse.json({ success: false, error: msg }, { status: 503 });
         } finally {
             clearTimeout(timer);
         }
 
+        console.log('[API-TESTING] Done');
         return NextResponse.json({ success: true, code, model: selectedModel, type });
 
     } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error('[API-TESTING ERROR]', msg);
+        console.error('[API-TESTING] Unexpected:', msg);
         return NextResponse.json({ success: false, error: msg }, { status: 500 });
     }
 }
