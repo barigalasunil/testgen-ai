@@ -118,7 +118,7 @@ export function InputBox({
             } else {
                 setStoryError(res.error || 'Failed to load story');
             }
-        } catch (err) {
+        } catch {
             setStoryError('Could not reach Jira. Check your credentials in settings.');
         } finally {
             setStoryFetching(false);

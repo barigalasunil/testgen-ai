@@ -1,3 +1,6 @@
-firstName,lastName,postalCode,expectedMessage
-John,Doe,90210,Thank you for your order!
-Jane,Smith,12345,Thank you for your order!
+firstName,lastName,postalCode,expectedMessage,notes
+John,Doe,90210,Thank you for your order!,Standard US address
+Jane,Smith,12345,Thank you for your order!,New York zip
+Ravi,Kumar,560001,Thank you for your order!,Bangalore India
+Test,User,00000,Thank you for your order!,Edge case zip
+A,B,1,Thank you for your order!,Minimum length fields

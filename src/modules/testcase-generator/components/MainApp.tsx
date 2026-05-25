@@ -94,14 +94,6 @@ export function MainApp() {
     const [resultTab, setResultTab] = useState<'testCases' | 'scripts' | 'logs'>('testCases');
     const [ollamaStatus, setOllamaStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
     const [activityIndex, setActivityIndex] = useState(0);
-    const handleStoryLoaded = (story: { summary: string; description: string; storyId: string }) => {
-    setValue(
-        `Generate test cases for this Jira story:\n\nSummary: ${story.summary}\n\nDescription: ${story.description}`
-    );
-    if (story.description?.trim()) {
-        setAcceptanceCriteria(story.description.slice(0, 500));
-    }
-    };
 
     // Feature states
     const [models, setModels] = useState<string[]>([]);
@@ -130,6 +122,15 @@ export function MainApp() {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const restoredSessionIdRef = useRef<string | null>(null);
+
+    const handleStoryLoaded = (story: { summary: string; description: string; storyId: string }) => {
+        setValue(
+            `Generate test cases for this Jira story:\n\nSummary: ${story.summary}\n\nDescription: ${story.description}`
+        );
+        if (story.description?.trim()) {
+            setAcceptanceCriteria(story.description.slice(0, 500));
+        }
+    };
 
     // Load sessions + models + jira creds on mount
     useEffect(() => {
@@ -647,14 +648,25 @@ export function MainApp() {
                                 </div>
                             )}
                             <InputBox
-                                value={value} onChange={setValue} onSend={handleSend}
-                                disabled={loading} inputRef={textareaRef} models={models}
-                                selectedModel={selectedModel} setSelectedModel={setSelectedModel}
-                                isJiraMode={isJiraMode} setIsJiraMode={setIsJiraMode}
-                                platformType={platformType} setPlatformType={setPlatformType}
-                                customPrompt={customPrompt} setCustomPrompt={setCustomPrompt}
-                                acceptanceCriteria={acceptanceCriteria} setAcceptanceCriteria={setAcceptanceCriteria}
-                                jiraStoryId={jiraStoryId} setJiraStoryId={setJiraStoryId} onStoryLoaded={handleStoryLoaded}
+                                value={value}
+                                onChange={setValue}
+                                onSend={handleSend}
+                                disabled={loading}
+                                inputRef={textareaRef}
+                                models={models}
+                                selectedModel={selectedModel}
+                                setSelectedModel={setSelectedModel}
+                                isJiraMode={isJiraMode}
+                                setIsJiraMode={setIsJiraMode}
+                                platformType={platformType}
+                                setPlatformType={setPlatformType}
+                                customPrompt={customPrompt}
+                                setCustomPrompt={setCustomPrompt}
+                                acceptanceCriteria={acceptanceCriteria}
+                                setAcceptanceCriteria={setAcceptanceCriteria}
+                                jiraStoryId={jiraStoryId}
+                                setJiraStoryId={setJiraStoryId}
+                                onStoryLoaded={handleStoryLoaded}
                             />
                         </div>
                     </div>

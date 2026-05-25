@@ -103,6 +103,12 @@ export function Sidebar({
             
             <div className="p-2 border-t border-gray-200">
                 <Link
+                    href="/test-data"
+                    className="w-full flex items-center gap-3 rounded-md p-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium"
+                >
+                    <span className="text-gray-500">🗂</span> Test Data
+                </Link>
+                <Link
                     href="/api-testing"
                     className="w-full flex items-center gap-3 rounded-md p-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium"
                 >

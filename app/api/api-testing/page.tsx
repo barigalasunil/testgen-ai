@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type TestType = 'restassured' | 'scenarios' | 'playwright';
@@ -21,8 +22,9 @@ const TEST_TYPES: { key: TestType; label: string; description: string }[] = [
 ];
 
 const SAMPLE_URLS = [
-    { label: 'Petstore (JSON)', url: 'https://petstore.swagger.io/v2/swagger.json' },
-    { label: 'Petstore v3', url: 'https://petstore3.swagger.io/api/v3/openapi.json' },
+    { label: 'SauceDemo API (Mock)', url: '/saucedemo-api-spec.json' },
+    { label: 'Petstore v2 (JSON)', url: 'https://petstore.swagger.io/v2/swagger.json' },
+    { label: 'Petstore v3 (OpenAPI 3.0)', url: 'https://petstore3.swagger.io/api/v3/openapi.json' },
 ];
 
 export default function ApiTestingPage() {
@@ -130,9 +132,9 @@ export default function ApiTestingPage() {
                     <h1 className="text-xl font-bold text-slate-900">API Testing Assistant</h1>
                     <p className="text-xs text-slate-500 mt-0.5">Generate RestAssured, Playwright, or scenario-based API tests from Swagger/OpenAPI specs</p>
                 </div>
-                <a href="/" className="text-sm text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg">
+                <Link href="/" className="text-sm text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg">
                     ← Back to TCGen
-                </a>
+                </Link>
             </div>
 
             <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -364,8 +366,9 @@ export default function ApiTestingPage() {
                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Sample Swagger URLs to test with</h3>
                         <div className="flex flex-col gap-2">
                             {[
-                                { name: 'Swagger Petstore v2', url: 'https://petstore.swagger.io/v2/swagger.json', desc: 'Classic REST API example' },
-                                { name: 'Swagger Petstore v3', url: 'https://petstore3.swagger.io/api/v3/openapi.json', desc: 'OpenAPI 3.0 example' },
+                                { name: 'SauceDemo API', url: '/saucedemo-api-spec.json', desc: 'Login, inventory, cart, checkout endpoints' },
+                                { name: 'Swagger Petstore v2', url: 'https://petstore.swagger.io/v2/swagger.json', desc: 'Classic REST API — 20 endpoints' },
+                                { name: 'Swagger Petstore v3', url: 'https://petstore3.swagger.io/api/v3/openapi.json', desc: 'OpenAPI 3.0 — 19 endpoints' },
                             ].map(api => (
                                 <div key={api.url} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 hover:border-slate-200 hover:bg-slate-50 transition">
                                     <div>

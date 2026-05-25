@@ -1,4 +1,7 @@
-username,password,expectedResult
-standard_user,secret_sauce,success
-locked_out_user,secret_sauce,error
-problem_user,secret_sauce,success
+username,password,expectedResult,userType,notes
+standard_user,secret_sauce,success,standard,Default test user - all features work normally
+locked_out_user,secret_sauce,fail,locked,Account is locked - should show error message
+problem_user,secret_sauce,success,problem,Images are broken - visual bugs present
+performance_glitch_user,secret_sauce,success,performance,App loads slowly - performance issues
+error_user,secret_sauce,success,error,Errors on cart and checkout interactions
+visual_user,secret_sauce,success,visual,Visual layout differences from standard
