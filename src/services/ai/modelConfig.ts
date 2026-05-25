@@ -10,7 +10,7 @@ export const MODEL_PRIORITY = [
 export const MODEL_CONFIG: Record<string, { num_predict: number; temperature: number; top_p: number }> = {
     "llama3:8b": { num_predict: 2400, temperature: 0.25, top_p: 0.92 },
     "mistral:7b": { num_predict: 2400, temperature: 0.3, top_p: 0.95 },
-    "phi3:mini": { num_predict: 1400, temperature: 0.2, top_p: 0.9 },
+    "phi3:mini": { num_predict: 2400, temperature: 0.2, top_p: 0.9 },
     "gemma4:e4b": { num_predict: 2400, temperature: 0.25, top_p: 0.92 },
 };
 

@@ -1,22 +1,6 @@
 import { NextResponse } from 'next/server';
-
-type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch';
-type OpenApiOperation = {
-    summary?: string;
-    operationId?: string;
-};
-type OpenApiSpec = {
-    info?: {
-        title?: string;
-        version?: string;
-        description?: string;
-    };
-    paths?: Record<string, Partial<Record<HttpMethod, OpenApiOperation>>>;
-    raw?: string;
-    format?: 'yaml';
-};
-
-const HTTP_METHODS: HttpMethod[] = ['get', 'post', 'put', 'delete', 'patch'];
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 export async function POST(request: Request) {
     try {
@@ -26,36 +10,51 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'URL is required' }, { status: 400 });
         }
 
-        // Handle local public files.
-        const trimmedUrl = url.trim();
-        const isLocal = trimmedUrl.startsWith('/');
-        const fetchUrl = isLocal
-            ? `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}${trimmedUrl}`
-            : trimmedUrl;
+        let spec: any;
 
-        const res = await fetch(fetchUrl);
-        if (!res.ok) {
-            return NextResponse.json(
-                { success: false, error: `Could not fetch spec (${res.status}). Check the URL.` },
-                { status: 400 }
-            );
-        }
-
-        const contentType = res.headers.get('content-type') || '';
-        let spec: OpenApiSpec;
-
-        if (contentType.includes('yaml') || (contentType.includes('text') && !contentType.includes('json'))) {
-            const text = await res.text();
-            spec = { raw: text, format: 'yaml' };
+        // Handle local public files — read from disk directly
+        if (url.startsWith('/')) {
+            try {
+                const filePath = join(process.cwd(), 'public', url);
+                const raw = readFileSync(filePath, 'utf-8');
+                spec = JSON.parse(raw);
+            } catch (err) {
+                return NextResponse.json(
+                    { success: false, error: `Could not read local spec file: ${url}. Make sure it exists in the public/ folder.` },
+                    { status: 400 }
+                );
+            }
         } else {
-            spec = await res.json();
+            // External URL — fetch normally
+            try {
+                const res = await fetch(url.trim());
+                if (!res.ok) {
+                    return NextResponse.json(
+                        { success: false, error: `Could not fetch spec (${res.status}). Check the URL.` },
+                        { status: 400 }
+                    );
+                }
+                const contentType = res.headers.get('content-type') || '';
+                if (contentType.includes('yaml') || (contentType.includes('text') && !contentType.includes('json'))) {
+                    const text = await res.text();
+                    spec = { raw: text, format: 'yaml' };
+                } else {
+                    spec = await res.json();
+                }
+            } catch (err) {
+                return NextResponse.json(
+                    { success: false, error: `Failed to fetch: ${err instanceof Error ? err.message : String(err)}` },
+                    { status: 400 }
+                );
+            }
         }
 
         const info = spec.info || {};
         const paths = spec.paths || {};
-        const endpoints = Object.entries(paths).flatMap(([path, methods]) =>
-            HTTP_METHODS
-                .filter(method => methods[method])
+
+        const endpoints = Object.entries(paths).flatMap(([path, methods]: [string, any]) =>
+            Object.keys(methods)
+                .filter(m => ['get', 'post', 'put', 'delete', 'patch'].includes(m))
                 .map(method => ({
                     method: method.toUpperCase(),
                     path,

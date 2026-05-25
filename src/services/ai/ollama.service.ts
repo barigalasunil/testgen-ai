@@ -4,7 +4,6 @@ export interface OllamaRequest {
     stream?: boolean;
     format?: string;
     options?: Record<string, unknown>;
-    timeoutMs?: number;
 }
 
 export interface OllamaResponse {
@@ -19,16 +18,18 @@ export interface OllamaResponse {
     eval_count?: number;
 }
 
+// Always use 127.0.0.1 — localhost fails on this Windows setup
+const OLLAMA_BASE = 'http://127.0.0.1:11434';
+
 export class OllamaService {
     private baseUrl: string;
     private activeController: AbortController | null = null;
 
-    constructor(baseUrl: string = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434") {
-        this.baseUrl = baseUrl;
+    constructor(baseUrl?: string) {
+        this.baseUrl = baseUrl || OLLAMA_BASE;
     }
 
     async generate(request: OllamaRequest): Promise<OllamaResponse> {
-        // Cancel any previous hanging request before starting new one.
         if (this.activeController) {
             this.activeController.abort();
             this.activeController = null;
@@ -37,22 +38,19 @@ export class OllamaService {
         const controller = new AbortController();
         this.activeController = controller;
 
-        // Local models can need several minutes to produce full test-case JSON.
-        const timeoutMs = request.timeoutMs ?? 10 * 60 * 1000;
-        const timeoutId = setTimeout(() => {
-            controller.abort();
-        }, timeoutMs);
+        // 8 minute timeout for large models cold-starting
+        const timeoutId = setTimeout(() => controller.abort(), 8 * 60 * 1000);
 
         try {
-            const ollamaRequest = { ...request };
-            delete ollamaRequest.timeoutMs;
+            console.log(`[OLLAMA] Calling ${this.baseUrl} with model: ${request.model}`);
+
             const response = await fetch(`${this.baseUrl}/api/generate`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ...ollamaRequest,
+                    ...request,
                     stream: request.stream ?? false,
-                    format: request.format ?? "json",
+                    format: request.format ?? 'json',
                 }),
                 signal: controller.signal,
             });
@@ -63,9 +61,15 @@ export class OllamaService {
             }
 
             return await response.json() as OllamaResponse;
+
         } catch (err: unknown) {
-            if (err instanceof Error && err.name === "AbortError") {
-                throw new Error(`Ollama generation timed out after ${Math.round(timeoutMs / 1000)} seconds. Try a smaller model, reduce the prompt, or increase the timeout.`);
+            if (err instanceof Error && err.name === 'AbortError') {
+                throw new Error(
+                    `Model "${request.model}" timed out loading.\n\n` +
+                    `Run this in terminal to pre-load it:\n` +
+                    `  ollama run qwen3:1.7b "hi"\n\n` +
+                    `Then try again immediately.`
+                );
             }
             throw err;
         } finally {
@@ -80,9 +84,11 @@ export class OllamaService {
         const response = await fetch(`${this.baseUrl}/api/tags`, {
             signal: AbortSignal.timeout(5000),
         });
-        if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch models: ${response.statusText}`);
+        }
         const data = await response.json() as { models: { name: string }[] };
-        return data.models.map((m) => m.name);
+        return data.models.map(m => m.name);
     }
 
     async health(): Promise<void> {
@@ -90,10 +96,29 @@ export class OllamaService {
             signal: AbortSignal.timeout(5000),
         });
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ollama unavailable: ${response.status} ${errorText}`);
+            throw new Error(`Ollama unavailable: ${response.status}`);
         }
         await response.json();
+    }
+
+    async warmUp(model: string): Promise<void> {
+        try {
+            console.log(`[OLLAMA] Warming up: ${model}`);
+            await fetch(`${this.baseUrl}/api/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model,
+                    prompt: 'hi',
+                    stream: false,
+                    options: { num_predict: 1 },
+                }),
+                signal: AbortSignal.timeout(8 * 60 * 1000),
+            });
+            console.log(`[OLLAMA] Warmed up: ${model}`);
+        } catch {
+            console.warn(`[OLLAMA] Warm up failed for ${model}`);
+        }
     }
 }
 

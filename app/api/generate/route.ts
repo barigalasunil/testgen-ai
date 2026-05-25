@@ -1,26 +1,76 @@
 import { NextResponse } from "next/server";
+import { OllamaService } from "@/src/services/ai/ollama.service";
 import { promptBuilder, TestType, PlatformType } from "@/src/services/ai/prompt-builder";
 import { responseParser } from "@/src/services/ai/response-parser";
-import { AUTO_MODEL } from "@/src/services/ai/modelConfig";
-import { ModelAttempt, ModelManager, ModelManagerError } from "@/src/services/ai/modelManager";
 
-type ParsedTestCase = {
-    testCaseId?: string;
-    title?: string;
-    testType?: string;
-    priority?: string;
-    preconditions?: string;
-    testData?: string;
-    steps?: string;
-    expectedResult?: string;
+const MODEL_CONFIG: Record<string, { num_predict: number; temperature: number; top_p: number }> = {
+    "phi3:mini":      { num_predict: 3000, temperature: 0.2,  top_p: 0.9  },
+    "mistral:7b":     { num_predict: 6000, temperature: 0.3,  top_p: 0.95 },
+    "gemma4:e4b":     { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
+    "gemma3:12b":     { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
+    "qwen3:1.7b":     { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
+    "granite3.3:2b":  { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
+    "stablelm2":      { num_predict: 2000, temperature: 0.2,  top_p: 0.9  },
 };
 
-type ParsedTestCases = {
-    testCases?: ParsedTestCase[];
-};
+const DEFAULT_CONFIG = { num_predict: 4096, temperature: 0.3, top_p: 0.95 };
+
+function getModelConfig(model: string) {
+    const key = Object.keys(MODEL_CONFIG).find(k =>
+        model.startsWith(k.split(':')[0])
+    );
+    return key ? MODEL_CONFIG[key] : DEFAULT_CONFIG;
+}
+
+async function resolveModel(requested: string): Promise<string> {
+    const preferenceOrder = [
+        'qwen3:1.7b',
+        'granite3.3:2b',
+        'phi3:mini',
+        'mistral:7b',
+        'gemma4:e4b',
+        'stablelm2',
+        'gemma3:12b',
+    ];
+
+    try {
+        const res = await fetch('http://localhost:11434/api/tags', {
+            signal: AbortSignal.timeout(3000),
+        });
+        if (!res.ok) return requested;
+
+        const data = await res.json() as { models: { name: string }[] };
+        const available = data.models.map(m => m.name);
+
+        console.log('[GENERATE] Available models:', available);
+
+        if (available.length === 0) return requested;
+
+        // Exact match
+        if (available.includes(requested)) return requested;
+
+        // Prefix match
+        const prefix = requested.split(':')[0];
+        const prefixMatch = available.find(m => m.startsWith(prefix));
+        if (prefixMatch) return prefixMatch;
+
+        // Auto-fallback to smallest preferred available
+        for (const pref of preferenceOrder) {
+            const found = available.find(m => m.startsWith(pref.split(':')[0]));
+            if (found) {
+                console.warn(`[GENERATE] ${requested} not found, falling back to ${found}`);
+                return found;
+            }
+        }
+
+        return available[0];
+    } catch {
+        return requested;
+    }
+}
 
 export async function POST(req: Request) {
-    const modelManager = new ModelManager();
+    const ollama = new OllamaService();
 
     try {
         const {
@@ -32,9 +82,11 @@ export async function POST(req: Request) {
             acceptanceCriteria,
         } = await req.json();
 
-        const selectedModel = model || AUTO_MODEL;
+        const selectedModel = await resolveModel(model || "mistral:7b");
+        const modelConfig = getModelConfig(selectedModel);
 
-        console.log("GENERATION REQUEST:", { prompt, selectedModel, type, platformType });
+        console.log("[GENERATE] Model resolved:", selectedModel);
+        console.log("[GENERATE] Config:", modelConfig);
 
         const fullPrompt = promptBuilder.buildPrompt(
             prompt,
@@ -45,70 +97,38 @@ export async function POST(req: Request) {
         );
 
         let rawResponse: string;
-        let activeModel = selectedModel;
-        let attempts: ModelAttempt[] = [];
-        let fallbackUsed = false;
-        let modelMessage = `Using: ${selectedModel}`;
-
         try {
-            const generation = await modelManager.generate({
+            const response = await ollama.generate({
                 model: selectedModel,
                 prompt: fullPrompt,
                 format: "json",
                 stream: false,
+                options: modelConfig,
             });
-            rawResponse = generation.response.response;
-            activeModel = generation.model;
-            attempts = generation.attempts;
-            fallbackUsed = generation.fallbackUsed;
-            modelMessage = generation.message;
+            rawResponse = response.response;
         } catch (ollamaError) {
             const msg = ollamaError instanceof Error ? ollamaError.message : String(ollamaError);
-            if (ollamaError instanceof ModelManagerError) {
-                attempts = ollamaError.attempts;
-            }
-            console.error("OLLAMA ERROR:", msg);
+            console.error("[GENERATE] Ollama error:", msg);
             return NextResponse.json(
-                {
-                    error: true,
-                    result: msg,
-                    meta: {
-                        requestedModel: selectedModel,
-                        activeModel: null,
-                        mode: selectedModel === AUTO_MODEL ? "auto" : "manual",
-                        attempts,
-                        fallbackUsed,
-                    },
-                },
+                { error: true, result: `Model error: ${msg}` },
                 { status: 503 }
             );
         }
 
-        let parsedData: ParsedTestCases;
+        let parsedData;
         try {
             parsedData = responseParser.parse(rawResponse);
         } catch (parseError) {
-            console.error("PARSE ERROR:", parseError);
-            console.error("RAW RESPONSE SAMPLE:", rawResponse?.slice(0, 500));
+            console.error("[GENERATE] Parse error:", parseError);
             return NextResponse.json(
-                {
-                    error: true,
-                    result: `The model returned a response that could not be parsed. Retry generation or switch models.\n\nModel used: ${activeModel}`,
-                    meta: {
-                        requestedModel: selectedModel,
-                        activeModel,
-                        attempts,
-                        fallbackUsed,
-                        message: modelMessage,
-                    },
-                },
+                { error: true, result: `Could not parse model response. Try again or switch models.` },
                 { status: 422 }
             );
         }
 
         const sanitized = {
             testCases: (parsedData.testCases || [])
-                .map((tc: ParsedTestCase, index: number) => {
+                .map((tc: any, index: number) => {
                     const num = String(index + 1).padStart(3, "0");
                     return {
                         testCaseId: String(tc.testCaseId || `TC-${num}`),
@@ -121,7 +141,7 @@ export async function POST(req: Request) {
                         expectedResult: String(tc.expectedResult || ""),
                     };
                 })
-                .filter((tc) =>
+                .filter((tc: any) =>
                     tc.title.trim().length > 0 &&
                     tc.steps.trim().length > 0 &&
                     tc.expectedResult.trim().length > 0
@@ -130,43 +150,24 @@ export async function POST(req: Request) {
 
         if (sanitized.testCases.length === 0) {
             return NextResponse.json(
-                {
-                    error: true,
-                    result: "Model responded but generated 0 complete test cases. Retry generation or switch models.",
-                    meta: {
-                        requestedModel: selectedModel,
-                        activeModel,
-                        attempts,
-                        fallbackUsed,
-                        message: modelMessage,
-                    },
-                },
+                { error: true, result: "Model returned 0 valid test cases. Try a more specific prompt." },
                 { status: 422 }
             );
         }
 
-        console.log(`SUCCESS: ${sanitized.testCases.length} test cases via ${activeModel}`);
+        console.log(`[GENERATE] Success: ${sanitized.testCases.length} test cases via ${selectedModel}`);
 
         return NextResponse.json({
             error: false,
             result: sanitized,
-            meta: {
-                model: activeModel,
-                requestedModel: selectedModel,
-                count: sanitized.testCases.length,
-                type,
-                platformType,
-                attempts,
-                fallbackUsed,
-                message: modelMessage,
-            },
+            meta: { model: selectedModel, count: sanitized.testCases.length, type, platformType },
         });
 
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error("API ERROR:", errorMessage);
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("[GENERATE] Unexpected error:", msg);
         return NextResponse.json(
-            { error: true, result: `Unexpected error: ${errorMessage}` },
+            { error: true, result: `Unexpected error: ${msg}` },
             { status: 500 }
         );
     }

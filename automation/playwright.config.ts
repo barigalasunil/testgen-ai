@@ -32,7 +32,16 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Explicitly set headless here so it overrides devices spread
+        headless: !isHeaded,
+        launchOptions: {
+          headless: !isHeaded,
+          slowMo: isHeaded ? 800 : 0,
+          args: isHeaded ? ['--start-maximized'] : [],
+        },
+      },
     },
   ],
 });
