@@ -1,19 +1,25 @@
 import { NextResponse } from 'next/server';
 
-function toADF(text: string) {
-    const paragraphs = text
-        .split(/\r?\n\r?\n/)
-        .map(p => p.replace(/\r?\n/g, ' ').trim())
-        .filter(Boolean);
-
+function toADF(text: string, isCode?: boolean) {
+    if (isCode) {
+        return {
+            type: 'doc',
+            version: 1,
+            content: [
+                {
+                    type: 'codeBlock',
+                    attrs: { language: 'java' },
+                    content: [{ type: 'text', text: text.slice(0, 30000) }],
+                },
+            ],
+        };
+    }
+    const paragraphs = text.split(/\r?\n\r?\n/).map(p => p.replace(/\r?\n/g, ' ').trim()).filter(Boolean);
     return {
         type: 'doc',
         version: 1,
         content: paragraphs.length > 0
-            ? paragraphs.map(p => ({
-                type: 'paragraph',
-                content: [{ type: 'text', text: p }],
-            }))
+            ? paragraphs.map(p => ({ type: 'paragraph', content: [{ type: 'text', text: p }] }))
             : [{ type: 'paragraph', content: [] }],
     };
 }
@@ -45,10 +51,20 @@ export async function POST(request: Request) {
 
         const normalizedUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
         const auth = Buffer.from(`${email}:${apiToken}`).toString('base64');
-        const adfDescription = toADF(description || 'No description provided');
+        
+        const isCodeContent = description?.trim().startsWith('import ') ||
+            description?.trim().startsWith('package ') ||
+            description?.trim().startsWith('//') ||
+            description?.trim().startsWith('TC-0');
+        const adfDescription = toADF(description || 'No description provided', isCodeContent);
+
+        let finalSummary = summary || 'No summary';
+        if (storyId && !finalSummary.startsWith('[')) {
+            finalSummary = `[${storyId}] ${finalSummary}`;
+        }
 
         if (storyId) {
-            adfDescription.content.push({
+            (adfDescription.content as any[]).push({
                 type: 'paragraph',
                 content: [{ type: 'text', text: `Related Story: ${storyId}` }],
             });
@@ -58,7 +74,7 @@ export async function POST(request: Request) {
         const payload: Record<string, any> = {
             fields: {
                 project: { key: projectKey },
-                summary: summary || 'No summary',
+                summary: finalSummary,
                 issuetype: { name: issueType || 'Bug' },
                 description: adfDescription,
                 labels: Array.isArray(labels) ? labels : ['tcgen-buddy', 'qa-defect'],
@@ -108,9 +124,8 @@ export async function POST(request: Request) {
         const issueUrl = `${normalizedUrl.replace(/\/$/, '')}/browse/${issueKey}`;
 
         // 🔗 CREATE FORMAL JIRA ISSUE LINK
-        if (storyId) {
+        if (storyId && issueKey) {
             try {
-                console.log(`[JIRA] Linking ${issueKey} to ${storyId}`);
                 await fetch(`${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issueLink`, {
                     method: 'POST',
                     headers: {
@@ -123,12 +138,13 @@ export async function POST(request: Request) {
                         outwardIssue: { key: storyId },
                     }),
                 });
-            } catch (linkError) {
-                console.warn('[JIRA LINK ERROR]', linkError);
+                console.log('[JIRA] Linked', issueKey, 'to parent', storyId);
+            } catch (linkErr) {
+                console.warn('[JIRA] Could not create issue link:', linkErr);
             }
         }
 
-        // 🗄️ PERSIST IN MYSQL FOR ENTERPRISE TRACKING
+        // 🗄️ PERSIST IN MYSQL FOR TRACKING
         try {
             const { MySqlService } = await import('@/src/services/db/mysql.service');
             await MySqlService.insert('defects', {
@@ -137,7 +153,7 @@ export async function POST(request: Request) {
                 linked_requirement_id: storyId || null,
                 status: 'Open',
                 project_key: projectKey,
-                title: summary,
+                title: finalSummary,
                 severity: priority,
                 metadata: JSON.stringify({ issueUrl })
             });

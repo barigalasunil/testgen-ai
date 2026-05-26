@@ -136,17 +136,57 @@ export function MainApp() {
     };
 
     useEffect(() => {
-        const saved = localStorage.getItem("testgen-sessions");
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved) as HistoryItem[];
-                setSessions(parsed);
-                if (parsed.length > 0) {
-                    setActiveId(parsed[0].id);
-                    if (window.innerWidth >= 768) setIsSidebarOpen(true);
+        // Load sessions on mount
+        const loadSessions = () => {
+            const saved = localStorage.getItem("testgen-sessions");
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved) as HistoryItem[];
+                    setSessions(parsed);
+                    if (parsed.length > 0) {
+                        setActiveId(prev => prev ?? parsed[0].id);
+                        if (window.innerWidth >= 768) setIsSidebarOpen(true);
+                    }
+                } catch { }
+            }
+        };
+
+        loadSessions();
+
+        // Reload sessions when user navigates back to this page
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                loadSessions();
+            }
+        };
+
+        // Reload when window gets focus (coming back from api-testing or test-data pages)
+        const handleFocus = () => {
+            loadSessions();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+
+        // Load saved Jira credentials
+        const savedCreds = loadJiraCredentials();
+        if (savedCreds) setJiraFields(savedCreds);
+
+        fetchModels()
+            .then(data => {
+                if (data.models && data.models.length > 0) {
+                    setModels(data.models);
+                    setSelectedModel(current =>
+                        data.models.includes(current) ? current : data.models[0]
+                    );
                 }
-            } catch { }
-        }
+            })
+            .catch(err => console.error("Failed to fetch models", err));
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+        };
     }, []);
 
     useEffect(() => {
@@ -277,7 +317,10 @@ export function MainApp() {
 
         const targetId = activeId ?? Date.now().toString();
         const now = new Date().toISOString();
-        const smartName = generateWorkspaceName(currentPrompt);
+        // If a Jira story was loaded, use that as the session title
+        const smartName = jiraStoryId?.trim()
+            ? jiraStoryId.trim()
+            : generateWorkspaceName(currentPrompt);
 
         if (!activeId) {
             setActiveId(targetId);
@@ -324,11 +367,11 @@ export function MainApp() {
 
         try {
             const data = await generateTestCases(
-                currentPrompt, 
-                generationOptions.model, 
+                currentPrompt,
+                generationOptions.model,
                 "functional",
-                generationOptions.platformType, 
-                generationOptions.customPrompt, 
+                generationOptions.platformType,
+                generationOptions.customPrompt,
                 generationOptions.acceptanceCriteria,
                 provider
             ) as GenerateApiResponse;
@@ -561,14 +604,14 @@ export function MainApp() {
                             <div className={cn(
                                 "flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold transition-all",
                                 providerStatus === 'connected' ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
-                                providerStatus === 'error' ? "bg-red-50 border-red-200 text-red-700" :
-                                "bg-amber-50 border-amber-200 text-amber-700"
+                                    providerStatus === 'error' ? "bg-red-50 border-red-200 text-red-700" :
+                                        "bg-amber-50 border-amber-200 text-amber-700"
                             )}>
                                 <span className={cn(
                                     "h-2 w-2 rounded-full",
                                     providerStatus === 'connected' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
-                                    providerStatus === 'error' ? "bg-red-500" :
-                                    "bg-amber-500 animate-pulse"
+                                        providerStatus === 'error' ? "bg-red-500" :
+                                            "bg-amber-500 animate-pulse"
                                 )} />
                                 {provider.toUpperCase()} {providerStatus === 'connected' ? 'Connected' : providerStatus === 'error' ? 'API Error' : 'Connecting...'}
                             </div>

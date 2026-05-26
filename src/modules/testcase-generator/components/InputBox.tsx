@@ -108,6 +108,17 @@ export function InputBox({
             if (res.success) {
                 setStoryLoaded(true);
                 setStoryTitle(res.summary || '');
+                // Save to localStorage for RAG and session history
+                const ragKey = 'tcgen-rag-stories';
+                const existing = JSON.parse(localStorage.getItem(ragKey) || '[]');
+                const newEntry = {
+                    storyId: jiraStoryId.trim(),
+                    summary: res.summary || '',
+                    description: res.description || '',
+                    fetchedAt: new Date().toISOString(),
+                };
+                const updated = [newEntry, ...existing.filter((e: any) => e.storyId !== jiraStoryId.trim())].slice(0, 20);
+                localStorage.setItem(ragKey, JSON.stringify(updated));
                 // Fire callback to auto-fill the prompt in MainApp
                 onStoryLoaded?.({
                     summary: res.summary || '',

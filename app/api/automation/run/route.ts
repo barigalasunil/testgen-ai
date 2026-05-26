@@ -83,18 +83,17 @@ async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
 
         const child = spawn('npx', args, {
             cwd: automationDir,
-            shell: isWindows,
+            shell: true,
             stdio: ['pipe', 'pipe', 'pipe'],
+            windowsHide: false,
+            detached: false,
             env: {
                 ...process.env,
                 SAUCEDEMO_BASE_URL: 'https://www.saucedemo.com',
                 PW_REPORT_DIR: reportDir,
                 PW_HEADED: headed ? 'true' : 'false',
-                // Ensure browsers are found
-                FORCE_COLOR: '3',
+                FORCE_COLOR: '0',
             },
-            detached: isWindows,
-            windowsHide: false,
         });
 
         if (isWindows) {

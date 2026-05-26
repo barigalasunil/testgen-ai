@@ -28,6 +28,19 @@ export default function DeepMindRagPage() {
     const [isUploading, setIsUploading] = useState(false);
     const [items, setItems] = useState<RagItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [projectKey, setProjectKey] = useState<string>('');
+
+    useEffect(() => {
+        const updateKey = () => {
+            try {
+                const creds = JSON.parse(localStorage.getItem('jira-credentials') || '{}');
+                if (creds.projectKey) setProjectKey(creds.projectKey);
+            } catch (e) {}
+        };
+        updateKey();
+        window.addEventListener('storage', updateKey);
+        return () => window.removeEventListener('storage', updateKey);
+    }, []);
 
     const fetchItems = async () => {
         setIsLoading(true);
@@ -88,13 +101,18 @@ export default function DeepMindRagPage() {
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">DeepMind RAG</h1>
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-400 tracking-tighter uppercase">Enterprise</span>
                         </div>
                         <p className="text-slate-500 text-sm font-medium">Centralized AI Semantic Memory & Knowledge Ingestion</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-6 px-6 py-2 rounded-2xl bg-white/5 border border-white/5">
+                        {projectKey && (
+                            <div className="text-center px-2">
+                                <p className="text-[10px] uppercase text-slate-500 font-bold tracking-widest mb-0.5">Active Project</p>
+                                <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-xs font-bold text-blue-400">{projectKey}</span>
+                            </div>
+                        )}
                         <div className="text-center">
                             <p className="text-[10px] uppercase text-slate-500 font-bold tracking-widest mb-0.5">Vector Nodes</p>
                             <p className="text-lg font-mono text-emerald-400 font-bold">{stats.totalChunks}</p>

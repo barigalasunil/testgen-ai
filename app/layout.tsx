@@ -2,7 +2,7 @@ import "./globals.css";
 
 export const metadata = {
   title: "TCGen-Buddy",
-  description: "AI-powered enterprise test case generation assistant",
+  description: "AI-powered test case generation assistant",
 };
 
 export default function RootLayout({

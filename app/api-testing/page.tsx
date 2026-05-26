@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle, Play, Terminal, Bug, ExternalLink, FileCode, ListChecks, Shield, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getSavedModel, getAiLabel } from "@/src/services/ai/ai-config.service";
+import { getSavedModel, getAiLabel, getSavedProvider } from "@/src/services/ai/ai-config.service";
 import { loadJiraCredentials } from '@/src/services/jira/jira.service';
 
-type TestType = 'restassured' | 'scenarios' | 'playwright';
+type TestType = 'restassured' | 'scenarios' | 'manual' | 'playwright' | 'newman';
 type InputMode = 'url' | 'paste' | 'curl' | 'postman' | 'raw';
 type AnalysisStep = 'idle' | 'analyzing' | 'generating' | 'positive' | 'negative' | 'edge' | 'automation' | 'done';
 
@@ -30,10 +30,12 @@ type ExecutionResult = {
     error?: string;
 };
 
-const TEST_TYPES: { key: TestType; label: string; description: string }[] = [
-    { key: 'restassured', label: 'RestAssured (Java)', description: 'Generate Java RestAssured test class' },
-    { key: 'scenarios', label: 'Test Scenarios', description: 'Plain English test scenarios table' },
-    { key: 'playwright', label: 'Playwright API (TS)', description: 'TypeScript Playwright API tests' },
+const TEST_TYPES: { key: TestType; label: string; description: string; buttonLabel: string; downloadExt: string }[] = [
+    { key: 'restassured', label: 'RestAssured (Java)', description: 'Java RestAssured test class with Maven', buttonLabel: 'Generate RestAssured Tests', downloadExt: 'java' },
+    { key: 'scenarios', label: 'Test Scenarios', description: 'Plain English scenario table', buttonLabel: 'Generate Test Scenarios', downloadExt: 'txt' },
+    { key: 'manual', label: 'Manual API Test Cases', description: 'Industry standard manual test cases', buttonLabel: 'Generate Manual Test Cases', downloadExt: 'txt' },
+    { key: 'playwright', label: 'Playwright API (TS)', description: 'TypeScript Playwright API tests', buttonLabel: 'Generate Playwright Tests', downloadExt: 'ts' },
+    { key: 'newman', label: 'Newman / Postman', description: 'Postman collection JSON for Newman CLI', buttonLabel: 'Generate Postman Collection', downloadExt: 'json' },
 ];
 
 const SAMPLE_URLS = [
@@ -73,11 +75,12 @@ export default function ApiTestingPage() {
     const [savingToJira, setSavingToJira] = useState(false);
     const [jiraResult, setJiraResult] = useState<{ key?: string; url?: string; error?: string } | null>(null);
     const [error, setError] = useState('');
-    const [toast, setToast] = useState('');
+    const [toast, setToast] = useState<{ msg: string; url?: string } | null>(null);
+    const [aiProvider, setAiProvider] = useState<'cloud' | 'local' | 'unknown'>('unknown');
 
-    const showToast = (msg: string) => {
-        setToast(msg);
-        setTimeout(() => setToast(''), 2500);
+    const showToast = (msg: string, url?: string) => {
+        setToast({ msg, url });
+        if (!url) setTimeout(() => setToast(null), 3000);
     };
 
     useEffect(() => {
@@ -90,6 +93,18 @@ export default function ApiTestingPage() {
             })
             .catch(() => { })
             .finally(() => setModelsLoading(false));
+
+        const provider = getSavedProvider();
+        fetch(`/api/health?provider=${provider}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.connected) {
+                    setAiProvider(data.provider === 'cloud' ? 'cloud' : 'local');
+                } else {
+                    setAiProvider('unknown');
+                }
+            })
+            .catch(() => setAiProvider('unknown'));
     }, []);
 
     const activeModel = getSavedModel();
@@ -267,8 +282,9 @@ export default function ApiTestingPage() {
     };
 
     const handleDownload = () => {
-        const ext = testType === 'restassured' ? 'java' : testType === 'playwright' ? 'ts' : 'txt';
-        const filename = `api-tests.${ext}`;
+        const typeConfig = TEST_TYPES.find(t => t.key === testType);
+        const ext = typeConfig?.downloadExt || 'txt';
+        const filename = `api-tests-${testType}.${ext}`;
         const blob = new Blob([generatedCode], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -304,7 +320,7 @@ export default function ApiTestingPage() {
             const data = await res.json();
             if (data.success) {
                 setJiraResult({ key: data.issueKey, url: data.issueUrl });
-                showToast(`\u2713 Created ${data.issueKey} in Jira`);
+                showToast(`Created ${data.issueKey} in Jira — click to open`, data.issueUrl);
             } else {
                 setJiraResult({ error: data.error || 'Failed to create Jira ticket' });
             }
@@ -479,9 +495,16 @@ export default function ApiTestingPage() {
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
             {toast && (
-                <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-gray-900 text-white px-4 py-2.5 rounded-xl shadow-xl text-sm">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    {toast}
+                <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-sm">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-sm flex-1">{toast.msg}</span>
+                    {toast.url && (
+                        <a href={toast.url} target="_blank" rel="noreferrer"
+                            className="text-xs text-blue-400 hover:text-blue-300 underline whitespace-nowrap font-semibold">
+                            Open in Jira ↗
+                        </a>
+                    )}
+                    <button onClick={() => setToast(null)} className="text-slate-400 hover:text-white ml-1">✕</button>
                 </div>
             )}
 
@@ -492,11 +515,21 @@ export default function ApiTestingPage() {
                     <p className="text-xs text-slate-500 mt-0.5">AI-powered API test generation, automation, and execution dashboard</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
-                        {aiLabel}
+                    <span className={cn(
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold",
+                        aiProvider === 'cloud' ? "bg-blue-50 border-blue-200 text-blue-700" :
+                        aiProvider === 'local' ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
+                        "bg-slate-50 border-slate-200 text-slate-500"
+                    )}>
+                        <span className={cn("h-2 w-2 rounded-full",
+                            aiProvider === 'cloud' ? "bg-blue-500" :
+                            aiProvider === 'local' ? "bg-emerald-500" : "bg-slate-400"
+                        )} />
+                        {aiProvider === 'cloud' ? 'Cloud AI Connected' :
+                         aiProvider === 'local' ? 'Local AI Connected' : 'AI Connecting...'}
                     </span>
                     <Link href="/" className="text-sm text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg">
-                        ← Back
+                        Back to TCGen
                     </Link>
                 </div>
             </div>
@@ -558,15 +591,20 @@ export default function ApiTestingPage() {
                         </div>
                     </div>
 
-                    {renderAnalysisProgress()}
 
-                    <button onClick={handleGenerate}
-                        disabled={isGenerating || !hasInput}
-                        className="w-full py-3 rounded-2xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2">
+                    <button
+                        onClick={handleGenerate}
+                        disabled={isGenerating || (!swaggerUrl.trim() && !swaggerJson.trim())}
+                        className="w-full py-3 rounded-2xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
+                    >
                         {isGenerating ? (
-                            <><span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Processing...</>
-                        ) : '⚡ Generate API Tests'}
+                            <><span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Generating...</>
+                        ) : (
+                            TEST_TYPES.find(t => t.key === testType)?.buttonLabel || 'Generate API Tests'
+                        )}
                     </button>
+
+                    {renderAnalysisProgress()}
 
                     {error && (
                         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
@@ -589,36 +627,14 @@ export default function ApiTestingPage() {
 
                 {/* Right panel */}
                 <div className="flex flex-col gap-4">
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col" style={{ minHeight: '600px' }}>
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col" style={{ minHeight: '500px' }}>
                         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
                             <div>
                                 <h2 className="text-sm font-semibold text-slate-800">Generated Test Code</h2>
                                 <p className="text-xs text-slate-400">
-                                    {generatedCode ? `${generatedCode.split('\n').length} lines · ${testType}` : 'Output will appear here'}
+                                    {generatedCode ? `${generatedCode.split('\n').length} lines` : 'Output will appear here'}
                                 </p>
                             </div>
-                            {generatedCode && (
-                                <div className="flex gap-2">
-                                    <button onClick={handleCopy}
-                                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
-                                        <Copy className="w-3.5 h-3.5" /> Copy
-                                    </button>
-                                    <button onClick={handleDownload}
-                                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800">
-                                        <Download className="w-3.5 h-3.5" /> Download
-                                    </button>
-                                    <button onClick={handleSaveToJira} disabled={savingToJira}
-                                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-                                        {savingToJira
-                                            ? <><span className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" /> Saving...</>
-                                            : '📋 Save to Jira'}
-                                    </button>
-                                    <button onClick={handleGenerate} disabled={isGenerating}
-                                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
-                                        <RefreshCw className="w-3.5 h-3.5" /> Retry
-                                    </button>
-                                </div>
-                            )}
                         </div>
 
                         <div className="flex-1 bg-slate-950 rounded-b-2xl overflow-auto">
@@ -644,10 +660,33 @@ export default function ApiTestingPage() {
                         </div>
                     </div>
 
+                    {generatedCode && (
+                        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex gap-3">
+                            <button onClick={handleCopy}
+                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50">
+                                <Copy className="w-4 h-4" /> Copy
+                            </button>
+                            <button onClick={handleDownload}
+                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50">
+                                <Download className="w-4 h-4" /> Download
+                            </button>
+                            <button onClick={handleSaveToJira} disabled={savingToJira}
+                                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 disabled:opacity-50">
+                                {savingToJira
+                                    ? <><span className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" /> Saving...</>
+                                    : <><Bug className="w-4 h-4" /> Save to Jira</>}
+                            </button>
+                            <button onClick={handleGenerate} disabled={isGenerating}
+                                className="flex items-center justify-center px-4 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
+                                <RefreshCw className="w-4 h-4" />
+                            </button>
+                        </div>
+                    )}
+
                     {renderExecutionDashboard()}
 
                     <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Sample Swagger URLs</h3>
+                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Sample Swagger URLs Reference</h3>
                         <div className="flex flex-col gap-2">
                             {[
                                 { name: 'SauceDemo API', url: '/saucedemo-api-spec.json', desc: 'Login, inventory, cart, checkout endpoints' },

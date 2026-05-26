@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
 import path from 'path';
 
 const reportDir = process.env.PW_REPORT_DIR
@@ -26,20 +26,27 @@ export default defineConfig({
         trace: 'retain-on-failure',
         actionTimeout: 15000,
         navigationTimeout: 30000,
-        ...(isHeaded && { launchOptions: { slowMo: 800 } }),
+        launchOptions: {
+            headless: !isHeaded,
+            slowMo: isHeaded ? 800 : 0,
+            args: isHeaded ? [
+                '--start-maximized',
+                '--disable-infobars',
+                '--no-sandbox',
+            ] : [],
+        },
     },
     projects: [
         {
             name: 'chromium',
             use: {
-                ...devices['Desktop Chrome'],
+                channel: 'chrome',
                 headless: !isHeaded,
-                ...(isHeaded && {
-                    launchOptions: {
-                        slowMo: 500,
-                        args: ['--start-maximized', '--disable-infobars'],
-                    },
-                }),
+                launchOptions: {
+                    headless: !isHeaded,
+                    slowMo: isHeaded ? 800 : 0,
+                    args: isHeaded ? ['--start-maximized', '--disable-infobars'] : [],
+                },
             },
         },
     ],
