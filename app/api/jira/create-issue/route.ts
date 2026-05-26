@@ -28,6 +28,7 @@ export async function POST(request: Request) {
             storyId,
             labels,
             credentials,
+            traceability,
         } = await request.json();
 
         const baseUrl = credentials?.baseUrl || process.env.JIRA_BASE_URL;
@@ -63,6 +64,16 @@ export async function POST(request: Request) {
                 labels: Array.isArray(labels) ? labels : ['tcgen-buddy', 'qa-defect'],
             },
         };
+
+        if (traceability?.sourceId) {
+            payload.fields.description.content.push({
+                type: 'paragraph',
+                content: [{ type: 'text', text: `Traceability: Source=${traceability.sourceId}${traceability.testCaseId ? ', TestCase=' + traceability.testCaseId : ''}` }],
+            });
+            if (!payload.fields.labels.includes(traceability.sourceId.toLowerCase().replace(/[^a-z0-9]/g, '-'))) {
+                payload.fields.labels.push(traceability.sourceId.toLowerCase().replace(/[^a-z0-9]/g, '-'));
+            }
+        }
 
         if (priority) payload.fields.priority = { name: priority };
 

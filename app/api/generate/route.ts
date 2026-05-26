@@ -102,14 +102,21 @@ export async function POST(req: Request) {
 
         let rawResponse: string;
         try {
-            const response = await ollama.generate({
-                model: selectedModel,
-                prompt: fullPrompt,
-                format: "json",
-                stream: false,
-                options: modelConfig,
-            });
-            rawResponse = response.response;
+            // Try OpenRouter first if key is available, fall back to Ollama
+            if (process.env.OPENROUTER_API_KEY) {
+                console.log('[GENERATE] Using OpenRouter');
+                rawResponse = await ollama.generateWithOpenRouter(fullPrompt);
+            } else {
+                console.log('[GENERATE] Using Ollama');
+                const response = await ollama.generate({
+                    model: selectedModel,
+                    prompt: fullPrompt,
+                    format: "json",
+                    stream: false,
+                    options: modelConfig,
+                });
+                rawResponse = response.response;
+            }
         } catch (ollamaError) {
             const msg = ollamaError instanceof Error ? ollamaError.message : String(ollamaError);
             console.error("[GENERATE] Ollama error:", msg);

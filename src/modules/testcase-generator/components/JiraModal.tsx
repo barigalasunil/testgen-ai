@@ -9,9 +9,10 @@ type Props = {
     isOpen: boolean;
     onClose: () => void;
     testCase: TestCase | null;
+    requirementId?: string;
 };
 
-export default function JiraModal({ isOpen, onClose, testCase }: Props) {
+export default function JiraModal({ isOpen, onClose, testCase, requirementId }: Props) {
     const [tab, setTab] = useState<'ai' | 'quick'>('ai');
     const [actualResult, setActualResult] = useState('');
     const [loading, setLoading] = useState(false);
@@ -67,18 +68,23 @@ export default function JiraModal({ isOpen, onClose, testCase }: Props) {
         }
     };
 
-    // Always creates as Bug
+    const buildDefectPayload = () => ({
+        summary,
+        description,
+        issueType: 'Bug',
+        priority,
+        labels: labels.split(',').map(s => s.trim()).filter(Boolean),
+        storyId: requirementId,
+        traceability: requirementId
+            ? { sourceId: requirementId, sourceType: 'requirement', testCaseId: testCase?.testCaseId }
+            : undefined,
+    });
+
     const handleCreate = async () => {
         setLoading(true);
         setResultMsg(null);
         try {
-            const res = await jiraService.createIssue({
-                summary,
-                description,
-                issueType: 'Bug',   // hardcoded — defect modal always creates Bug
-                priority,
-                labels: labels.split(',').map(s => s.trim()).filter(Boolean),
-            });
+            const res = await jiraService.createIssue(buildDefectPayload());
             if (res?.success) {
                 setResultMsg({ success: true, text: `Created ${res.issueKey}`, url: res.issueUrl });
             } else {
@@ -95,13 +101,7 @@ export default function JiraModal({ isOpen, onClose, testCase }: Props) {
         setLoading(true);
         setResultMsg(null);
         try {
-            const res = await jiraService.createIssue({
-                summary,
-                description,
-                issueType: 'Bug',  // quick create from defect modal is also Bug
-                priority,
-                labels: labels.split(',').map(s => s.trim()).filter(Boolean),
-            });
+            const res = await jiraService.createIssue(buildDefectPayload());
             if (res?.success) {
                 setResultMsg({ success: true, text: `Created ${res.issueKey}`, url: res.issueUrl });
             } else {
@@ -151,6 +151,14 @@ export default function JiraModal({ isOpen, onClose, testCase }: Props) {
                 </div>
 
                 {/* Body — scrollable */}
+                {requirementId && (
+                    <div className="px-4 pt-2 shrink-0">
+                        <div className="flex items-center gap-1.5 text-[10px] text-blue-400 bg-blue-900/20 border border-blue-800/30 rounded-lg px-2.5 py-1.5">
+                            <span>🔗</span>
+                            <span>Linked to Requirement: <strong>{requirementId}</strong></span>
+                        </div>
+                    </div>
+                )}
                 <div className="flex-1 overflow-y-auto p-4">
                     {tab === 'ai' ? (
                         <div className="flex flex-col gap-3">

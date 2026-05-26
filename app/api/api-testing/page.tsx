@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getSavedModel, getAiLabel } from "@/src/services/ai/ai-config.service";
 
 type TestType = 'restassured' | 'scenarios' | 'playwright';
 type ParsedSpec = {
@@ -32,9 +33,7 @@ export default function ApiTestingPage() {
     const [swaggerJson, setSwaggerJson] = useState('');
     const [inputMode, setInputMode] = useState<'url' | 'paste'>('url');
     const [testType, setTestType] = useState<TestType>('restassured');
-    const [model, setModel] = useState('mistral:7b');
-    const [availableModels, setAvailableModels] = useState<string[]>([]);
-    const [modelsLoading, setModelsLoading] = useState(true);
+    const [model] = useState(getSavedModel);
     const [parsedSpec, setParsedSpec] = useState<ParsedSpec | null>(null);
     const [isParsing, setIsParsing] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -49,20 +48,7 @@ export default function ApiTestingPage() {
         setTimeout(() => setToast(''), 2500);
     };
 
-    useEffect(() => {
-        fetch('/api/models')
-            .then(r => r.json())
-            .then(data => {
-                if (data.models && data.models.length > 0) {
-                    setAvailableModels(data.models);
-                    setModel(prev =>
-                        data.models.includes(prev) ? prev : data.models[0]
-                    );
-                }
-            })
-            .catch(() => {})
-            .finally(() => setModelsLoading(false));
-    }, []);
+    const aiLabel = getAiLabel();
 
     const handleParseSpec = async () => {
         if (!swaggerUrl.trim()) return;
@@ -119,7 +105,7 @@ export default function ApiTestingPage() {
                     const hasClass = /class\s+\w+/.test(code);
                     if (!hasClass) {
                         const header = `import org.junit.Test;\nimport static io.restassured.RestAssured.*;\nimport static org.hamcrest.Matchers.*;\n\n`;
-                        const body = code.split('\n').map(l => '    ' + l).join('\n');
+                        const body = code.split('\n').map((l: string) => '    ' + l).join('\n');
                         code = header + `public class ApiTests {\n` + body + `\n}`;
                     }
                 }
@@ -346,38 +332,15 @@ export default function ApiTestingPage() {
                         </div>
                     </div>
 
-                    {/* Model + Generate */}
+                    {/* AI Model — reads from global config */}
                     <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                        <h2 className="text-sm font-semibold text-slate-800 mb-3">AI Model</h2>
-                        <div className="flex gap-2">
-                        {modelsLoading ? (
-                            <div className="flex items-center gap-2 text-xs text-slate-400">
-                                <span className="h-3 w-3 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />
-                                Loading models...
-                            </div>
-                        ) : availableModels.length === 0 ? (
-                            <span className="text-xs text-red-500">
-                                No models found — make sure Ollama is running
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-sm font-semibold text-slate-800">AI Provider</h2>
+                            <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
+                                {aiLabel}
                             </span>
-                        ) : (
-                            <div className="flex flex-wrap gap-2">
-                                {availableModels.map(m => (
-                                    <button
-                                        key={m}
-                                        onClick={() => setModel(m)}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded-xl text-xs font-semibold border transition",
-                                            model === m
-                                                ? "bg-slate-900 text-white border-slate-900"
-                                                : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                        )}
-                                    >
-                                        {m}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-2">Configured globally in the main workspace. <Link href="/" className="text-blue-600 hover:underline">Change here →</Link></p>
                     </div>
 
                     <button

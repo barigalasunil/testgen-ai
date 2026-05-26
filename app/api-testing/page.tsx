@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
+import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle, Play, Terminal, Bug, ExternalLink, FileCode, ListChecks, Shield, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getSavedModel, getAiLabel } from "@/src/services/ai/ai-config.service";
 import { loadJiraCredentials } from '@/src/services/jira/jira.service';
 
 type TestType = 'restassured' | 'scenarios' | 'playwright';
+type InputMode = 'url' | 'paste' | 'curl' | 'postman' | 'raw';
+type AnalysisStep = 'idle' | 'analyzing' | 'generating' | 'positive' | 'negative' | 'edge' | 'automation' | 'done';
+
 type ParsedSpec = {
     title: string;
     version: string;
@@ -14,6 +18,16 @@ type ParsedSpec = {
     endpointCount: number;
     endpoints: { method: string; path: string; summary: string }[];
     rawSpec: string;
+};
+
+type ExecutionResult = {
+    endpoint: string;
+    method: string;
+    status: number | string;
+    passed: boolean;
+    responseTime: string;
+    responsePreview: string;
+    error?: string;
 };
 
 const TEST_TYPES: { key: TestType; label: string; description: string }[] = [
@@ -28,18 +42,34 @@ const SAMPLE_URLS = [
     { label: 'Petstore v3 (OpenAPI 3.0)', url: 'https://petstore3.swagger.io/api/v3/openapi.json' },
 ];
 
+const INPUT_MODE_TABS: { key: InputMode; label: string; icon: string }[] = [
+    { key: 'url', label: 'Swagger URL', icon: '🔗' },
+    { key: 'paste', label: 'Paste JSON/YAML', icon: '📋' },
+    { key: 'curl', label: 'cURL', icon: '⬆' },
+    { key: 'postman', label: 'Postman Collection', icon: '📦' },
+    { key: 'raw', label: 'Raw Request', icon: '✏' },
+];
+
 export default function ApiTestingPage() {
     const [swaggerUrl, setSwaggerUrl] = useState('');
     const [swaggerJson, setSwaggerJson] = useState('');
-    const [inputMode, setInputMode] = useState<'url' | 'paste'>('url');
+    const [curlCommand, setCurlCommand] = useState('');
+    const [postmanJson, setPostmanJson] = useState('');
+    const [rawPayload, setRawPayload] = useState('');
+    const [rawMethod, setRawMethod] = useState('GET');
+    const [rawEndpoint, setRawEndpoint] = useState('');
+    const [inputMode, setInputMode] = useState<InputMode>('url');
     const [testType, setTestType] = useState<TestType>('restassured');
-    const [model, setModel] = useState('mistral:7b');
     const [availableModels, setAvailableModels] = useState<string[]>([]);
     const [modelsLoading, setModelsLoading] = useState(true);
     const [parsedSpec, setParsedSpec] = useState<ParsedSpec | null>(null);
     const [isParsing, setIsParsing] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedCode, setGeneratedCode] = useState('');
+    const [analysisStep, setAnalysisStep] = useState<AnalysisStep>('idle');
+    const [execResults, setExecResults] = useState<ExecutionResult[]>([]);
+    const [executing, setExecuting] = useState(false);
+    const [execLog, setExecLog] = useState<string[]>([]);
     const [savingToJira, setSavingToJira] = useState(false);
     const [jiraResult, setJiraResult] = useState<{ key?: string; url?: string; error?: string } | null>(null);
     const [error, setError] = useState('');
@@ -56,14 +86,26 @@ export default function ApiTestingPage() {
             .then(data => {
                 if (data.models && data.models.length > 0) {
                     setAvailableModels(data.models);
-                    setModel(prev =>
-                        data.models.includes(prev) ? prev : data.models[0]
-                    );
                 }
             })
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setModelsLoading(false));
     }, []);
+
+    const activeModel = getSavedModel();
+    const aiLabel = getAiLabel();
+
+    const resolveSpecInput = useCallback((): string | null => {
+        switch (inputMode) {
+            case 'url': return swaggerUrl.trim() || null;
+            case 'paste': return swaggerJson.trim() || null;
+            case 'curl': return curlCommand.trim() || null;
+            case 'postman': return postmanJson.trim() || null;
+            case 'raw': return rawEndpoint.trim() ? JSON.stringify({ method: rawMethod, endpoint: rawEndpoint, body: rawPayload }) : null;
+        }
+    }, [inputMode, swaggerUrl, swaggerJson, curlCommand, postmanJson, rawMethod, rawEndpoint, rawPayload]);
+
+    const hasInput = !!resolveSpecInput();
 
     const handleParseSpec = async () => {
         if (!swaggerUrl.trim()) return;
@@ -90,25 +132,133 @@ export default function ApiTestingPage() {
         setIsGenerating(true);
         setError('');
         setGeneratedCode('');
+        setExecResults([]);
+        setAnalysisStep('analyzing');
+        setExecLog([]);
+
+        const input = resolveSpecInput();
+        if (!input) {
+            setError('No input provided');
+            setIsGenerating(false);
+            setAnalysisStep('idle');
+            return;
+        }
+
+        const steps: AnalysisStep[] = ['generating', 'positive', 'negative', 'edge', 'automation'];
+        let stepIdx = 0;
+        const advanceStep = () => {
+            if (stepIdx < steps.length) {
+                setAnalysisStep(steps[stepIdx]);
+                stepIdx++;
+            } else {
+                setAnalysisStep('done');
+            }
+        };
+        advanceStep();
+
         try {
             const res = await fetch('/api/api-testing/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    swaggerUrl: inputMode === 'url' ? swaggerUrl : undefined,
-                    swaggerJson: inputMode === 'paste' ? swaggerJson : undefined,
-                    model,
+                    swaggerUrl: inputMode === 'url' ? swaggerUrl.trim() || null : null,
+                    swaggerJson: inputMode === 'paste' ? swaggerJson.trim() || null : null,
+                    curlCommand: inputMode === 'curl' ? curlCommand.trim() || null : null,
+                    postmanJson: inputMode === 'postman' ? postmanJson.trim() || null : null,
+                    rawEndpoint: inputMode === 'raw' ? rawEndpoint.trim() || null : null,
+                    rawMethod: inputMode === 'raw' ? rawMethod : null,
+                    rawPayload: inputMode === 'raw' ? rawPayload.trim() || null : null,
+                    model: activeModel,
                     testType,
+                    inputMode,
                 }),
             });
-            const data = await res.json();
-            if (data.success) setGeneratedCode(data.code);
-            else setError(data.error || 'Generation failed');
+
+            let data;
+            try {
+                data = await res.json();
+            } catch (jsonErr) {
+                const text = await res.text();
+                throw new Error(`Server error: ${res.status} ${text.slice(0, 200)}`);
+            }
+
+            advanceStep();
+
+            if (data.success) {
+                let code = data.code || '';
+                if (testType === 'restassured') {
+                    const hasClass = /class\s+\w+/.test(code);
+                    if (!hasClass) {
+                        const header = `import org.junit.Test;\nimport static io.restassured.RestAssured.*;\nimport static org.hamcrest.Matchers.*;\n\n`;
+                        const body = code.split('\n').map((l: string) => '    ' + l).join('\n');
+                        code = header + `public class ApiTests {\n` + body + `\n}`;
+                    }
+                }
+                setGeneratedCode(code);
+                while (stepIdx < steps.length) advanceStep();
+                setAnalysisStep('done');
+            } else {
+                setError(data.error || 'Generation failed');
+                setAnalysisStep('idle');
+            }
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            const msg = err instanceof Error ? err.message : String(err);
+            setError(msg || 'Failed to generate.');
+            setAnalysisStep('idle');
         } finally {
             setIsGenerating(false);
         }
+    };
+
+    const handleExecute = async () => {
+        if (!generatedCode) return;
+        setExecuting(true);
+        setExecResults([]);
+        setExecLog(l => [...l, `[${new Date().toLocaleTimeString()}] Starting API validations...`]);
+
+        const endpoints = parsedSpec?.endpoints || [
+            { method: 'GET', path: '/', summary: 'Root endpoint' }
+        ];
+
+        for (const ep of endpoints.slice(0, 5)) {
+            const start = performance.now();
+            setExecLog(l => [...l, `[${new Date().toLocaleTimeString()}] Testing ${ep.method} ${ep.path}...`]);
+            try {
+                const res = await fetch('/api/api-testing/debug', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        endpoint: ep.path,
+                        method: ep.method,
+                    }),
+                });
+                const duration = ((performance.now() - start) / 1000).toFixed(2);
+                const result: ExecutionResult = {
+                    endpoint: ep.path,
+                    method: ep.method,
+                    status: res.status,
+                    passed: res.ok,
+                    responseTime: `${duration}s`,
+                    responsePreview: '',
+                };
+                setExecResults(prev => [...prev, result]);
+                setExecLog(l => [...l, `[${new Date().toLocaleTimeString()}] ${res.ok ? 'PASS' : 'FAIL'} ${ep.method} ${ep.path} → ${res.status} (${duration}s)`]);
+            } catch (err) {
+                const result: ExecutionResult = {
+                    endpoint: ep.path,
+                    method: ep.method,
+                    status: 'ERROR',
+                    passed: false,
+                    responseTime: '—',
+                    responsePreview: '',
+                    error: err instanceof Error ? err.message : String(err),
+                };
+                setExecResults(prev => [...prev, result]);
+                setExecLog(l => [...l, `[${new Date().toLocaleTimeString()}] ERROR ${ep.method} ${ep.path}: ${result.error}`]);
+            }
+        }
+        setExecLog(l => [...l, `[${new Date().toLocaleTimeString()}] Validations complete.`]);
+        setExecuting(false);
     };
 
     const handleCopy = () => {
@@ -135,16 +285,8 @@ export default function ApiTestingPage() {
         setJiraResult(null);
         try {
             const credentials = loadJiraCredentials();
-            if (!credentials) {
-                setJiraResult({
-                    error: 'No Jira credentials found. Open TCGen-Buddy, click Jira Integration in the sidebar, fill in your credentials and click Save.'
-                });
-                setSavingToJira(false);
-                return;
-            }
-
-            const summary = `[API Tests] ${parsedSpec?.title || 'API Testing'} - ${testType} (${new Date().toLocaleDateString()})`;
-            const description = `Generated by TCGen-Buddy API Testing Assistant.\n\nType: ${testType}\n\nGenerated Code:\n\n${generatedCode.slice(0, 2000)}${generatedCode.length > 2000 ? '\n...(truncated)' : ''}`;
+            const summary = `[API Tests] ${parsedSpec?.title || 'API Testing'} \u2014 ${testType} (${new Date().toLocaleDateString()})`;
+            const description = `Generated by TCGen-Buddy API Testing Assistant.\n\nModel: ${aiLabel}\nType: ${testType}\n\nGenerated Code:\n\n${generatedCode.slice(0, 2000)}${generatedCode.length > 2000 ? '\n...(truncated)' : ''}`;
 
             const res = await fetch('/api/jira/create-issue', {
                 method: 'POST',
@@ -156,12 +298,13 @@ export default function ApiTestingPage() {
                     priority: 'Medium',
                     labels: ['api-testing', 'tcgen-buddy', testType],
                     credentials,
+                    traceability: parsedSpec?.title ? { label: parsedSpec.title, sourceId: parsedSpec.title } : undefined,
                 }),
             });
             const data = await res.json();
             if (data.success) {
                 setJiraResult({ key: data.issueKey, url: data.issueUrl });
-                showToast(`Created ${data.issueKey} in Jira`);
+                showToast(`\u2713 Created ${data.issueKey} in Jira`);
             } else {
                 setJiraResult({ error: data.error || 'Failed to create Jira ticket' });
             }
@@ -171,6 +314,168 @@ export default function ApiTestingPage() {
             setSavingToJira(false);
         }
     };
+
+    const renderInputSection = () => (
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-800 mb-3">API Input</h2>
+            <div className="flex gap-2 mb-4 flex-wrap">
+                {INPUT_MODE_TABS.map(t => (
+                    <button key={t.key} onClick={() => setInputMode(t.key)}
+                        className={cn("px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap",
+                            inputMode === t.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
+                        {t.icon} {t.label}
+                    </button>
+                ))}
+            </div>
+
+            {inputMode === 'url' && (
+                <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                        <input type="text" value={swaggerUrl} onChange={e => setSwaggerUrl(e.target.value)}
+                            placeholder="https://petstore.swagger.io/v2/swagger.json"
+                            className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <button onClick={handleParseSpec} disabled={isParsing || !swaggerUrl.trim()}
+                            className="px-4 py-2.5 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap">
+                            {isParsing ? 'Loading...' : 'Load Spec'}
+                        </button>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                        <span className="text-xs text-slate-400">Try:</span>
+                        {SAMPLE_URLS.map(s => (
+                            <button key={s.url} onClick={() => setSwaggerUrl(s.url)}
+                                className="text-xs text-blue-600 hover:underline">{s.label}</button>
+                        ))}
+                    </div>
+                </div>
+            )}
+            {inputMode === 'paste' && (
+                <textarea value={swaggerJson} onChange={e => setSwaggerJson(e.target.value)}
+                    placeholder="Paste your OpenAPI JSON or YAML spec here..."
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none h-40" />
+            )}
+            {inputMode === 'curl' && (
+                <div className="flex flex-col gap-2">
+                    <textarea value={curlCommand} onChange={e => setCurlCommand(e.target.value)}
+                        placeholder={'curl -X GET https://api.example.com/users \\\n  -H "Authorization: Bearer token"'}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none h-28" />
+                    <p className="text-[10px] text-slate-400">Paste any cURL command. The AI will analyze and generate tests from it.</p>
+                </div>
+            )}
+            {inputMode === 'postman' && (
+                <div className="flex flex-col gap-2">
+                    <textarea value={postmanJson} onChange={e => setPostmanJson(e.target.value)}
+                        placeholder={'{\n  "info": { "name": "My API", "schema": "https://schema.getpostman.com/..." },\n  "item": [...]\n}'}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none h-40" />
+                    <p className="text-[10px] text-slate-400">Export your Postman collection as JSON v2.1 and paste it here.</p>
+                </div>
+            )}
+            {inputMode === 'raw' && (
+                <div className="flex flex-col gap-3">
+                    <div className="flex gap-2">
+                        <select value={rawMethod} onChange={e => setRawMethod(e.target.value)}
+                            className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                            {['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map(m => (
+                                <option key={m}>{m}</option>
+                            ))}
+                        </select>
+                        <input type="text" value={rawEndpoint} onChange={e => setRawEndpoint(e.target.value)}
+                            placeholder="/api/v1/users"
+                            className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                    </div>
+                    <textarea value={rawPayload} onChange={e => setRawPayload(e.target.value)}
+                        placeholder='{"key": "value"}  (optional request body for POST/PUT/PATCH)'
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none h-24" />
+                </div>
+            )}
+        </div>
+    );
+
+    const renderAnalysisProgress = () => {
+        if (analysisStep === 'idle') return null;
+        const steps = [
+            { key: 'analyzing' as const, label: 'Analyzing API structure...', icon: '🔍' },
+            { key: 'generating' as const, label: 'Generating test cases...', icon: '📝' },
+            { key: 'positive' as const, label: 'Creating positive scenarios...', icon: '✅' },
+            { key: 'negative' as const, label: 'Building negative validations...', icon: '🛡' },
+            { key: 'edge' as const, label: 'Adding edge cases...', icon: '⚡' },
+            { key: 'automation' as const, label: 'Generating automation scripts...', icon: '🤖' },
+        ];
+        const currentIdx = steps.findIndex(s => s.key === analysisStep);
+        return (
+            <div className="bg-white rounded-2xl border border-blue-100 p-4 shadow-sm">
+                <div className="flex flex-col gap-2">
+                    {steps.map((s, i) => (
+                        <div key={s.key} className={cn(
+                            "flex items-center gap-2 text-xs transition-colors",
+                            i < currentIdx ? "text-emerald-600" : i === currentIdx ? "text-blue-600 font-semibold" : "text-slate-300"
+                        )}>
+                            <span>{i < currentIdx ? '✓' : i === currentIdx ? '⟳' : '○'}</span>
+                            <span>{s.icon} {s.label}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    const renderExecutionDashboard = () => {
+        if (!generatedCode) return null;
+        const passed = execResults.filter(r => r.passed).length;
+        const failed = execResults.filter(r => !r.passed).length;
+        return (
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                        <Terminal className="w-4 h-4 text-slate-500" />
+                        API Execution Dashboard
+                    </h3>
+                    <button onClick={handleExecute} disabled={executing}
+                        className={cn(
+                            "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl font-semibold transition",
+                            executing ? "bg-slate-200 text-slate-400" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                        )}>
+                        {executing ? (
+                            <><span className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" /> Running...</>
+                        ) : (
+                            <><Play className="w-3.5 h-3.5" /> Execute Validations</>
+                        )}
+                    </button>
+                </div>
+                {execResults.length > 0 && (
+                    <div className="mb-3 flex gap-3 text-xs">
+                        <span className="text-emerald-600 font-semibold">✓ {passed} passed</span>
+                        <span className="text-red-600 font-semibold">✕ {failed} failed</span>
+                        <span className="text-slate-400">{execResults.length} total</span>
+                    </div>
+                )}
+                <div className="max-h-48 overflow-y-auto flex flex-col gap-1 text-xs font-mono">
+                    {execResults.map((r, i) => (
+                        <div key={i} className={cn(
+                            "flex items-center gap-2 px-2 py-1 rounded",
+                            r.passed ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                        )}>
+                            <span>{r.passed ? '✓' : '✕'}</span>
+                            <span className="font-bold">{r.method}</span>
+                            <span className="text-slate-600">{r.endpoint}</span>
+                            <span className="ml-auto">{r.status} · {r.responseTime}</span>
+                        </div>
+                    ))}
+                </div>
+                {execLog.length > 0 && (
+                    <div className="mt-2">
+                        <button onClick={() => setExecLog([])}
+                            className="text-[10px] text-slate-400 hover:text-slate-600 mb-1">Clear Log</button>
+                        <div className="bg-slate-900 rounded-xl p-2 max-h-32 overflow-y-auto">
+                            {execLog.map((l, i) => (
+                                <div key={i} className="text-[10px] text-slate-300 font-mono leading-relaxed">{l}</div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
             {toast && (
@@ -182,63 +487,24 @@ export default function ApiTestingPage() {
 
             <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
                 <div>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Module 3</p>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">AI API Testing Workspace</p>
                     <h1 className="text-xl font-bold text-slate-900">API Testing Assistant</h1>
-                    <p className="text-xs text-slate-500 mt-0.5">Generate RestAssured, Playwright, or scenario-based API tests from Swagger/OpenAPI specs</p>
+                    <p className="text-xs text-slate-500 mt-0.5">AI-powered API test generation, automation, and execution dashboard</p>
                 </div>
-                <Link href="/" className="text-sm text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg">
-                    Back to TCGen
-                </Link>
+                <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
+                        {aiLabel}
+                    </span>
+                    <Link href="/" className="text-sm text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg">
+                        ← Back
+                    </Link>
+                </div>
             </div>
 
             <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
-
                 {/* Left panel */}
                 <div className="flex flex-col gap-4">
-
-                    <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                        <h2 className="text-sm font-semibold text-slate-800 mb-3">API Specification Input</h2>
-                        <div className="flex gap-2 mb-4">
-                            <button onClick={() => setInputMode('url')}
-                                className={cn("px-3 py-1.5 rounded-xl text-xs font-semibold transition",
-                                    inputMode === 'url' ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
-                                Swagger URL
-                            </button>
-                            <button onClick={() => setInputMode('paste')}
-                                className={cn("px-3 py-1.5 rounded-xl text-xs font-semibold transition",
-                                    inputMode === 'paste' ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}>
-                                Paste JSON/YAML
-                            </button>
-                        </div>
-
-                        {inputMode === 'url' ? (
-                            <div className="flex flex-col gap-2">
-                                <div className="flex gap-2">
-                                    <input type="text" value={swaggerUrl}
-                                        onChange={e => setSwaggerUrl(e.target.value)}
-                                        placeholder="https://petstore.swagger.io/v2/swagger.json"
-                                        className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                    <button onClick={handleParseSpec} disabled={isParsing || !swaggerUrl.trim()}
-                                        className="px-4 py-2.5 rounded-xl bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap">
-                                        {isParsing ? 'Loading...' : 'Load Spec'}
-                                    </button>
-                                </div>
-                                <div className="flex gap-2 flex-wrap">
-                                    <span className="text-xs text-slate-400">Try:</span>
-                                    {SAMPLE_URLS.map(s => (
-                                        <button key={s.url} onClick={() => setSwaggerUrl(s.url)}
-                                            className="text-xs text-blue-600 hover:underline">
-                                            {s.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : (
-                            <textarea value={swaggerJson} onChange={e => setSwaggerJson(e.target.value)}
-                                placeholder="Paste your OpenAPI JSON or YAML spec here..."
-                                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none h-40" />
-                        )}
-                    </div>
+                    {renderInputSection()}
 
                     {parsedSpec && (
                         <div className="bg-white rounded-2xl border border-emerald-200 p-4 shadow-sm">
@@ -247,6 +513,9 @@ export default function ApiTestingPage() {
                                 <h3 className="text-sm font-semibold text-slate-800">Spec Loaded: {parsedSpec.title}</h3>
                                 <span className="text-xs text-slate-400 ml-auto">v{parsedSpec.version}</span>
                             </div>
+                            {parsedSpec.description && (
+                                <p className="text-xs text-slate-500 mb-3">{parsedSpec.description.slice(0, 150)}</p>
+                            )}
                             <div className="flex items-center gap-2 mb-3">
                                 <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full font-semibold">
                                     {parsedSpec.endpointCount} endpoints
@@ -289,33 +558,13 @@ export default function ApiTestingPage() {
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                        <h2 className="text-sm font-semibold text-slate-800 mb-3">AI Model</h2>
-                        {modelsLoading ? (
-                            <div className="flex items-center gap-2 text-xs text-slate-400">
-                                <span className="h-3 w-3 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />
-                                Loading models...
-                            </div>
-                        ) : availableModels.length === 0 ? (
-                            <span className="text-xs text-red-500">No models found — make sure Ollama is running</span>
-                        ) : (
-                            <div className="flex flex-wrap gap-2">
-                                {availableModels.map(m => (
-                                    <button key={m} onClick={() => setModel(m)}
-                                        className={cn("px-3 py-1.5 rounded-xl text-xs font-semibold border transition",
-                                            model === m ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>
-                                        {m}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    {renderAnalysisProgress()}
 
                     <button onClick={handleGenerate}
-                        disabled={isGenerating || (!swaggerUrl.trim() && !swaggerJson.trim())}
+                        disabled={isGenerating || !hasInput}
                         className="w-full py-3 rounded-2xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2">
                         {isGenerating ? (
-                            <><span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Generating tests...</>
+                            <><span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Processing...</>
                         ) : '⚡ Generate API Tests'}
                     </button>
 
@@ -381,7 +630,7 @@ export default function ApiTestingPage() {
                                 <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3 p-8">
                                     <div className="text-4xl">⚡</div>
                                     <p className="text-sm text-center">
-                                        {isGenerating ? 'AI is analyzing your API spec and generating tests...' : 'Enter a Swagger URL or paste your OpenAPI spec, then click Generate'}
+                                        {isGenerating ? 'AI is analyzing your API spec and generating tests...' : 'Enter API input (Swagger, cURL, Postman, or raw), then click Generate'}
                                     </p>
                                     {isGenerating && (
                                         <div className="flex gap-1">
@@ -394,6 +643,8 @@ export default function ApiTestingPage() {
                             )}
                         </div>
                     </div>
+
+                    {renderExecutionDashboard()}
 
                     <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Sample Swagger URLs</h3>

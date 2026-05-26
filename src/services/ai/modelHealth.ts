@@ -19,7 +19,6 @@ export async function checkModelHealth(ollama: OllamaService, model: string): Pr
             stream: false,
             format: "json",
             options: { ...getModelConfig(model), num_predict: 24, temperature: 0 },
-            timeoutMs: 30 * 1000,
         });
 
         return { ok: true };

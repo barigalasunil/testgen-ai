@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, ChevronDown, Settings as SettingsIcon, Tag, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { saveModel, saveProvider } from "@/src/services/ai/ai-config.service";
 
 const AUTO_MODEL = "auto";
 const AUTO_MODEL_LABEL = "Auto (Recommended)";
@@ -253,7 +254,7 @@ export function InputBox({
                                         {modelOptions.map((m) => (
                                             <button
                                                 key={m}
-                                                onClick={() => { setSelectedModel(m); setIsDropdownOpen(false); }}
+                                                onClick={() => { setSelectedModel(m); saveModel(m); saveProvider(m === 'openrouter' ? 'openrouter' : 'ollama'); setIsDropdownOpen(false); }}
                                                 className={cn(
                                                     "w-full text-left px-3 py-2 text-sm rounded-md transition-colors",
                                                     m === selectedModel

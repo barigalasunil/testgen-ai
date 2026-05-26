@@ -16,6 +16,7 @@ import {
     loadJiraCredentials,
     testConnection,
 } from "@/src/services/jira/jira.service";
+import { getSavedModel, saveModel } from "@/src/services/ai/ai-config.service";
 
 type AutomationRunResponse = {
     error: boolean;
@@ -154,9 +155,11 @@ export function MainApp() {
             .then(data => {
                 if (data.models && data.models.length > 0) {
                     setModels(data.models);
-                    setSelectedModel(current =>
-                        current === AUTO_MODEL || data.models.includes(current) ? current : AUTO_MODEL
-                    );
+                    const savedFromConfig = getSavedModel();
+                    const resolved = savedFromConfig !== AUTO_MODEL && data.models.includes(savedFromConfig)
+                        ? savedFromConfig
+                        : AUTO_MODEL;
+                    setSelectedModel(resolved);
                 }
             })
             .catch(err => console.error("Failed to fetch models", err));
@@ -219,7 +222,7 @@ export function MainApp() {
     const progressLabel = GENERATION_STEPS[activityIndex];
 
     const statusLabel = ollamaStatus === 'connected'
-        ? 'Ollama Connected'
+        ? (process.env.NEXT_PUBLIC_HAS_OPENROUTER === 'true' ? 'AI Ready (Cloud)' : 'Ollama Connected')
         : ollamaStatus === 'connecting'
             ? 'Connecting...'
             : 'Ollama Offline';
@@ -245,6 +248,8 @@ export function MainApp() {
             acceptanceCriteria: overrideOptions?.acceptanceCriteria ?? acceptanceCriteria,
             jiraStoryId: overrideOptions?.jiraStoryId ?? jiraStoryId,
         };
+
+        saveModel(generationOptions.model);
 
         setGeneratingPrompt(currentPrompt);
         setGenerationModelStatus(
@@ -687,6 +692,7 @@ export function MainApp() {
                 isOpen={jiraModalOpen}
                 onClose={() => setJiraModalOpen(false)}
                 testCase={jiraTargetCase}
+                requirementId={currentThread?.aiOptions?.jiraStoryId || jiraStoryId || undefined}
             />
 
             {/* Settings Modal */}

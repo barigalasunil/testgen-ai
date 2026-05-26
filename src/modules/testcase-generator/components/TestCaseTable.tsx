@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, RefreshCw, ThumbsUp, AlertCircle, FileJson, FileSpreadsheet, FileText, CheckCircle2, ExternalLink, Bug } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Copy, RefreshCw, ThumbsUp, AlertCircle, FileJson, FileSpreadsheet, FileText, CheckCircle2, ExternalLink, Bug, Link } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TestCase } from "../types";
 import { exportExcel, exportCsv, exportJson } from "@/src/services/export/export.service";
 import { saveTestCasesToJira } from "@/src/services/jira/jira.service";
+import { addRecord, getTraceabilityForRequirement } from "@/src/services/traceability/traceability.service";
 
 interface JiraResult {
     testCaseId: string;
@@ -40,6 +41,38 @@ export function TestCaseTable({
     const [scriptCode, setScriptCode] = useState<string | null>(null);
     const [scriptFileName, setScriptFileName] = useState<string | null>(null);
     const [showScriptModal, setShowScriptModal] = useState(false);
+
+    const [defects, setDefects] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        if (!jiraStoryId) return;
+        const trace = getTraceabilityForRequirement(jiraStoryId);
+        const defectMap: Record<string, string> = {};
+        for (const tc of data.testCases) {
+            const match = trace.defects.find(d => d.metadata?.testCaseId === tc.testCaseId);
+            if (match?.jiraKey) defectMap[tc.testCaseId] = match.jiraKey;
+        }
+        setDefects(defectMap);
+
+        if (!trace.requirement) {
+            addRecord({
+                id: jiraStoryId,
+                type: 'requirement',
+                label: jiraStoryId,
+                jiraKey: jiraStoryId,
+                linkedIds: data.testCases.map(tc => tc.testCaseId),
+            });
+        }
+        for (const tc of data.testCases) {
+            addRecord({
+                id: tc.testCaseId,
+                type: 'testcase',
+                label: tc.title,
+                jiraKey: tc.testCaseId,
+                linkedIds: [jiraStoryId],
+            });
+        }
+    }, [jiraStoryId, data.testCases]);
 
     // Jira bulk save states
     const [isSavingToJira, setIsSavingToJira] = useState(false);
@@ -318,16 +351,23 @@ export function TestCaseTable({
                                 <td className="p-4 text-gray-500 text-xs italic bg-gray-50/30">
                                     {(tc.testData && tc.testData !== "N/A") ? renderValue(tc.testData) : "—"}
                                 </td>
-                                {/* Defect column — creates Bug in Jira */}
+                                {/* Defect column — shows linked defect or create button */}
                                 <td className="p-4">
-                                    <button
-                                        onClick={() => onOpenJira?.(tc)}
-                                        title="Raise a Bug in Jira for this test case"
-                                        className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-400 transition whitespace-nowrap"
-                                    >
-                                        <Bug className="w-3.5 h-3.5" />
-                                        Defect
-                                    </button>
+                                    {defects[tc.testCaseId] ? (
+                                        <span className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 whitespace-nowrap">
+                                            <Bug className="w-3 h-3" />
+                                            {defects[tc.testCaseId]}
+                                        </span>
+                                    ) : (
+                                        <button
+                                            onClick={() => onOpenJira?.(tc)}
+                                            title="Raise a Bug in Jira for this test case"
+                                            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-400 transition whitespace-nowrap"
+                                        >
+                                            <Bug className="w-3.5 h-3.5" />
+                                            Defect
+                                        </button>
+                                    )}
                                 </td>
                             </tr>
                         ))}
@@ -395,7 +435,13 @@ export function TestCaseTable({
                         <ThumbsUp className={cn("w-3.5 h-3.5", liked ? "fill-green-600" : "")} />
                     </button>
 
-                    <span className="ml-auto text-[11px] text-gray-500 font-medium">
+                    {jiraStoryId && (
+                        <span className="flex items-center gap-1 text-[11px] text-blue-600 font-medium bg-blue-50 border border-blue-100 rounded-full px-2.5 py-1">
+                            <Link className="w-3 h-3" />
+                            {jiraStoryId}
+                        </span>
+                    )}
+                    <span className="text-[11px] text-gray-500 font-medium">
                         {data.testCases.length} test case{data.testCases.length !== 1 ? "s" : ""} generated
                     </span>
                 </div>
