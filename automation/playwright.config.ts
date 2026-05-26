@@ -32,11 +32,11 @@ export default defineConfig({
         {
             name: 'chromium',
             use: {
-                channel: 'chrome',
+                ...devices['Desktop Chrome'],
                 headless: !isHeaded,
                 ...(isHeaded && {
                     launchOptions: {
-                        slowMo: 800,
+                        slowMo: 500,
                         args: ['--start-maximized', '--disable-infobars'],
                     },
                 }),

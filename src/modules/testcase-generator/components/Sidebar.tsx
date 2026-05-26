@@ -17,6 +17,12 @@ interface SidebarProps {
     loading: boolean;
     onRename: (id: string, newTitle: string) => void;
     onDelete: (id: string) => void;
+    models: string[];
+    selectedModel: string;
+    onModelChange: (model: string) => void;
+    provider: 'local' | 'cloud';
+    onProviderChange: (provider: 'local' | 'cloud') => void;
+    providerStatus: 'connecting' | 'connected' | 'error';
 }
 
 export function Sidebar({ 
@@ -29,7 +35,13 @@ export function Sidebar({
     onOpenSettings, 
     loading, 
     onRename, 
-    onDelete 
+    onDelete,
+    models,
+    selectedModel,
+    onModelChange,
+    onProviderChange,
+    provider,
+    providerStatus
 }: SidebarProps) {
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -114,9 +126,64 @@ export function Sidebar({
                 >
                     <span className="text-gray-500">⚡</span> API Testing
                 </Link>
+                <Link
+                    href="/deepmind-rag"
+                    className="w-full flex items-center gap-3 rounded-md p-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium"
+                >
+                    <span className="text-emerald-600">🧠</span> DeepMind RAG
+                </Link>
                 <button onClick={onOpenSettings} className="w-full flex items-center gap-3 rounded-md p-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors font-medium">
                     <Settings className="w-4 h-4 text-gray-500" /> Jira Integration
                 </button>
+
+                <div className="mt-2 p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                                <div className={cn(
+                                    "w-1.5 h-1.5 rounded-full",
+                                    providerStatus === 'connected' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : 
+                                    providerStatus === 'connecting' ? "bg-amber-500 animate-pulse" : 
+                                    "bg-red-500"
+                                )} />
+                                <span className="text-[11px] font-bold tracking-tight text-slate-400 capitalize">
+                                    {providerStatus === 'connected' ? 'Active' : providerStatus}
+                                </span>
+                            </div>
+                        <div className={cn(
+                            "w-2 h-2 rounded-full",
+                            loading ? "bg-amber-400 animate-pulse" : "bg-emerald-500"
+                        )} />
+                    </div>
+                    
+                    <div className="flex flex-col gap-2">
+                        <div className="flex p-0.5 bg-gray-100 rounded-lg">
+                            <button 
+                                onClick={() => onProviderChange('local')}
+                                className={cn("flex-1 py-1 text-[10px] font-bold rounded-md transition", provider === 'local' ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600")}
+                            >
+                                LOCAL
+                            </button>
+                            <button 
+                                onClick={() => onProviderChange('cloud')}
+                                className={cn("flex-1 py-1 text-[10px] font-bold rounded-md transition", provider === 'cloud' ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600")}
+                            >
+                                CLOUD
+                            </button>
+                        </div>
+
+                        <select 
+                            value={selectedModel}
+                            onChange={(e) => onModelChange(e.target.value)}
+                            className="w-full bg-white border border-gray-200 rounded-lg p-2 text-xs text-gray-700 outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                            <option value="auto">Auto (Recommended)</option>
+                            {models.map(m => (
+                                <option key={m} value={m}>{m}</option>
+                            ))}
+                        </select>
+                        <p className="text-[9px] text-gray-400 px-1">Global AI model used across all QA workspaces.</p>
+                    </div>
+                </div>
             </div>
         </div>
     );

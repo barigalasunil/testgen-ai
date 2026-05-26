@@ -50,8 +50,22 @@ export async function GET(request: Request) {
         const description = extractText(fields.description);
         const summary = fields.summary || '';
         const issueType = fields.issuetype?.name || 'Story';
-        const priority = fields.priority?.name || 'Medium';
-        const status = fields.status?.name || '';
+        const projectKey = storyId.split('-')[0];
+
+        // 🔗 PERSIST FOR TRACEABILITY + RAG
+        try {
+            const { IngestionService } = await import('@/src/services/rag/ingestionService');
+            await IngestionService.ingestRequirement({
+                jiraStoryId: storyId,
+                title: summary,
+                description: description,
+                acceptanceCriteria: description.slice(0, 500), // Fallback if AC not field
+                projectKey: projectKey,
+            });
+        } catch (ingestError) {
+            console.error('[JIRA-FETCH] Ingestion failed:', ingestError);
+            // Don't fail the request, just log it
+        }
 
         return NextResponse.json({
             success: true,
@@ -59,8 +73,8 @@ export async function GET(request: Request) {
             summary,
             description,
             issueType,
-            priority,
-            status,
+            priority: fields.priority?.name || 'Medium',
+            status: fields.status?.name || '',
             issueUrl: `${normalizedUrl.replace(/\/$/, '')}/browse/${storyId}`,
         });
 

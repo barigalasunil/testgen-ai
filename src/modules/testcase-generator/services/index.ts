@@ -4,7 +4,8 @@ export async function generateTestCases(
     type: string = "functional", 
     platformType: string = "web",
     customPrompt?: string,
-    acceptanceCriteria?: string
+    acceptanceCriteria?: string,
+    provider: string = "local"
 ) {
     const res = await fetch("/api/generate", {
         method: "POST",
@@ -15,13 +16,14 @@ export async function generateTestCases(
             type, 
             platformType,
             customPrompt,
-            acceptanceCriteria
+            acceptanceCriteria,
+            provider
         }),
     });
     return await res.json();
 }
 
-export async function fetchModels() {
-    const res = await fetch("/api/models");
+export async function fetchModels(provider: string = 'local') {
+    const res = await fetch(`/api/models?provider=${provider}`);
     return await res.json();
 }

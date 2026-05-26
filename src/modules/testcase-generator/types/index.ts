@@ -7,6 +7,12 @@ export type TestCase = {
     testData: string;
     steps: string;
     expectedResult: string;
+    
+    // Traceability fields
+    linkedRequirementId?: string;
+    projectKey?: string;
+    defectId?: string;
+    executionStatus?: 'Passed' | 'Failed' | 'Blocked' | 'Untested';
 };
 
 export type SuiteKey = 'smoke' | 'sanity' | 'regression';

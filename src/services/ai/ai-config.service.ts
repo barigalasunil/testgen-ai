@@ -17,25 +17,25 @@ export function saveModel(model: string): void {
     } catch { }
 }
 
-export function getSavedProvider(): 'ollama' | 'openrouter' {
-    if (typeof window === 'undefined') return 'ollama';
+export function getSavedProvider(): 'local' | 'cloud' {
+    if (typeof window === 'undefined') return 'local';
     try {
         const val = localStorage.getItem(USE_OPENROUTER_KEY);
-        return val === 'true' ? 'openrouter' : 'ollama';
+        return val === 'true' ? 'cloud' : 'local';
     } catch {
-        return 'ollama';
+        return 'local';
     }
 }
 
-export function saveProvider(provider: 'ollama' | 'openrouter'): void {
+export function saveProvider(provider: 'local' | 'cloud'): void {
     try {
-        localStorage.setItem(USE_OPENROUTER_KEY, provider === 'openrouter' ? 'true' : 'false');
+        localStorage.setItem(USE_OPENROUTER_KEY, provider === 'cloud' ? 'true' : 'false');
     } catch { }
 }
 
 export function getAiLabel(): string {
     const model = getSavedModel();
     const provider = getSavedProvider();
-    if (provider === 'openrouter') return `OpenRouter · ${model}`;
-    return model === 'auto' ? 'Auto (Ollama)' : `Ollama · ${model}`;
+    if (provider === 'cloud') return `CLOUD · ${model}`;
+    return model === 'auto' ? 'Auto (LOCAL)' : `LOCAL · ${model}`;
 }

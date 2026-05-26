@@ -24,6 +24,33 @@ function getProjectRoot(): string {
     return root;
 }
 
+async function validateEnvironment() {
+    const rootDir = getProjectRoot();
+    const automationDir = join(rootDir, 'automation');
+    
+    // Check if Playwright is installed
+    const isWindows = process.platform === 'win32';
+    const cmd = isWindows ? 'npx.cmd' : 'npx';
+    const { execSync } = require('child_process');
+
+    try {
+        execSync(`${cmd} playwright --version`, { cwd: automationDir });
+    } catch (e) {
+        throw new Error('Playwright is not installed. Please run: npm install @playwright/test');
+    }
+
+    // Check for browser binaries (Chromium)
+    try {
+        // This command returns a non-zero exit code if browsers are missing
+        execSync(`${cmd} playwright test --list --config playwright.config.ts`, { 
+            cwd: automationDir,
+            env: { ...process.env, PW_REPORT_DIR: '/tmp' } 
+        });
+    } catch (e) {
+        throw new Error('Playwright browser binaries not installed. Please run: npx playwright install chromium');
+    }
+}
+
 async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
     const rootDir = getProjectRoot();
     const reportDir = join(rootDir, 'public', 'automation-reports', suite);
@@ -63,8 +90,8 @@ async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
                 SAUCEDEMO_BASE_URL: 'https://www.saucedemo.com',
                 PW_REPORT_DIR: reportDir,
                 PW_HEADED: headed ? 'true' : 'false',
-                // Prevent Playwright from using bundled browsers and preserve UI behavior
-                PLAYWRIGHT_BROWSERS_PATH: '0',
+                // Ensure browsers are found
+                FORCE_COLOR: '3',
             },
             detached: isWindows,
             windowsHide: false,
@@ -125,6 +152,8 @@ export async function POST(request: Request) {
                 { status: 400 }
             );
         }
+
+        await validateEnvironment();
 
         const startedAt = new Date().toISOString();
         const reportUrl = getReportUrl(suite as SuiteName);

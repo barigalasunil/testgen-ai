@@ -122,12 +122,53 @@ export async function POST(request: Request) {
         const issueKey = data.key;
         const issueUrl = `${normalizedUrl.replace(/\/$/, '')}/browse/${issueKey}`;
 
+        // 🔗 CREATE FORMAL JIRA ISSUE LINK
+        if (storyId) {
+            try {
+                await fetch(`${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issueLink`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Basic ${auth}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        type: { name: 'Relates' },
+                        inwardIssue: { key: issueKey },
+                        outwardIssue: { key: storyId },
+                    }),
+                });
+            } catch (linkError) {
+                console.warn('[JIRA LINK ERROR]', linkError);
+            }
+        }
+
+        // 🗄️ PERSIST TEST CASES IN MYSQL FOR TRACEABILITY
+        try {
+            const { MySqlService } = await import('@/src/services/db/mysql.service');
+            for (const tc of testCases) {
+                await MySqlService.insert('test_cases', {
+                    test_case_id: tc.testCaseId,
+                    title: tc.title,
+                    test_type: tc.testType,
+                    priority: tc.priority,
+                    steps: tc.steps,
+                    expected_result: tc.expectedResult,
+                    project_key: projectKey,
+                    linked_requirement_id: storyId || null,
+                    jira_task_id: issueKey,
+                    execution_status: 'Untested'
+                });
+            }
+        } catch (dbError) {
+            console.error('[DATABASE ERROR] Failed to log test cases:', dbError);
+        }
+
         return NextResponse.json({
             success: true,
             issueKey,
             issueUrl,
             total: testCases.length,
-            message: `Created ${issueKey} with ${testCases.length} test cases as a table`,
+            message: `Created ${issueKey} with ${testCases.length} test cases as a table and synced with traceability DB`,
         });
 
     } catch (err) {

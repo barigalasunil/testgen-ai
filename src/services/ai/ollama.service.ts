@@ -121,13 +121,14 @@ export class OllamaService {
         }
     }
 
-    async generateWithOpenRouter(prompt: string): Promise<string> {
+    async generateWithOpenRouter(prompt: string, modelOverride?: string): Promise<string> {
         const apiKey = process.env.OPENROUTER_API_KEY;
-        const model = process.env.OPENROUTER_MODEL || 'openrouter/auto';
+        const defaultModel = process.env.OPENROUTER_MODEL || 'openrouter/auto';
+        const targetModel = modelOverride || defaultModel;
 
         if (!apiKey) throw new Error('OPENROUTER_API_KEY not set in .env.local');
 
-        console.log(`[OPENROUTER] Calling model: ${model}`);
+        console.log(`[OPENROUTER] Calling model: ${targetModel}`);
 
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
@@ -138,7 +139,7 @@ export class OllamaService {
                 'X-Title': 'TCGen-Buddy QA Platform',
             },
             body: JSON.stringify({
-                model,
+                model: targetModel,
                 messages: [{ role: 'user', content: prompt }],
                 max_tokens: 4000,
                 temperature: 0.2,

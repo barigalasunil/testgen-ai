@@ -1,31 +1,26 @@
 import { NextResponse } from "next/server";
 import { ollamaService } from "@/src/services/ai/ollama.service";
 
-export async function GET() {
+export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const provider = searchParams.get('provider') || 'local';
+
     try {
-        await ollamaService.health();
-
-        // Get available models
-        const models = await ollamaService.listModels();
-
-        // Warm up the best available model in the background
-        // so it's ready when the user sends their first prompt
-        const warmModel = models.find(m =>
-            m.startsWith('mistral') ||
-            m.startsWith('phi3') ||
-            m.startsWith('qwen3')
-        ) || models[0];
-
-        if (warmModel) {
-            // Don't await — run in background
-            ollamaService.warmUp(warmModel).catch(() => {});
+        if (provider === 'local') {
+            await ollamaService.health();
+            const models = await ollamaService.listModels();
+            return NextResponse.json({ connected: true, provider: 'local', models });
+        } else {
+            // Cloud (OpenRouter) health check
+            if (!process.env.OPENROUTER_API_KEY) {
+                return NextResponse.json({ connected: false, message: 'Cloud API key missing' }, { status: 401 });
+            }
+            const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
+                headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}` },
+                signal: AbortSignal.timeout(5000)
+            });
+            return NextResponse.json({ connected: res.ok, provider: 'cloud' });
         }
-
-        return NextResponse.json({
-            connected: true,
-            models,
-            activeModel: warmModel || null,
-        });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return NextResponse.json({ connected: false, message }, { status: 503 });

@@ -16,7 +16,7 @@ import {
     loadJiraCredentials,
     testConnection,
 } from "@/src/services/jira/jira.service";
-import { getSavedModel, saveModel } from "@/src/services/ai/ai-config.service";
+import { getSavedModel, saveModel, getSavedProvider, saveProvider } from "@/src/services/ai/ai-config.service";
 
 type AutomationRunResponse = {
     error: boolean;
@@ -99,6 +99,8 @@ export function MainApp() {
     // Feature states
     const [models, setModels] = useState<string[]>([]);
     const [selectedModel, setSelectedModel] = useState(AUTO_MODEL);
+    const [provider, setProvider] = useState<'local' | 'cloud'>('local');
+    const [providerStatus, setProviderStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
     const [isJiraMode, setIsJiraMode] = useState(false);
     const [platformType, setPlatformType] = useState<"web" | "mobile" | "api">("web");
     const [customPrompt, setCustomPrompt] = useState("");
@@ -133,7 +135,6 @@ export function MainApp() {
         }
     };
 
-    // Load sessions + models + jira creds on mount
     useEffect(() => {
         const saved = localStorage.getItem("testgen-sessions");
         if (saved) {
@@ -146,13 +147,19 @@ export function MainApp() {
                 }
             } catch { }
         }
+    }, []);
 
-        // Load saved Jira credentials
-        const savedCreds = loadJiraCredentials();
-        if (savedCreds) setJiraFields(savedCreds);
+    useEffect(() => {
+        const loadInitial = async () => {
+            // Load saved Jira credentials
+            const savedCreds = loadJiraCredentials();
+            if (savedCreds) setJiraFields(savedCreds);
 
-        fetchModels()
-            .then(data => {
+            const activeProvider = getSavedProvider();
+            setProvider(activeProvider);
+
+            try {
+                const data = await fetchModels(activeProvider);
                 if (data.models && data.models.length > 0) {
                     setModels(data.models);
                     const savedFromConfig = getSavedModel();
@@ -161,9 +168,25 @@ export function MainApp() {
                         : AUTO_MODEL;
                     setSelectedModel(resolved);
                 }
-            })
-            .catch(err => console.error("Failed to fetch models", err));
+            } catch (err) {
+                console.error("Failed to fetch models", err);
+            }
+        };
+        loadInitial();
     }, []);
+
+    useEffect(() => {
+        // Re-fetch models when provider changes
+        fetchModels(provider)
+            .then(data => {
+                setModels(data.models || []);
+                // If auto is selected, stay on auto. If a specific model was selected, check if it exists in new provider
+                if (selectedModel !== AUTO_MODEL && data.models && !data.models.includes(selectedModel)) {
+                    setSelectedModel(AUTO_MODEL);
+                }
+            })
+            .catch(err => console.error("Failed to update models for provider", err));
+    }, [provider]);
 
     useEffect(() => {
         localStorage.setItem("testgen-sessions", JSON.stringify(sessions));
@@ -198,18 +221,19 @@ export function MainApp() {
 
     useEffect(() => {
         const loadStatus = async () => {
+            setProviderStatus('connecting');
             try {
-                const health = await fetch('/api/health');
-                const payload = await health.json();
-                setOllamaStatus(health.ok && payload.connected ? 'connected' : 'offline');
+                const res = await fetch(`/api/health?provider=${provider}`);
+                const payload = await res.json();
+                setProviderStatus(res.ok && payload.connected ? 'connected' : 'error');
             } catch {
-                setOllamaStatus('offline');
+                setProviderStatus('error');
             }
         };
         loadStatus();
-        const interval = window.setInterval(loadStatus, 15000);
+        const interval = window.setInterval(loadStatus, 20000); // Check every 20s
         return () => window.clearInterval(interval);
-    }, []);
+    }, [provider]);
 
     useEffect(() => {
         if (!loading) { setActivityIndex(0); return; }
@@ -221,17 +245,7 @@ export function MainApp() {
 
     const progressLabel = GENERATION_STEPS[activityIndex];
 
-    const statusLabel = ollamaStatus === 'connected'
-        ? (process.env.NEXT_PUBLIC_HAS_OPENROUTER === 'true' ? 'AI Ready (Cloud)' : 'Ollama Connected')
-        : ollamaStatus === 'connecting'
-            ? 'Connecting...'
-            : 'Ollama Offline';
-
-    const statusColor = ollamaStatus === 'connected'
-        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-        : ollamaStatus === 'offline'
-            ? 'bg-red-100 text-red-700 border-red-200'
-            : 'bg-amber-100 text-amber-700 border-amber-200';
+    // Removed legacy status labels
 
     const currentThread = sessions.find(s => s.id === activeId);
 
@@ -310,8 +324,13 @@ export function MainApp() {
 
         try {
             const data = await generateTestCases(
-                currentPrompt, generationOptions.model, "functional",
-                generationOptions.platformType, generationOptions.customPrompt, generationOptions.acceptanceCriteria
+                currentPrompt, 
+                generationOptions.model, 
+                "functional",
+                generationOptions.platformType, 
+                generationOptions.customPrompt, 
+                generationOptions.acceptanceCriteria,
+                provider
             ) as GenerateApiResponse;
 
             if (data.meta?.message) {
@@ -521,6 +540,12 @@ export function MainApp() {
                 loading={loading}
                 onRename={handleRename}
                 onDelete={handleDelete}
+                models={models}
+                selectedModel={selectedModel}
+                provider={provider}
+                onModelChange={(m) => { setSelectedModel(m); saveModel(m); }}
+                onProviderChange={(p) => { setProvider(p); saveProvider(p); }}
+                providerStatus={providerStatus}
             />
 
             <main className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -531,11 +556,26 @@ export function MainApp() {
                         <h1 className="text-lg font-semibold text-slate-900">TCGen-Buddy</h1>
                         <p className="mt-0.5 text-xs text-slate-500 max-w-2xl">Generate test cases, export artifacts, and run automation suites.</p>
                     </div>
-                    <div className="hidden sm:flex items-center gap-3 text-sm">
-                        <span className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1 font-medium", statusColor)}>
-                            <span className={cn("h-2.5 w-2.5 rounded-full", ollamaStatus === 'connected' ? 'bg-emerald-500' : ollamaStatus === 'offline' ? 'bg-red-500' : 'bg-amber-500')} />
-                            {statusLabel}
-                        </span>
+                    <div className="hidden sm:flex items-center gap-3">
+                        <div className="flex flex-col items-end">
+                            <div className={cn(
+                                "flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold transition-all",
+                                providerStatus === 'connected' ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
+                                providerStatus === 'error' ? "bg-red-50 border-red-200 text-red-700" :
+                                "bg-amber-50 border-amber-200 text-amber-700"
+                            )}>
+                                <span className={cn(
+                                    "h-2 w-2 rounded-full",
+                                    providerStatus === 'connected' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
+                                    providerStatus === 'error' ? "bg-red-500" :
+                                    "bg-amber-500 animate-pulse"
+                                )} />
+                                {provider.toUpperCase()} {providerStatus === 'connected' ? 'Connected' : providerStatus === 'error' ? 'API Error' : 'Connecting...'}
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-mono mt-1 pr-1 truncate max-w-[150px]">
+                                Model: {selectedModel === 'auto' ? 'Auto-Select' : selectedModel}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -660,7 +700,6 @@ export function MainApp() {
                                 inputRef={textareaRef}
                                 models={models}
                                 selectedModel={selectedModel}
-                                setSelectedModel={setSelectedModel}
                                 isJiraMode={isJiraMode}
                                 setIsJiraMode={setIsJiraMode}
                                 platformType={platformType}

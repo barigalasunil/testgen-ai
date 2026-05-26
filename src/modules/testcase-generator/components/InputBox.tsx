@@ -23,7 +23,7 @@ interface InputBoxProps {
     inputRef: React.RefObject<HTMLTextAreaElement | null>;
     models: string[];
     selectedModel: string;
-    setSelectedModel: (model: string) => void;
+    onModelChange?: (model: string) => void;
     isJiraMode: boolean;
     setIsJiraMode: (mode: boolean) => void;
     platformType: "web" | "mobile" | "api";
@@ -45,7 +45,6 @@ export function InputBox({
     inputRef,
     models,
     selectedModel,
-    setSelectedModel,
     platformType,
     setPlatformType,
     customPrompt,
@@ -56,7 +55,6 @@ export function InputBox({
     setJiraStoryId,
     onStoryLoaded,
 }: InputBoxProps) {
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isPlatformDropdownOpen, setIsPlatformDropdownOpen] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -232,48 +230,7 @@ export function InputBox({
                 <div className="flex justify-between items-center px-1 mb-1 flex-wrap gap-2">
                     <div className="flex gap-2 items-center flex-wrap">
 
-                        {/* Model Selector */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm transition-colors font-medium"
-                            >
-                                <Bot className="w-4 h-4 text-[#10A37F]" />
-                                {selectedModelLabel}
-                                <ChevronDown className="w-3.5 h-3.5" />
-                            </button>
-                            <AnimatePresence>
-                                {isDropdownOpen && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        transition={{ duration: 0.15 }}
-                                        className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-xl shadow-lg p-2 min-w-[180px] z-50"
-                                    >
-                                        {modelOptions.map((m) => (
-                                            <button
-                                                key={m}
-                                                onClick={() => { setSelectedModel(m); saveModel(m); saveProvider(m === 'openrouter' ? 'openrouter' : 'ollama'); setIsDropdownOpen(false); }}
-                                                className={cn(
-                                                    "w-full text-left px-3 py-2 text-sm rounded-md transition-colors",
-                                                    m === selectedModel
-                                                        ? "bg-[#10A37F] text-white"
-                                                        : "text-gray-700 hover:bg-gray-100"
-                                                )}
-                                            >
-                                                {m === AUTO_MODEL ? AUTO_MODEL_LABEL : m}
-                                            </button>
-                                        ))}
-                                        {(!models || models.length === 0) && (
-                                            <div className="px-3 py-2 text-xs text-gray-400">
-                                                No local models found
-                                            </div>
-                                        )}
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
+                        {/* Platform Selector removed model selector from here */}
 
                         {/* Platform Selector */}
                         <div className="relative">

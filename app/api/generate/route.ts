@@ -80,17 +80,22 @@ export async function POST(req: Request) {
         const {
             prompt,
             model,
+            provider = "local",
             type = "functional",
             platformType = "web",
             customPrompt,
             acceptanceCriteria,
+            jiraStoryId,
         } = await req.json();
 
-        const selectedModel = await resolveModel(model || "mistral:7b");
+        // 1. Resolve Model and Config
+        let selectedModel = model || "mistral:7b";
+        if (provider === 'local') {
+            selectedModel = await resolveModel(selectedModel);
+        }
         const modelConfig = getModelConfig(selectedModel);
 
-        console.log("[GENERATE] Model resolved:", selectedModel);
-        console.log("[GENERATE] Config:", modelConfig);
+        console.log(`[GENERATE] Provider: ${provider}, Model: ${selectedModel}`);
 
         const fullPrompt = promptBuilder.buildPrompt(
             prompt,
@@ -102,12 +107,11 @@ export async function POST(req: Request) {
 
         let rawResponse: string;
         try {
-            // Try OpenRouter first if key is available, fall back to Ollama
-            if (process.env.OPENROUTER_API_KEY) {
-                console.log('[GENERATE] Using OpenRouter');
-                rawResponse = await ollama.generateWithOpenRouter(fullPrompt);
-            } else {
-                console.log('[GENERATE] Using Ollama');
+            if (provider === 'cloud' && process.env.OPENROUTER_API_KEY) {
+                console.log('[GENERATE] Routing to OpenRouter (CLOUD)');
+                rawResponse = await ollama.generateWithOpenRouter(fullPrompt, model !== 'auto' ? model : undefined);
+            } else if (provider === 'local') {
+                console.log('[GENERATE] Routing to Ollama (LOCAL)');
                 const response = await ollama.generate({
                     model: selectedModel,
                     prompt: fullPrompt,
@@ -116,12 +120,28 @@ export async function POST(req: Request) {
                     options: modelConfig,
                 });
                 rawResponse = response.response;
+            } else {
+                // AUTO mode or Fallback
+                try {
+                    console.log('[GENERATE] Auto-Mode: Trying LOCAL first');
+                    const response = await ollama.generate({
+                        model: selectedModel,
+                        prompt: fullPrompt,
+                        format: "json",
+                        stream: false,
+                        options: modelConfig,
+                    });
+                    rawResponse = response.response;
+                } catch {
+                    console.log('[GENERATE] Auto-Mode: LOCAL failed, falling back to CLOUD');
+                    rawResponse = await ollama.generateWithOpenRouter(fullPrompt);
+                }
             }
-        } catch (ollamaError) {
-            const msg = ollamaError instanceof Error ? ollamaError.message : String(ollamaError);
-            console.error("[GENERATE] Ollama error:", msg);
+        } catch (error: any) {
+            const msg = error instanceof Error ? error.message : String(error);
+            console.error("[GENERATE] Provider error:", msg);
             return NextResponse.json(
-                { error: true, result: `Model error: ${msg}` },
+                { error: true, result: `Generation error: ${msg}` },
                 { status: 503 }
             );
         }
@@ -137,12 +157,15 @@ export async function POST(req: Request) {
             );
         }
 
+        const jiraId = jiraStoryId || null;
+        const projectKey = jiraId ? jiraId.split('-')[0] : 'TCGB';
+
         const sanitized = {
             testCases: (parsedData.testCases || [])
                 .map((tc: any, index: number) => {
                     const num = String(index + 1).padStart(3, "0");
                     return {
-                        testCaseId: String(tc.testCaseId || `TC-${num}`),
+                        testCaseId: String(tc.testCaseId || `${jiraId || 'TC'}-${num}`),
                         title: String(tc.title || ""),
                         testType: String(tc.testType || "Functional"),
                         priority: String(tc.priority || "Medium"),
@@ -150,6 +173,11 @@ export async function POST(req: Request) {
                         testData: String(tc.testData || ""),
                         steps: String(tc.steps || ""),
                         expectedResult: String(tc.expectedResult || ""),
+                        
+                        // Traceability link
+                        linkedRequirementId: jiraId,
+                        projectKey: projectKey,
+                        executionStatus: 'Untested'
                     };
                 })
                 .filter((tc: any) =>

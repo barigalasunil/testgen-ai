@@ -1,30 +1,30 @@
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const provider = searchParams.get('provider') || 'local';
+
     try {
-        const res = await fetch('http://127.0.0.1:11434/api/tags', {
-            signal: AbortSignal.timeout(5000),
-        });
-
-        if (!res.ok) {
-            console.error('[MODELS] Ollama returned:', res.status);
+        if (provider === 'local') {
+            const res = await fetch('http://127.0.0.1:11434/api/tags', {
+                signal: AbortSignal.timeout(5000),
+            });
+            const data = await res.json();
+            return NextResponse.json({ models: data.models?.map((m: any) => m.name) || [] });
+        } else {
+            // Cloud (OpenRouter) models
             return NextResponse.json({ 
-                models: [],
-                error: `Ollama returned status ${res.status}` 
-            }, { status: 503 });
+                models: [
+                    'anthropic/claude-3.5-sonnet',
+                    'google/gemini-2.0-flash-001',
+                    'openai/gpt-4o-mini',
+                    'gryphe/mythomax-l2-13b',
+                    'mistralai/mistral-7b-instruct',
+                    'meta-llama/llama-3.1-8b-instruct'
+                ] 
+            });
         }
-
-        const data = await res.json() as { models: { name: string }[] };
-        const models = data.models?.map(m => m.name) || [];
-        console.log('[MODELS] Available:', models);
-
-        return NextResponse.json({ models, error: null });
     } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error('[MODELS] Error:', msg);
-        return NextResponse.json({ 
-            models: [],
-            error: `Cannot reach Ollama: ${msg}` 
-        }, { status: 503 });
+        return NextResponse.json({ models: [], error: String(error) }, { status: 503 });
     }
 }

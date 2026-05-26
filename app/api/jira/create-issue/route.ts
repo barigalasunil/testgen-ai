@@ -107,6 +107,44 @@ export async function POST(request: Request) {
         const issueKey = data.key;
         const issueUrl = `${normalizedUrl.replace(/\/$/, '')}/browse/${issueKey}`;
 
+        // 🔗 CREATE FORMAL JIRA ISSUE LINK
+        if (storyId) {
+            try {
+                console.log(`[JIRA] Linking ${issueKey} to ${storyId}`);
+                await fetch(`${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issueLink`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Basic ${auth}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        type: { name: 'Relates' },
+                        inwardIssue: { key: issueKey },
+                        outwardIssue: { key: storyId },
+                    }),
+                });
+            } catch (linkError) {
+                console.warn('[JIRA LINK ERROR]', linkError);
+            }
+        }
+
+        // 🗄️ PERSIST IN MYSQL FOR ENTERPRISE TRACKING
+        try {
+            const { MySqlService } = await import('@/src/services/db/mysql.service');
+            await MySqlService.insert('defects', {
+                jira_defect_id: issueKey,
+                linked_test_case_id: traceability?.testCaseId || null,
+                linked_requirement_id: storyId || null,
+                status: 'Open',
+                project_key: projectKey,
+                title: summary,
+                severity: priority,
+                metadata: JSON.stringify({ issueUrl })
+            });
+        } catch (dbError) {
+            console.error('[DATABASE ERROR] Failed to log defect:', dbError);
+        }
+
         return NextResponse.json({ success: true, issueKey, issueUrl });
 
     } catch (err) {
