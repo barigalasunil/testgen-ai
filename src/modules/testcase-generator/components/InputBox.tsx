@@ -129,6 +129,21 @@ export function InputBox({
                     description: res.description || '',
                     storyId: jiraStoryId.trim(),
                 });
+                // Auto-ingest into RAG for future generation context
+                try {
+                    const creds = JSON.parse(localStorage.getItem('jira-credentials') || '{}');
+                    fetch('/api/rag/ingest', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title: res.summary || '',
+                            description: res.description || '',
+                            acceptanceCriteria: '',
+                            projectKey: creds.projectKey || (jiraStoryId.trim().split('-')[0] || 'TCGB'),
+                            jiraStoryId: jiraStoryId.trim(),
+                        }),
+                    }).catch(() => {});
+                } catch {}
             } else {
                 setStoryError(res.error || 'Failed to load story');
             }

@@ -1,8 +1,8 @@
 import mysql from 'mysql2/promise';
 
 /**
- * Enterprise-grade MySQL service for TCGen-Buddy.
- * Handles connections to the tcgen_buddy_enterprise database.
+ * MySQL service for TCGen-Buddy.
+ * Handles connections to the tcgen_buddy database.
  */
 export class MySqlService {
     private static pool: mysql.Pool | null = null;

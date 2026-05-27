@@ -147,10 +147,10 @@ export async function POST(request: Request) {
         const headed = body?.headed === true;
 
         if (type === 'restassured') {
-            return NextResponse.json({ error: true, message: 'RestAssured tests must be executed via Maven.' }, { status: 405 });
+            return NextResponse.json({ error: false, message: 'RestAssured tests must be executed via Maven.', status: 'skipped' });
         }
         if (type === 'scenarios' || type === 'manual') {
-            return NextResponse.json({ error: true, message: 'These are manual test artifacts meant for human execution.' }, { status: 405 });
+            return NextResponse.json({ error: false, message: 'These are manual test artifacts meant for human execution.', status: 'skipped' });
         }
 
         if (!suite || !VALID_SUITES.includes(suite as SuiteName)) {

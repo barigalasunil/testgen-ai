@@ -20,7 +20,7 @@ type RagItem = {
     chunks: number;
 };
 
-const PROJECT_KEYS = ['TCGB', 'TCA', 'AUTH', 'PAY'];
+const DEFAULT_PROJECT_KEYS = ['TCGB', 'TCA', 'AUTH', 'PAY'];
 
 export default function DeepMindRagPage() {
     const [searchQuery, setSearchQuery] = useState("");
@@ -30,11 +30,19 @@ export default function DeepMindRagPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [projectKey, setProjectKey] = useState<string>('');
 
+    const projectKeys = projectKey && !DEFAULT_PROJECT_KEYS.includes(projectKey)
+        ? [projectKey, ...DEFAULT_PROJECT_KEYS]
+        : DEFAULT_PROJECT_KEYS;
+
     useEffect(() => {
         const updateKey = () => {
             try {
                 const creds = JSON.parse(localStorage.getItem('jira-credentials') || '{}');
-                if (creds.projectKey) setProjectKey(creds.projectKey);
+                if (creds.projectKey) {
+                    setProjectKey(creds.projectKey);
+                    // Auto-select user's project if currently on "All"
+                    setSelectedProject(prev => prev === 'All' ? creds.projectKey : prev);
+                }
             } catch (e) {}
         };
         updateKey();
@@ -80,7 +88,7 @@ export default function DeepMindRagPage() {
     const stats = {
         totalItems: items.length,
         totalChunks: items.reduce((acc, curr) => acc + curr.chunks, 0),
-        projects: PROJECT_KEYS.length,
+        projects: projectKeys.length,
         lastSync: '12 mins ago'
     };
 
@@ -144,7 +152,7 @@ export default function DeepMindRagPage() {
                     </div>
                     <div className="flex gap-3 w-full md:w-auto">
                         <div className="flex bg-white/5 p-1 rounded-2xl border border-white/5">
-                            {['All', ...PROJECT_KEYS].map(p => (
+                            {['All', ...projectKeys].map(p => (
                                 <button 
                                     key={p} 
                                     onClick={() => setSelectedProject(p)}

@@ -136,14 +136,13 @@ export function MainApp() {
     };
 
     useEffect(() => {
-        // Load sessions on mount
         const loadSessions = () => {
             const saved = localStorage.getItem("testgen-sessions");
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved) as HistoryItem[];
-                    setSessions(parsed);
                     if (parsed.length > 0) {
+                        setSessions(parsed);
                         setActiveId(prev => prev ?? parsed[0].id);
                         if (window.innerWidth >= 768) setIsSidebarOpen(true);
                     }
@@ -151,6 +150,7 @@ export function MainApp() {
             }
         };
 
+        // Load sessions on mount
         loadSessions();
 
         // Reload sessions when user navigates back to this tab
@@ -465,7 +465,7 @@ export function MainApp() {
     const copyTableData = () => {
         if (!currentThread?.result) return;
         const text = currentThread.result.testCases.map(tc =>
-            `ID: ${tc.testCaseId}\nTitle: ${tc.title}\nType: ${tc.testType}\nPriority: ${tc.priority}\nPreconditions: ${tc.preconditions}\nTest Data: ${tc.testData}\nSteps: ${tc.steps}\nExpected: ${tc.expectedResult}`
+            `ID: ${tc.testCaseId}\nTitle: ${tc.scenarioTitle}\nType: ${tc.testType}\nPriority: ${tc.priority}\nPreconditions: ${tc.preconditions}\nTest Data: ${tc.testData}\nSteps: ${tc.testSteps}\nExpected: ${tc.expectedResult}`
         ).join("\n\n---\n\n");
         navigator.clipboard.writeText(text);
     };
@@ -502,7 +502,7 @@ export function MainApp() {
         setJiraConnStatus('idle');
     };
 
-    const handleExecuteSuite = async (suite: SuiteKey) => {
+    const handleExecuteSuite = async (suite: SuiteKey, headed: boolean = false) => {
         if (!activeId) return;
         const startedAt = new Date().toISOString();
         setSessions(prev => prev.map(s =>
@@ -515,7 +515,7 @@ export function MainApp() {
             const response = await fetch('/api/automation/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ suite }),
+                body: JSON.stringify({ suite, headed }),
             });
             const payload = (await response.json()) as AutomationRunResponse;
             const finishedAt = payload.finishedAt || new Date().toISOString();

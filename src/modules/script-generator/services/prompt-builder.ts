@@ -28,8 +28,8 @@ export class ScriptPromptBuilder {
 
     const testCasesJson = JSON.stringify(
       testCases.map((tc) => ({
-        title: tc.title,
-        steps: tc.steps,
+        title: tc.scenarioTitle,
+        steps: tc.testSteps,
         expectedResult: tc.expectedResult,
         testType: tc.testType,
       })),

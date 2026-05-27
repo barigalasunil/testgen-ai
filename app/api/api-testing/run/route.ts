@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         const reportDir = join(rootDir, 'public', 'automation-reports', 'api-tests');
         if (!existsSync(reportDir)) mkdirSync(reportDir, { recursive: true });
 
-        return new Promise((resolve) => {
+        return new Promise<NextResponse>((resolve) => {
             const child = spawn('npx', ['playwright', 'test', filePath, '--config', configPath, '--reporter=json'], {
                 cwd: join(rootDir, 'automation'),
                 shell: true,

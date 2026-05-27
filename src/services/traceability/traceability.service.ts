@@ -15,7 +15,7 @@ export type TraceabilityRecord = {
 };
 
 /**
- * Enterprise Traceability Service (Foundation for MySQL)
+ * Traceability Service (Foundation for MySQL)
  */
 export class TraceabilityService {
     /**

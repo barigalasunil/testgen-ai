@@ -30,9 +30,9 @@ export default function JiraModal({ isOpen, onClose, testCase, requirementId }: 
     useEffect(() => {
         if (isOpen && testCase) {
             setActualResult('');
-            setSummary(`[BUG] ${testCase.title || ''}`);
+            setSummary(`[BUG] ${testCase.scenarioTitle || ''}`);
             setDescription(
-                `Steps to Reproduce:\n${testCase.steps || ''}\n\nExpected Result:\n${testCase.expectedResult || ''}\n\nActual Result:\n(fill in)`
+                `Steps to Reproduce:\n${testCase.testSteps || ''}\n\nExpected Result:\n${testCase.expectedResult || ''}\n\nActual Result:\n(fill in)`
             );
             setPriority(testCase.priority || 'Medium');
             setLabels('regression, saucedemo');
@@ -47,8 +47,8 @@ export default function JiraModal({ isOpen, onClose, testCase, requirementId }: 
         setResultMsg(null);
         try {
             const res = await jiraService.generateDefect({
-                testCaseTitle: testCase.title,
-                testCaseSteps: testCase.steps,
+                testCaseTitle: testCase.scenarioTitle,
+                testCaseSteps: testCase.testSteps,
                 expectedResult: testCase.expectedResult,
                 actualResult,
                 model: 'mistral:7b',
@@ -166,9 +166,9 @@ export default function JiraModal({ isOpen, onClose, testCase, requirementId }: 
                             {/* Test case preview */}
                             <div className="rounded-xl border border-slate-700 p-3 bg-slate-800/60">
                                 <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Test Case</p>
-                                <p className="text-sm font-semibold text-slate-100">{testCase?.title}</p>
+                                <p className="text-sm font-semibold text-slate-100">{testCase?.scenarioTitle}</p>
                                 <pre className="mt-2 max-h-28 overflow-auto text-xs text-slate-300 bg-slate-900/60 p-2 rounded whitespace-pre-wrap">
-                                    {testCase?.steps}
+                                    {testCase?.testSteps}
                                 </pre>
                             </div>
 
