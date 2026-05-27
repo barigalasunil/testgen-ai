@@ -1,11 +1,11 @@
 export type TestCase = {
     testCaseId: string;
-    title: string;
-    testType: string;
-    priority: "High" | "Medium" | "Low";
+    scenarioTitle: string;
+    testType: 'E2E' | 'Negative' | 'Edge' | 'Security' | 'Boundary' | 'Resilience' | 'Persona';
+    priority: 'P1' | 'P2' | 'P3';
     preconditions: string;
     testData: string;
-    steps: string;
+    testSteps: string;
     expectedResult: string;
     
     // Traceability fields

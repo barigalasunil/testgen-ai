@@ -1,11 +1,18 @@
 import { defineConfig } from '@playwright/test';
 import path from 'path';
+import fs from 'fs';
 
 const reportDir = process.env.PW_REPORT_DIR
     ? path.resolve(process.env.PW_REPORT_DIR)
     : path.resolve('./public/automation-reports');
 
 const isHeaded = process.env.PW_HEADED === 'true';
+
+// Find Chrome on Windows — use real Chrome for headed mode to avoid CMD flash
+const WIN_CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const chromeExe = isHeaded && process.platform === 'win32' && fs.existsSync(WIN_CHROME)
+    ? WIN_CHROME
+    : undefined;
 
 export default defineConfig({
     testDir: './tests',
@@ -26,26 +33,19 @@ export default defineConfig({
         trace: 'retain-on-failure',
         actionTimeout: 15000,
         navigationTimeout: 30000,
-        launchOptions: {
-            headless: !isHeaded,
-            slowMo: isHeaded ? 800 : 0,
-            args: isHeaded ? [
-                '--start-maximized',
-                '--disable-infobars',
-                '--no-sandbox',
-            ] : [],
-        },
     },
     projects: [
         {
             name: 'chromium',
             use: {
-                channel: 'chrome',
                 headless: !isHeaded,
                 launchOptions: {
                     headless: !isHeaded,
                     slowMo: isHeaded ? 800 : 0,
-                    args: isHeaded ? ['--start-maximized', '--disable-infobars'] : [],
+                    executablePath: chromeExe,
+                    args: isHeaded
+                        ? ['--start-maximized', '--disable-infobars', '--no-sandbox']
+                        : [],
                 },
             },
         },

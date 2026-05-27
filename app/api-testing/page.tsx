@@ -80,6 +80,7 @@ export default function ApiTestingPage() {
 
     const showToast = (msg: string, url?: string) => {
         setToast({ msg, url });
+        // Only auto-dismiss if there's no Jira URL to click
         if (!url) setTimeout(() => setToast(null), 3000);
     };
 
@@ -494,6 +495,7 @@ export default function ApiTestingPage() {
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
+            {/* Toast — bottom-right, stays open when Jira URL present */}
             {toast && (
                 <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-sm">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -504,7 +506,10 @@ export default function ApiTestingPage() {
                             Open in Jira ↗
                         </a>
                     )}
-                    <button onClick={() => setToast(null)} className="text-slate-400 hover:text-white ml-1">✕</button>
+                    <button onClick={() => setToast(null)}
+                        className="ml-1 text-slate-400 hover:text-white text-lg leading-none">
+                        ×
+                    </button>
                 </div>
             )}
 
@@ -592,9 +597,10 @@ export default function ApiTestingPage() {
                     </div>
 
 
+                    {/* ── Generate CTA ── */}
                     <button
                         onClick={handleGenerate}
-                        disabled={isGenerating || (!swaggerUrl.trim() && !swaggerJson.trim())}
+                        disabled={isGenerating || !hasInput}
                         className="w-full py-3 rounded-2xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
                     >
                         {isGenerating ? (

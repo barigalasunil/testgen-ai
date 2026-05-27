@@ -153,17 +153,12 @@ export function MainApp() {
 
         loadSessions();
 
-        // Reload sessions when user navigates back to this page
+        // Reload sessions when user navigates back to this tab
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                loadSessions();
-            }
+            if (document.visibilityState === 'visible') loadSessions();
         };
-
-        // Reload when window gets focus (coming back from api-testing or test-data pages)
-        const handleFocus = () => {
-            loadSessions();
-        };
+        // Also reload when window regains focus (e.g. coming back from /api-testing)
+        const handleFocus = () => loadSessions();
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('focus', handleFocus);
@@ -317,7 +312,7 @@ export function MainApp() {
 
         const targetId = activeId ?? Date.now().toString();
         const now = new Date().toISOString();
-        // If a Jira story was loaded, use that as the session title
+        // Use Jira story ID as session title when available for easy traceability
         const smartName = jiraStoryId?.trim()
             ? jiraStoryId.trim()
             : generateWorkspaceName(currentPrompt);

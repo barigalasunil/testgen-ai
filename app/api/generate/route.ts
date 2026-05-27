@@ -166,12 +166,12 @@ export async function POST(req: Request) {
                     const num = String(index + 1).padStart(3, "0");
                     return {
                         testCaseId: String(tc.testCaseId || `${jiraId || 'TC'}-${num}`),
-                        title: String(tc.title || ""),
-                        testType: String(tc.testType || "Functional"),
-                        priority: String(tc.priority || "Medium"),
+                        scenarioTitle: String(tc.scenarioTitle || ""),
+                        testType: String(tc.testType || "E2E"),
+                        priority: String(tc.priority || "P2"),
                         preconditions: String(tc.preconditions || "None"),
                         testData: String(tc.testData || ""),
-                        steps: String(tc.steps || ""),
+                        testSteps: String(tc.testSteps || ""),
                         expectedResult: String(tc.expectedResult || ""),
                         
                         // Traceability link
@@ -181,8 +181,8 @@ export async function POST(req: Request) {
                     };
                 })
                 .filter((tc: any) =>
-                    tc.title.trim().length > 0 &&
-                    tc.steps.trim().length > 0 &&
+                    tc.scenarioTitle.trim().length > 0 &&
+                    tc.testSteps.trim().length > 0 &&
                     tc.expectedResult.trim().length > 0
                 ),
         };

@@ -1,6 +1,7 @@
 type RawTestCase = {
   testCaseId?: string;
   id?: string;
+  scenarioTitle?: string;
   title?: string;
   testType?: string;
   type?: string;
@@ -9,6 +10,7 @@ type RawTestCase = {
   precondition?: string;
   testData?: string | object;
   data?: string | object;
+  testSteps?: string | string[];
   steps?: string | string[];
   expectedResult?: string;
   expected?: string;
@@ -17,12 +19,12 @@ type RawTestCase = {
 type ParsedOutput = {
   testCases: {
     testCaseId: string;
-    title: string;
+    scenarioTitle: string;
     testType: string;
     priority: string;
     preconditions: string;
     testData: string;
-    steps: string;
+    testSteps: string;
     expectedResult: string;
   }[];
 };
@@ -57,12 +59,12 @@ class ResponseParser {
       const num = String(index + 1).padStart(3, '0');
       return {
         testCaseId: String(tc.testCaseId || tc.id || `TC-${num}`),
-        title: String(tc.title || `Test Case ${num}`),
-        testType: String(tc.testType || tc.type || 'Functional'),
+        scenarioTitle: String(tc.scenarioTitle || tc.title || `Scenario ${num}`),
+        testType: String(tc.testType || tc.type || 'E2E'),
         priority: this.normalizePriority(tc.priority),
         preconditions: String(tc.preconditions || tc.precondition || 'None'),
         testData: this.normalizeTestData(tc.testData || tc.data),
-        steps: this.normalizeSteps(tc.steps),
+        testSteps: this.normalizeSteps(tc.testSteps || tc.steps),
         expectedResult: String(tc.expectedResult || tc.expected || ''),
       };
     });
@@ -185,7 +187,7 @@ class ResponseParser {
     while ((match = objRegex.exec(arrayContent)) !== null) {
       try {
         const obj = JSON.parse(match[0]) as RawTestCase;
-        if (obj.title || obj.testCaseId || obj.id) {
+        if (obj.scenarioTitle || obj.title || obj.testCaseId || obj.id) {
           completeCases.push(obj);
         }
       } catch {
@@ -213,11 +215,11 @@ class ResponseParser {
     return indexes.length ? Math.min(...indexes) : -1;
   }
 
-  private normalizePriority(raw?: string): 'High' | 'Medium' | 'Low' {
-    const val = (raw || '').toLowerCase().trim();
-    if (val === 'high') return 'High';
-    if (val === 'low') return 'Low';
-    return 'Medium';
+  private normalizePriority(raw?: string): 'P1' | 'P2' | 'P3' {
+    const val = (raw || '').toUpperCase().trim();
+    if (val === 'P1' || val === 'HIGH') return 'P1';
+    if (val === 'P3' || val === 'LOW') return 'P3';
+    return 'P2';
   }
 }
 

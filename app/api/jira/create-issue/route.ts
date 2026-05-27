@@ -1,20 +1,30 @@
 import { NextResponse } from 'next/server';
 
-function toADF(text: string, isCode?: boolean) {
-    if (isCode) {
+// ── ADF Builder ─────────────────────────────────────────────────────────────
+function toADF(text: string) {
+    const t = text?.trim() || '';
+
+    // Detect code content — wrap in ADF codeBlock for readable Jira rendering
+    const isJava = t.startsWith('import ') || t.startsWith('package ') ||
+        t.startsWith('public class') || t.startsWith('//') && t.includes('class');
+    const isScenario = t.startsWith('TC-0') || /^TC-\d+\s*\|/.test(t.split('\n')[0]);
+
+    if (isJava || isScenario) {
         return {
             type: 'doc',
             version: 1,
             content: [
                 {
                     type: 'codeBlock',
-                    attrs: { language: 'java' },
-                    content: [{ type: 'text', text: text.slice(0, 30000) }],
+                    attrs: { language: isJava ? 'java' : 'plain' },
+                    content: [{ type: 'text', text: t.slice(0, 30000) }],
                 },
             ],
         };
     }
-    const paragraphs = text.split(/\r?\n\r?\n/).map(p => p.replace(/\r?\n/g, ' ').trim()).filter(Boolean);
+
+    // Paragraph-based ADF for plain text
+    const paragraphs = t.split(/\r?\n\r?\n/).map(p => p.replace(/\r?\n/g, ' ').trim()).filter(Boolean);
     return {
         type: 'doc',
         version: 1,
@@ -51,17 +61,15 @@ export async function POST(request: Request) {
 
         const normalizedUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
         const auth = Buffer.from(`${email}:${apiToken}`).toString('base64');
-        
-        const isCodeContent = description?.trim().startsWith('import ') ||
-            description?.trim().startsWith('package ') ||
-            description?.trim().startsWith('//') ||
-            description?.trim().startsWith('TC-0');
-        const adfDescription = toADF(description || 'No description provided', isCodeContent);
 
+        // Issue 4: Prepend [storyId] to summary if not already present
         let finalSummary = summary || 'No summary';
-        if (storyId && !finalSummary.startsWith('[')) {
-            finalSummary = `[${storyId}] ${finalSummary}`;
+        if (storyId?.trim() && !finalSummary.startsWith('[')) {
+            finalSummary = `[${storyId.trim()}] ${finalSummary}`;
         }
+
+        // Issue 7: Detect code and use ADF codeBlock
+        const adfDescription = toADF(description || 'No description provided');
 
         if (storyId) {
             (adfDescription.content as any[]).push({
@@ -70,7 +78,6 @@ export async function POST(request: Request) {
             });
         }
 
-        // issueType from modal will be 'Bug' for defects, 'Task' for others
         const payload: Record<string, any> = {
             fields: {
                 project: { key: projectKey },
@@ -82,12 +89,13 @@ export async function POST(request: Request) {
         };
 
         if (traceability?.sourceId) {
-            payload.fields.description.content.push({
+            (payload.fields.description.content as any[]).push({
                 type: 'paragraph',
                 content: [{ type: 'text', text: `Traceability: Source=${traceability.sourceId}${traceability.testCaseId ? ', TestCase=' + traceability.testCaseId : ''}` }],
             });
-            if (!payload.fields.labels.includes(traceability.sourceId.toLowerCase().replace(/[^a-z0-9]/g, '-'))) {
-                payload.fields.labels.push(traceability.sourceId.toLowerCase().replace(/[^a-z0-9]/g, '-'));
+            const traceLabel = traceability.sourceId.toLowerCase().replace(/[^a-z0-9]/g, '-');
+            if (!payload.fields.labels.includes(traceLabel)) {
+                payload.fields.labels.push(traceLabel);
             }
         }
 
@@ -123,28 +131,34 @@ export async function POST(request: Request) {
         const issueKey = data.key;
         const issueUrl = `${normalizedUrl.replace(/\/$/, '')}/browse/${issueKey}`;
 
-        // 🔗 CREATE FORMAL JIRA ISSUE LINK
-        if (storyId && issueKey) {
+        // Create formal "Relates" link between new defect and parent story
+        if (storyId?.trim() && issueKey) {
             try {
-                await fetch(`${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issueLink`, {
+                const linkRes = await fetch(`${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issueLink`, {
                     method: 'POST',
                     headers: {
                         Authorization: `Basic ${auth}`,
                         'Content-Type': 'application/json',
+                        Accept: 'application/json',
                     },
                     body: JSON.stringify({
                         type: { name: 'Relates' },
-                        inwardIssue: { key: issueKey },
-                        outwardIssue: { key: storyId },
+                        inwardIssue:  { key: issueKey },
+                        outwardIssue: { key: storyId.trim() },
                     }),
                 });
-                console.log('[JIRA] Linked', issueKey, 'to parent', storyId);
+                const linkBody = await linkRes.text();
+                if (linkRes.ok || linkRes.status === 201) {
+                    console.log(`[JIRA LINK] ✓ Linked defect ${issueKey} → Relates → ${storyId}`);
+                } else {
+                    console.warn(`[JIRA LINK] ✗ HTTP ${linkRes.status}:`, linkBody);
+                }
             } catch (linkErr) {
-                console.warn('[JIRA] Could not create issue link:', linkErr);
+                console.warn('[JIRA LINK ERROR]', linkErr);
             }
         }
 
-        // 🗄️ PERSIST IN MYSQL FOR TRACKING
+        // Persist in MySQL for tracking (non-blocking)
         try {
             const { MySqlService } = await import('@/src/services/db/mysql.service');
             await MySqlService.insert('defects', {
@@ -155,10 +169,10 @@ export async function POST(request: Request) {
                 project_key: projectKey,
                 title: finalSummary,
                 severity: priority,
-                metadata: JSON.stringify({ issueUrl })
+                metadata: JSON.stringify({ issueUrl }),
             });
         } catch (dbError) {
-            console.error('[DATABASE ERROR] Failed to log defect:', dbError);
+            console.error('[DATABASE] Failed to log defect:', dbError);
         }
 
         return NextResponse.json({ success: true, issueKey, issueUrl });

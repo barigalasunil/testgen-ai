@@ -214,6 +214,38 @@ Cover ALL of these for each endpoint:
 Return ONLY the scenario lines. No headers. No markdown. No explanation.`;
     }
 
+    if (type === 'manual') {
+        return `You are a senior QA engineer. Generate industry-standard manual API test cases based on this specification.${partNote}
+
+API SPEC:
+${spec}
+
+Generate a clear, professional table with the following columns ONLY:
+| Test Case ID | Test Case Title | Preconditions | Test Steps | Expected Result | Priority | Status |
+
+For each endpoint, include at minimum:
+- 1 Happy Path
+- 1 Negative Path (e.g. invalid input, missing field)
+- 1 Security/Auth Path (e.g. missing token)
+
+Return ONLY the markdown table. No explanation. No surrounding text.`;
+    }
+
+    if (type === 'newman') {
+        return `You are a senior QA engineer. Generate a valid Postman Collection (v2.1.0) JSON for this API specification to be run via Newman CLI.${partNote}
+
+API SPEC:
+${spec}
+
+Requirements:
+- Valid JSON format ONLY. Do not use Markdown backticks.
+- Include "info", "item", "event", and "variable" blocks.
+- Create an item for each endpoint.
+- For each item, include Postman tests in the "event" array to check status code (e.g., pm.response.to.have.status(200)) and response schema.
+
+Return ONLY raw JSON text. No explanations.`;
+    }
+
     return `You are a senior QA automation engineer. Generate comprehensive Playwright TypeScript API tests.${partNote}
 
 API SPEC:

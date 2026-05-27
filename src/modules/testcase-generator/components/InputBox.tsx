@@ -108,13 +108,17 @@ export function InputBox({
             if (res.success) {
                 setStoryLoaded(true);
                 setStoryTitle(res.summary || '');
-                // Save to localStorage for RAG and session history
+                // Persist full story metadata to localStorage for RAG context
                 const ragKey = 'tcgen-rag-stories';
-                const existing = JSON.parse(localStorage.getItem(ragKey) || '[]');
+                const existing: any[] = JSON.parse(localStorage.getItem(ragKey) || '[]');
                 const newEntry = {
                     storyId: jiraStoryId.trim(),
                     summary: res.summary || '',
                     description: res.description || '',
+                    issueType: res.issueType || '',
+                    priority: res.priority || '',
+                    status: res.status || '',
+                    issueUrl: res.issueUrl || '',
                     fetchedAt: new Date().toISOString(),
                 };
                 const updated = [newEntry, ...existing.filter((e: any) => e.storyId !== jiraStoryId.trim())].slice(0, 20);

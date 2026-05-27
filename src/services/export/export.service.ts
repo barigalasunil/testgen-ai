@@ -24,12 +24,12 @@ function getMaxLineLength(value: string): number {
 function mapTestCases(testCases: TestCase[]) {
     return testCases.map((tc) => ({
         "Test Case ID": normalizeValue(tc.testCaseId),
-        "Title": normalizeValue(tc.title),
+        "Scenario Title": normalizeValue(tc.scenarioTitle),
         "Test Type": normalizeValue(tc.testType),
         "Priority": normalizeValue(tc.priority),
         "Preconditions": normalizeValue(tc.preconditions),
         "Test Data": normalizeValue(tc.testData),
-        "Steps": normalizeValue(tc.steps),
+        "Test Steps": normalizeValue(tc.testSteps),
         "Expected Result": normalizeValue(tc.expectedResult),
     }));
 }
@@ -95,12 +95,12 @@ export function exportJson(testCases: TestCase[], jiraStoryId?: string): string 
         totalTestCases: testCases.length,
         testCases: testCases.map((tc) => ({
             testCaseId: tc.testCaseId,
-            title: tc.title,
+            scenarioTitle: tc.scenarioTitle,
             testType: tc.testType,
             priority: tc.priority,
             preconditions: tc.preconditions,
             testData: tc.testData,
-            steps: tc.steps,
+            testSteps: tc.testSteps,
             expectedResult: tc.expectedResult,
         })),
     };

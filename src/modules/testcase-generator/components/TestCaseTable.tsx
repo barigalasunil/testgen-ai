@@ -281,12 +281,14 @@ export function TestCaseTable({
                 <table className="w-full text-left text-sm text-gray-800 border-collapse">
                     <thead className="bg-[#fbfcff] text-gray-500 uppercase tracking-wider text-[11px] font-bold">
                         <tr>
-                            <th className="p-4 border-b border-gray-100 whitespace-nowrap">ID</th>
-                            <th className="p-4 border-b border-gray-100 min-w-[200px]">Title</th>
+                            <th className="p-4 border-b border-gray-100 whitespace-nowrap">Test Case ID</th>
+                            <th className="p-4 border-b border-gray-100 min-w-[200px]">Scenario Title</th>
+                            <th className="p-4 border-b border-gray-100 whitespace-nowrap">Test Type</th>
                             <th className="p-4 border-b border-gray-100 whitespace-nowrap">Priority</th>
-                            <th className="p-4 border-b border-gray-100 min-w-[260px]">Steps</th>
-                            <th className="p-4 border-b border-gray-100 min-w-[200px]">Expected Result</th>
+                            <th className="p-4 border-b border-gray-100 min-w-[200px]">Preconditions</th>
                             <th className="p-4 border-b border-gray-100 min-w-[120px]">Test Data</th>
+                            <th className="p-4 border-b border-gray-100 min-w-[260px]">Test Steps</th>
+                            <th className="p-4 border-b border-gray-100 min-w-[200px]">Expected Result</th>
                             <th className="p-4 border-b border-gray-100 whitespace-nowrap">Defect</th>
                         </tr>
                     </thead>
@@ -317,38 +319,44 @@ export function TestCaseTable({
                                         )}
                                     </div>
                                 </td>
+                                <td className="p-4 font-semibold text-gray-800">
+                                    {renderValue(tc.scenarioTitle)}
+                                </td>
                                 <td className="p-4">
-                                    <div className="font-semibold text-gray-800 mb-1">{renderValue(tc.title)}</div>
-                                    <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold uppercase">
+                                    <span className={cn(
+                                        "text-[10px] px-2 py-0.5 rounded font-bold uppercase whitespace-nowrap",
+                                        tc.testType === 'E2E' ? 'bg-blue-50 text-blue-600' :
+                                        tc.testType === 'Negative' || tc.testType === 'Security' ? 'bg-red-50 text-red-600' :
+                                        tc.testType === 'Edge' ? 'bg-amber-50 text-amber-600' :
+                                        tc.testType === 'Boundary' ? 'bg-purple-50 text-purple-600' :
+                                        tc.testType === 'Resilience' ? 'bg-orange-50 text-orange-600' :
+                                        tc.testType === 'Persona' ? 'bg-teal-50 text-teal-600' :
+                                        'bg-gray-50 text-gray-600'
+                                    )}>
                                         {renderValue(tc.testType)}
                                     </span>
                                 </td>
                                 <td className="p-4">
                                     <span className={cn(
                                         "text-[11px] px-2 py-1 rounded-full font-bold whitespace-nowrap",
-                                        tc.priority === "High" ? "bg-red-50 text-red-600" :
-                                        tc.priority === "Medium" ? "bg-orange-50 text-orange-600" :
+                                        tc.priority === "P1" ? "bg-red-50 text-red-600" :
+                                        tc.priority === "P2" ? "bg-orange-50 text-orange-600" :
                                         "bg-green-50 text-green-600"
                                     )}>
                                         {tc.priority}
                                     </span>
                                 </td>
                                 <td className="p-4 text-gray-600 leading-relaxed text-[13px] whitespace-pre-wrap">
-                                    {tc.preconditions && tc.preconditions !== "None" && (
-                                        <div className="mb-2 p-2 bg-amber-50 rounded text-xs border border-amber-100">
-                                            <span className="font-bold text-amber-500 block mb-0.5 uppercase text-[9px]">
-                                                Preconditions:
-                                            </span>
-                                            {renderValue(tc.preconditions)}
-                                        </div>
-                                    )}
-                                    {renderValue(tc.steps)}
-                                </td>
-                                <td className="p-4 text-emerald-700 font-medium leading-relaxed text-[13px] whitespace-pre-wrap">
-                                    {renderValue(tc.expectedResult)}
+                                    {renderValue(tc.preconditions)}
                                 </td>
                                 <td className="p-4 text-gray-500 text-xs italic bg-gray-50/30">
                                     {(tc.testData && tc.testData !== "N/A") ? renderValue(tc.testData) : "—"}
+                                </td>
+                                <td className="p-4 text-gray-600 leading-relaxed text-[13px] whitespace-pre-wrap">
+                                    {renderValue(tc.testSteps)}
+                                </td>
+                                <td className="p-4 text-emerald-700 font-medium leading-relaxed text-[13px] whitespace-pre-wrap">
+                                    {renderValue(tc.expectedResult)}
                                 </td>
                                 {/* Defect column — shows linked defect or create button */}
                                 <td className="p-4">

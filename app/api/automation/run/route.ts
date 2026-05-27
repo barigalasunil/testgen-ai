@@ -141,11 +141,19 @@ async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
+        const type = body?.type as string; // from testType
         const suite = body?.suite as string;
         // headed flag from dashboard toggle — default false
         const headed = body?.headed === true;
 
-        if (!VALID_SUITES.includes(suite as SuiteName)) {
+        if (type === 'restassured') {
+            return NextResponse.json({ error: true, message: 'RestAssured tests must be executed via Maven.' }, { status: 405 });
+        }
+        if (type === 'scenarios' || type === 'manual') {
+            return NextResponse.json({ error: true, message: 'These are manual test artifacts meant for human execution.' }, { status: 405 });
+        }
+
+        if (!suite || !VALID_SUITES.includes(suite as SuiteName)) {
             return NextResponse.json(
                 { error: true, message: 'Invalid suite. Expected smoke, sanity, or regression.' },
                 { status: 400 }
