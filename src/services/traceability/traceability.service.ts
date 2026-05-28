@@ -1,6 +1,6 @@
 import { MySqlService } from '../db/mysql.service';
 
-export type TraceEntityType = 'requirement' | 'testcase' | 'execution' | 'defect';
+export type TraceEntityType = 'requirement' | 'testcase' | 'execution' | 'defect' | 'automation';
 
 export type TraceabilityRecord = {
     id: string | number;
@@ -26,7 +26,8 @@ export class TraceabilityService {
             requirement: 'requirements',
             testcase: 'testcases',
             execution: 'executions',
-            defect: 'defects'
+            defect: 'defects',
+            automation: 'automation_artifacts'
         };
 
         // This is a foundation method that would interact with the specific tables

@@ -40,9 +40,11 @@ export type AiGenerationMeta = {
     }[];
 };
 
+export type PlatformType = 'web' | 'mobile' | 'api' | 'automation';
+
 export type AiGenerationOptions = {
     model: string;
-    platformType: 'web' | 'mobile' | 'api';
+    platformType: PlatformType;
     customPrompt?: string;
     acceptanceCriteria?: string;
     jiraStoryId?: string;
@@ -52,7 +54,7 @@ export type ConversationSession = {
     id: string;
     title?: string;
     prompt: string;
-    platform: 'web' | 'mobile' | 'api';
+    platform: PlatformType;
     result: { testCases: TestCase[] } | null;
     error: string | null;
     aiMeta?: AiGenerationMeta;

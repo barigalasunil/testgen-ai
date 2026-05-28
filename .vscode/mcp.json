@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "playwright-browser": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp", "--headless"],
+      "description": "Playwright MCP browser automation server for test execution and exploration"
+    },
+    "playwright-headed": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp", "--headed", "--slow-mo", "800"],
+      "description": "Playwright MCP in headed mode for visible demo execution"
+    }
+  }
+}

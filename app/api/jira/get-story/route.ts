@@ -52,6 +52,33 @@ export async function GET(request: Request) {
         const issueType = fields.issuetype?.name || 'Story';
         const projectKey = storyId.split('-')[0];
 
+        // Extract acceptance criteria — try customfield first, then accept-criteria field
+        let acceptanceCriteria = '';
+        const acField = fields['acceptance-criteria'];
+        if (acField) {
+            acceptanceCriteria = typeof acField === 'string' ? acField : extractText(acField);
+        }
+        if (!acceptanceCriteria) {
+            // Scan custom fields for acceptance criteria
+            for (const key of Object.keys(fields)) {
+                if (key.startsWith('customfield_')) {
+                    const val = fields[key];
+                    if (val && typeof val === 'object' && val.type === 'doc') {
+                        const text = extractText(val);
+                        if (text.length > 50 && (key.toLowerCase().includes('accept') || text.toLowerCase().includes('acceptance'))) {
+                            acceptanceCriteria = text;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (!acceptanceCriteria) {
+            // Fall back to last paragraph of description as likely AC
+            const paragraphs = description.split('\n').filter(p => p.trim());
+            acceptanceCriteria = paragraphs.slice(-3).join('\n').slice(0, 1000);
+        }
+
         // 🔗 PERSIST FOR TRACEABILITY + RAG
         try {
             const { IngestionService } = await import('@/src/services/rag/ingestionService');
@@ -59,7 +86,7 @@ export async function GET(request: Request) {
                 jiraStoryId: storyId,
                 title: summary,
                 description: description,
-                acceptanceCriteria: description.slice(0, 500), // Fallback if AC not field
+                acceptanceCriteria: acceptanceCriteria,
                 projectKey: projectKey,
             });
         } catch (ingestError) {
@@ -72,6 +99,7 @@ export async function GET(request: Request) {
             storyId,
             summary,
             description,
+            acceptanceCriteria,
             issueType,
             priority: fields.priority?.name || 'Medium',
             status: fields.status?.name || '',

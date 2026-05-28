@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
 import { InputBox } from "./InputBox";
-import { AutomationDashboard } from "./AutomationDashboard";
 import JiraModal from "./JiraModal";
 import { generateTestCases, fetchModels } from "../services";
 import { AiGenerationMeta, AiGenerationOptions, HistoryItem, SuiteKey, TestCase } from "../types";
@@ -101,11 +100,19 @@ export function MainApp() {
     const [selectedModel, setSelectedModel] = useState(AUTO_MODEL);
     const [provider, setProvider] = useState<'local' | 'cloud'>('local');
     const [providerStatus, setProviderStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
-    const [isJiraMode, setIsJiraMode] = useState(false);
     const [platformType, setPlatformType] = useState<"web" | "mobile" | "api">("web");
-    const [customPrompt, setCustomPrompt] = useState("");
-    const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
-    const [jiraStoryId, setJiraStoryId] = useState("");
+
+    // Automation states (lifted from TestCaseTable)
+    const [scriptCode, setScriptCode] = useState<string | null>(null);
+    const [scriptFileName, setScriptFileName] = useState<string | null>(null);
+    const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+    const [isRunningAutomation, setIsRunningAutomation] = useState(false);
+    const [executionLogs, setExecutionLogs] = useState<string[]>([]);
+    const [executionSummary, setExecutionSummary] = useState<{ total: number; passed: number; failed: number; durationMs: number; reportUrl?: string } | null>(null);
+    const [passedTests, setPassedTests] = useState<string[]>([]);
+    const [failedTests, setFailedTests] = useState<string[]>([]);
+    const [headed, setHeaded] = useState(false);
+    const [reportUrl, setReportUrl] = useState<string | null>(null);
 
     // Jira modal states
     const [jiraModalOpen, setJiraModalOpen] = useState(false);
@@ -125,15 +132,6 @@ export function MainApp() {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const restoredSessionIdRef = useRef<string | null>(null);
-
-    const handleStoryLoaded = (story: { summary: string; description: string; storyId: string }) => {
-        setValue(
-            `Generate test cases for this Jira story:\n\nSummary: ${story.summary}\n\nDescription: ${story.description}`
-        );
-        if (story.description?.trim()) {
-            setAcceptanceCriteria(story.description.slice(0, 500));
-        }
-    };
 
     useEffect(() => {
         const loadSessions = () => {
@@ -243,13 +241,10 @@ export function MainApp() {
 
         if (activeSession?.aiOptions) {
             setSelectedModel(activeSession.aiOptions.model);
-            setPlatformType(activeSession.aiOptions.platformType);
-            setCustomPrompt(activeSession.aiOptions.customPrompt || '');
-            setAcceptanceCriteria(activeSession.aiOptions.acceptanceCriteria || '');
-            setJiraStoryId(activeSession.aiOptions.jiraStoryId || '');
+            setPlatformType(activeSession.aiOptions.platformType as "web" | "mobile" | "api");
             setValue('');
         } else if (activeSession?.platform) {
-            setPlatformType(activeSession.platform);
+            setPlatformType(activeSession.platform as "web" | "mobile" | "api");
             setValue('');
         }
     }, [activeSessionId, activeSession]);
@@ -293,9 +288,9 @@ export function MainApp() {
         const generationOptions: AiGenerationOptions = {
             model: overrideOptions?.model ?? selectedModel,
             platformType: overrideOptions?.platformType ?? platformType,
-            customPrompt: overrideOptions?.customPrompt ?? customPrompt,
-            acceptanceCriteria: overrideOptions?.acceptanceCriteria ?? acceptanceCriteria,
-            jiraStoryId: overrideOptions?.jiraStoryId ?? jiraStoryId,
+            customPrompt: overrideOptions?.customPrompt ?? '',
+            acceptanceCriteria: overrideOptions?.acceptanceCriteria ?? '',
+            jiraStoryId: overrideOptions?.jiraStoryId ?? '',
         };
 
         saveModel(generationOptions.model);
@@ -312,10 +307,7 @@ export function MainApp() {
 
         const targetId = activeId ?? Date.now().toString();
         const now = new Date().toISOString();
-        // Use Jira story ID as session title when available for easy traceability
-        const smartName = jiraStoryId?.trim()
-            ? jiraStoryId.trim()
-            : generateWorkspaceName(currentPrompt);
+        const smartName = generateWorkspaceName(currentPrompt);
 
         if (!activeId) {
             setActiveId(targetId);
@@ -502,6 +494,109 @@ export function MainApp() {
         setJiraConnStatus('idle');
     };
 
+    const handleGenerateScript = async () => {
+        const testCases = currentThread?.result?.testCases;
+        if (!testCases?.length) return;
+        const storyId = currentThread?.aiOptions?.jiraStoryId || '';
+        setIsGeneratingScript(true);
+        try {
+            const response = await fetch('/api/automation/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    testCases,
+                    platform: currentThread?.platform || null,
+                    jiraStoryId: storyId,
+                }),
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.error) throw new Error(payload.message || 'Script generation failed');
+            setScriptCode(payload.code || '');
+            setScriptFileName(payload.fileName || 'generated.spec.ts');
+        } catch (error) {
+            console.error('Script generation failed:', error);
+        } finally {
+            setIsGeneratingScript(false);
+        }
+    };
+
+    const handleRunGeneratedScript = async () => {
+        if (!scriptCode || !scriptFileName) return;
+        const storyId = currentThread?.aiOptions?.jiraStoryId || '';
+        setIsRunningAutomation(true);
+        setExecutionLogs([]);
+        setExecutionSummary(null);
+        setPassedTests([]);
+        setFailedTests([]);
+        setReportUrl(null);
+        const logs: string[] = [];
+
+        const addLog = (msg: string) => {
+            logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+            setExecutionLogs([...logs]);
+        };
+
+        try {
+            addLog('Launching automation execution...');
+            addLog(`Script: ${scriptFileName}`);
+            addLog('Validating Playwright environment...');
+
+            const response = await fetch('/api/automation/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'generated',
+                    scriptFile: scriptFileName,
+                    jiraStoryId: storyId,
+                    headed,
+                }),
+            });
+
+            addLog('Execution started...');
+
+            if (response.body) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('__RESULT__:')) {
+                            try {
+                                const data = JSON.parse(line.slice('__RESULT__:'.length));
+                                if (data.type === 'summary') {
+                                    setExecutionSummary(data);
+                                    if (data.reportUrl) setReportUrl(data.reportUrl);
+                                    if (data.failed > 0) {
+                                        addLog(`✕ ${data.failed} failed, ${data.passed} passed — ${data.total} total`);
+                                    } else {
+                                        addLog(`✓ All ${data.passed} tests passed`);
+                                    }
+                                } else if (data.type === 'passed') {
+                                    setPassedTests(data.tests);
+                                } else if (data.type === 'failed') {
+                                    setFailedTests(data.tests);
+                                }
+                            } catch {}
+                        } else {
+                            addLog(line);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            addLog(`✕ Execution error: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+            setIsRunningAutomation(false);
+        }
+    };
+
     const handleExecuteSuite = async (suite: SuiteKey, headed: boolean = false) => {
         if (!activeId) return;
         const startedAt = new Date().toISOString();
@@ -584,36 +679,98 @@ export function MainApp() {
                 onModelChange={(m) => { setSelectedModel(m); saveModel(m); }}
                 onProviderChange={(p) => { setProvider(p); saveProvider(p); }}
                 providerStatus={providerStatus}
+                automation={currentThread?.automation}
+                onExecuteSuite={handleExecuteSuite}
+                hasTestCases={!!(currentThread?.result?.testCases?.length)}
+                scriptCode={scriptCode}
+                isGeneratingScript={isGeneratingScript}
+                isRunningAutomation={isRunningAutomation}
+                executionLogs={executionLogs}
+                executionSummary={executionSummary}
+                passedTests={passedTests}
+                failedTests={failedTests}
+                headed={headed}
+                onHeadedChange={setHeaded}
+                reportUrl={reportUrl}
+                onGenerateScript={handleGenerateScript}
+                onRunAutomation={handleRunGeneratedScript}
+                platformType={platformType}
             />
 
             <main className="flex-1 flex flex-col overflow-hidden min-w-0">
                 {/* Header */}
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2 shadow-sm z-10">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2 shadow-sm z-10 min-h-[52px]">
                     <div>
                         <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">AI QA Copilot</p>
                         <h1 className="text-lg font-semibold text-slate-900">TCGen-Buddy</h1>
-                        <p className="mt-0.5 text-xs text-slate-500 max-w-2xl">Generate test cases, export artifacts, and run automation suites.</p>
                     </div>
+
                     <div className="hidden sm:flex items-center gap-3">
-                        <div className="flex flex-col items-end">
-                            <div className={cn(
-                                "flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold transition-all",
-                                providerStatus === 'connected' ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
-                                    providerStatus === 'error' ? "bg-red-50 border-red-200 text-red-700" :
-                                        "bg-amber-50 border-amber-200 text-amber-700"
-                            )}>
-                                <span className={cn(
-                                    "h-2 w-2 rounded-full",
-                                    providerStatus === 'connected' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
-                                        providerStatus === 'error' ? "bg-red-500" :
-                                            "bg-amber-500 animate-pulse"
-                                )} />
-                                {provider.toUpperCase()} {providerStatus === 'connected' ? 'Connected' : providerStatus === 'error' ? 'API Error' : 'Connecting...'}
-                            </div>
-                            <span className="text-[10px] text-slate-400 font-mono mt-1 pr-1 truncate max-w-[150px]">
-                                Model: {selectedModel === 'auto' ? 'Auto-Select' : selectedModel}
-                            </span>
+                        {/* Provider toggle — shows all three options */}
+                        <div className="flex p-0.5 bg-slate-100 rounded-lg">
+                            {(['local', 'auto', 'cloud'] as const).map((p) => (
+                                <button
+                                    key={p}
+                                    onClick={() => {
+                                        if (p === 'auto') return; // auto is informational
+                                        setProvider(p);
+                                        saveProvider(p);
+                                    }}
+                                    className={cn(
+                                        "px-3 py-1 text-[11px] font-bold rounded-md transition-all",
+                                        provider === p
+                                            ? "bg-emerald-500 text-white shadow-sm shadow-emerald-300"
+                                            : "text-slate-400 hover:text-slate-600"
+                                    )}
+                                >
+                                    {p === 'auto' ? 'AUTO' : p.toUpperCase()}
+                                </button>
+                            ))}
                         </div>
+
+                        {/* Connection indicator */}
+                        <div className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all",
+                            providerStatus === 'connected' ? "bg-emerald-50 text-emerald-700" :
+                                providerStatus === 'error' ? "bg-red-50 text-red-700" :
+                                    "bg-amber-50 text-amber-700"
+                        )}>
+                            <span className={cn(
+                                "h-2 w-2 rounded-full",
+                                providerStatus === 'connected' ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" :
+                                    providerStatus === 'error' ? "bg-red-500" :
+                                        "bg-amber-500 animate-pulse"
+                            )} />
+                            {providerStatus === 'connected' ? 'Connected' :
+                                providerStatus === 'error' ? 'Offline' : 'Connecting...'}
+                        </div>
+
+                        {/* Model selector — hidden when provider is cloud */}
+                        {provider !== 'cloud' && (
+                            <select
+                                value={selectedModel}
+                                onChange={(e) => { setSelectedModel(e.target.value); saveModel(e.target.value); }}
+                                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                            >
+                                <option value="auto">Auto (Recommended)</option>
+                                {models.map(m => (
+                                    <option key={m} value={m}>{m}</option>
+                                ))}
+                            </select>
+                        )}
+
+                        {/* Cloud model shows the selected model name */}
+                        {provider === 'cloud' && (
+                            <span className="text-[11px] text-slate-500 font-mono max-w-[120px] truncate">
+                                Cloud model: {selectedModel === 'auto' ? 'Auto-Select' : selectedModel}
+                            </span>
+                        )}
+
+                        {provider !== 'cloud' && selectedModel !== 'auto' && (
+                            <span className="text-[10px] text-slate-400 font-mono max-w-[120px] truncate">
+                                {selectedModel}
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -670,7 +827,7 @@ export function MainApp() {
                                                 role="assistant"
                                                 isTable
                                                 tableData={currentThread.result}
-                                                jiraStoryId={currentThread.aiOptions?.jiraStoryId || jiraStoryId}
+                                                jiraStoryId={currentThread.aiOptions?.jiraStoryId || ''}
                                                 platformType={currentThread.platform}
                                                 onCopy={copyTableData}
                                                 onRegenerate={() => handleSend(currentThread.prompt, currentThread.aiOptions)}
@@ -736,31 +893,12 @@ export function MainApp() {
                                 onSend={handleSend}
                                 disabled={loading}
                                 inputRef={textareaRef}
-                                models={models}
-                                selectedModel={selectedModel}
-                                isJiraMode={isJiraMode}
-                                setIsJiraMode={setIsJiraMode}
                                 platformType={platformType}
                                 setPlatformType={setPlatformType}
-                                customPrompt={customPrompt}
-                                setCustomPrompt={setCustomPrompt}
-                                acceptanceCriteria={acceptanceCriteria}
-                                setAcceptanceCriteria={setAcceptanceCriteria}
-                                jiraStoryId={jiraStoryId}
-                                setJiraStoryId={setJiraStoryId}
-                                onStoryLoaded={handleStoryLoaded}
                             />
                         </div>
                     </div>
 
-                    {/* Automation sidebar */}
-                    <aside className="hidden xl:flex h-full w-[340px] min-w-[340px] max-w-[340px] flex-shrink-0 flex-col overflow-y-auto overflow-x-hidden border-l border-slate-200 bg-white p-3">
-                        <AutomationDashboard
-                            automation={currentThread?.automation}
-                            onExecuteSuite={handleExecuteSuite}
-                            compact
-                        />
-                    </aside>
                 </div>
             </main>
 
@@ -769,7 +907,7 @@ export function MainApp() {
                 isOpen={jiraModalOpen}
                 onClose={() => setJiraModalOpen(false)}
                 testCase={jiraTargetCase}
-                requirementId={currentThread?.aiOptions?.jiraStoryId || jiraStoryId || undefined}
+                requirementId={currentThread?.aiOptions?.jiraStoryId || undefined}
             />
 
             {/* Settings Modal */}

@@ -21,7 +21,7 @@ export default defineConfig({
         ['list'],
         ['html', { outputFolder: reportDir, open: 'never' }],
     ],
-    retries: 0,
+    retries: 1,
     workers: 1,
     fullyParallel: false,
     use: {

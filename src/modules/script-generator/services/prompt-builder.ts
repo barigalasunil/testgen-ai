@@ -31,13 +31,10 @@ export class ScriptPromptBuilder {
         title: tc.scenarioTitle,
         steps: tc.testSteps,
         expectedResult: tc.expectedResult,
-        testType: tc.testType,
-      })),
-      null,
-      2
+      }))
     );
 
-    return `${system}\n\n${platformPrompt}\n\nGenerate Playwright TypeScript code for the following test cases:\n${testCasesJson}`;
+    return `${system}\n\n${platformPrompt}\n\nTest cases:\n${testCasesJson}`;
   }
 }
 

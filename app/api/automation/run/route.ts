@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
-import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { join, basename } from 'path';
+import { existsSync, mkdirSync, copyFileSync, unlinkSync } from 'fs';
+import os from 'os';
 
 const VALID_SUITES = ['smoke', 'sanity', 'regression'] as const;
 type SuiteName = (typeof VALID_SUITES)[number];
@@ -44,7 +45,7 @@ async function validateEnvironment() {
         // This command returns a non-zero exit code if browsers are missing
         execSync(`${cmd} playwright test --list --config playwright.config.ts`, { 
             cwd: automationDir,
-            env: { ...process.env, PW_REPORT_DIR: '/tmp' } 
+            env: { ...process.env, PW_REPORT_DIR: os.tmpdir() } 
         });
     } catch (e) {
         throw new Error('Playwright browser binaries not installed. Please run: npx playwright install chromium');
@@ -138,13 +139,179 @@ async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
     });
 }
 
+async function runGeneratedScript(scriptFile: string, headed: boolean, jiraStoryId?: string) {
+    const rootDir = getProjectRoot();
+    const automationDir = join(rootDir, 'automation');
+    const configPath = join(automationDir, 'playwright.config.ts');
+    const scriptPath = join(automationDir, 'scripts', 'generated', scriptFile);
+
+    if (!existsSync(scriptPath)) {
+        throw new Error(`Generated script not found: ${scriptPath}`);
+    }
+
+    console.log('[AUTOMATION] Running generated script:', scriptPath);
+
+    // Ensure report dir exists
+    const reportDir = join(automationDir, '..', 'public', 'automation-reports', 'generated');
+    if (!existsSync(reportDir)) {
+        mkdirSync(reportDir, { recursive: true });
+    }
+
+    // Copy to tests/ directory so Playwright's testDir picks it up
+    const tempTestFile = `_generated_${basename(scriptFile)}`;
+    const testDir = join(automationDir, 'tests');
+    const tempTestPath = join(testDir, tempTestFile);
+    copyFileSync(scriptPath, tempTestPath);
+    console.log('[AUTOMATION] Copied to tests dir:', tempTestPath);
+
+    const cleanup = () => {
+        try { unlinkSync(tempTestPath); } catch {}
+    };
+
+    return new Promise<{
+        success: boolean;
+        output: string;
+        durationMs: number;
+        stderr?: string;
+    }>((resolvePromise, reject) => {
+        const start = Date.now();
+
+        const child = spawn('npx', [
+            'playwright',
+            'test',
+            tempTestFile,
+            '--config', configPath,
+        ], {
+            cwd: automationDir,
+            shell: true,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            windowsHide: false,
+            detached: false,
+            env: {
+                ...process.env,
+                FORCE_COLOR: '0',
+                PW_REPORT_DIR: reportDir,
+                PW_HEADED: headed ? 'true' : 'false',
+            },
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout?.on('data', (chunk) => {
+            const text = chunk.toString();
+            stdout += text;
+        });
+
+        child.stderr?.on('data', (chunk) => {
+            const text = chunk.toString();
+            stderr += text;
+        });
+
+        child.on('error', (error) => {
+            cleanup();
+            reject({ error, durationMs: Date.now() - start, stdout, stderr });
+        });
+
+        const timeoutHandle = setTimeout(() => {
+            child.kill();
+        }, 30 * 60 * 1000);
+
+        child.on('close', (code) => {
+            clearTimeout(timeoutHandle);
+            cleanup();
+            const durationMs = Date.now() - start;
+            resolvePromise({
+                success: code === 0,
+                output: stdout,
+                durationMs,
+                stderr,
+            });
+        });
+    });
+}
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const type = body?.type as string; // from testType
+        const type = body?.type as string;
         const suite = body?.suite as string;
-        // headed flag from dashboard toggle — default false
+        const scriptFile = body?.scriptFile as string;
         const headed = body?.headed === true;
+
+        // Handle generated script execution with streaming
+        if (type === 'generated' && scriptFile) {
+            const encoder = new TextEncoder();
+            const stream = new ReadableStream({
+                async start(controller) {
+                    const addLog = (msg: string) => {
+                        controller.enqueue(encoder.encode(msg + '\n'));
+                    };
+
+                    const addResult = (data: object) => {
+                        controller.enqueue(encoder.encode('__RESULT__:' + JSON.stringify(data) + '\n'));
+                    };
+
+                    addLog('Launching browser...');
+                    addLog(`Script: ${scriptFile}`);
+
+                    try {
+                        addLog('Running generated Playwright script...');
+                        const result = await runGeneratedScript(scriptFile, headed, body?.jiraStoryId);
+
+                        // Parse Playwright output for structured results
+                        const passed: string[] = [];
+                        const failed: string[] = [];
+                        const lines = (result.output || '').split('\n');
+                        for (const line of lines) {
+                            const passMatch = line.match(/✓.*›\s(.+)/);
+                            const failMatch = line.match(/✘.*›\s(.+)/);
+                            if (passMatch) passed.push(passMatch[1].trim());
+                            if (failMatch) failed.push(failMatch[1].trim());
+                        }
+
+                        addResult({
+                            type: 'summary',
+                            total: passed.length + failed.length,
+                            passed: passed.length,
+                            failed: failed.length,
+                            durationMs: result.durationMs,
+                            reportUrl: `/automation-reports/generated/index.html`,
+                        });
+
+                        if (result.success) {
+                            addLog(`✓ All ${passed.length} tests passed in ${(result.durationMs / 1000).toFixed(1)}s`);
+                        } else {
+                            addLog(`✕ ${failed.length} failed, ${passed.length} passed in ${(result.durationMs / 1000).toFixed(1)}s`);
+                        }
+
+                        // Send individual test results
+                        if (passed.length > 0) {
+                            addResult({ type: 'passed', tests: passed });
+                        }
+                        if (failed.length > 0) {
+                            addResult({ type: 'failed', tests: failed });
+                        }
+
+                        // Raw output for debugging
+                        if (result.output) {
+                            result.output.split('\n').filter(Boolean).forEach(line => addLog(line));
+                        }
+                    } catch (error: any) {
+                        addLog(`✕ Execution error: ${error.message || String(error)}`);
+                    } finally {
+                        controller.close();
+                    }
+                },
+            });
+
+            return new Response(stream, {
+                headers: {
+                    'Content-Type': 'text/plain',
+                    'Transfer-Encoding': 'chunked',
+                },
+            });
+        }
 
         if (type === 'restassured') {
             return NextResponse.json({ error: false, message: 'RestAssured tests must be executed via Maven.', status: 'skipped' });

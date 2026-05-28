@@ -19,7 +19,7 @@ interface ChatMessageProps {
     isTable?: boolean;
     tableData?: { testCases: TestCase[] };
     jiraStoryId?: string;
-    platformType?: "web" | "mobile" | "api";
+    platformType?: "web" | "mobile" | "api" | "automation";
     onCopy?: () => void;
     onRegenerate?: () => void;
     onOpenJira?: (testCase: TestCase) => void;

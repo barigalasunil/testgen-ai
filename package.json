@@ -11,7 +11,8 @@
     "test:automation:smoke": "npx playwright test --config automation/playwright.config.ts automation/tests/smoke",
     "test:automation:sanity": "npx playwright test --config automation/playwright.config.ts automation/tests/sanity",
     "test:automation:regression": "npx playwright test --config automation/playwright.config.ts automation/tests/regression",
-    "playwright:install": "npx playwright install"
+    "playwright:install": "npx playwright install",
+    "db:migrate": "npx tsx src/services/db/migrate.ts"
   },
   "dependencies": {
     "@radix-ui/react-dropdown-menu": "^2.1.16",

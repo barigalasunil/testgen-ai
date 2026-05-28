@@ -1,5 +1,10 @@
-Generate Playwright web automation code for a browser application.
-Use reusable selectors, page object style helpers, and assertions on page state.
-Use comments only for selector placeholders and high-level test steps.
-Prefer simple selectors such as data-test attributes, text content, or CSS classes.
-Focus on login, add-to-cart, checkout, and order confirmation flows when relevant.
+Generate concise Playwright web automation tests for saucedemo.com. One test function per scenario, inline locators only.
+Use these specific locators that work on Saucedemo:
+- Login: page.getByTestId('username'), page.getByTestId('password'), page.getByTestId('login-button')
+- Inventory: page.locator('.inventory_item'), page.locator('.inventory_item_name'), page.getByTestId('add-to-cart-sauce-labs-backpack'), page.locator('.shopping_cart_badge'), page.locator('.shopping_cart_link')
+- Cart/Checkout: page.getByTestId('checkout'), page.getByTestId('firstName'), page.getByTestId('lastName'), page.getByTestId('postal-code'), page.getByTestId('continue')
+- Checkout overview: page.getByTestId('finish'), page.locator('.complete-header')
+- Error: page.getByTestId('error')
+- Menu: page.locator('#react-burger-menu-btn'), page.locator('#logout_sidebar_link')
+Use page.locator('.css-class') with DOT — NEVER use [class="exact"]. Keep each test under 20 lines.
+CRITICAL: Every string, quote, backtick, brace, and parenthesis MUST be properly closed. DO NOT truncate code.

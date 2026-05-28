@@ -97,13 +97,21 @@ export async function POST(req: Request) {
 
         console.log(`[GENERATE] Provider: ${provider}, Model: ${selectedModel}`);
 
-        const fullPrompt = promptBuilder.buildPrompt(
-            prompt,
-            type as TestType,
-            platformType as PlatformType,
-            customPrompt,
-            acceptanceCriteria
-        );
+        const isAutomationMode = platformType === 'automation';
+
+        const fullPrompt = isAutomationMode
+            ? promptBuilder.buildAutomationPrompt(prompt, customPrompt, acceptanceCriteria)
+            : promptBuilder.buildPrompt(
+                prompt,
+                type as TestType,
+                platformType as PlatformType,
+                customPrompt,
+                acceptanceCriteria
+            );
+
+        if (isAutomationMode) {
+            console.log('[GENERATE] Using Automation Workflow Mode with workflow-master.md orchestration');
+        }
 
         let rawResponse: string;
         try {
@@ -199,7 +207,15 @@ export async function POST(req: Request) {
         return NextResponse.json({
             error: false,
             result: sanitized,
-            meta: { model: selectedModel, count: sanitized.testCases.length, type, platformType },
+            meta: {
+                model: selectedModel,
+                count: sanitized.testCases.length,
+                type: isAutomationMode ? 'automation' : type,
+                platformType,
+                message: isAutomationMode
+                    ? `Automation Workflow: ${sanitized.testCases.length} automation-ready test cases`
+                    : undefined,
+            },
         });
 
     } catch (error) {

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { 
-    AlertCircle, CheckCircle2, Copy, Download, ExternalLink, 
-    FileText, Play, Bug, FileSpreadsheet, FileJson, Tag, RefreshCw, ThumbsUp, Link
+    AlertCircle, CheckCircle2, Copy, ExternalLink, FileText,
+    Bug, FileSpreadsheet, FileJson, Tag, RefreshCw, ThumbsUp, Link
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TestCase } from "../types";
@@ -22,7 +22,7 @@ interface JiraResult {
 interface TestCaseTableProps {
     data: { testCases: TestCase[] };
     jiraStoryId?: string;
-    platformType?: 'web' | 'mobile' | 'api';
+    platformType?: 'web' | 'mobile' | 'api' | 'automation';
     onCopy: () => void;
     onRegenerate: () => void;
     onScriptGenerated?: (code: string, fileName: string) => void;
@@ -40,10 +40,6 @@ export function TestCaseTable({
     const [liked, setLiked] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
-    const [isGeneratingScript, setIsGeneratingScript] = useState(false);
-    const [scriptCode, setScriptCode] = useState<string | null>(null);
-    const [scriptFileName, setScriptFileName] = useState<string | null>(null);
-    const [showScriptModal, setShowScriptModal] = useState(false);
 
     const [defects, setDefects] = useState<Record<string, string>>({});
 
@@ -78,33 +74,6 @@ export function TestCaseTable({
         }
     };
 
-    const handleGenerateScript = async () => {
-        if (!data?.testCases?.length) return;
-        setIsGeneratingScript(true);
-        try {
-            const response = await fetch('/api/automation/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    testCases: data.testCases,
-                    platform: platformType || null,
-                    jiraStoryId,
-                }),
-            });
-            const payload = await response.json();
-            if (!response.ok || payload.error) throw new Error(payload.message || 'Script generation failed');
-            setScriptCode(payload.code || '');
-            setScriptFileName(payload.fileName || 'generated.spec.ts');
-            setShowScriptModal(true);
-            showToast(`Generated: ${payload.fileName}`);
-        } catch (error) {
-            showToast(`Script generation failed: ${error instanceof Error ? error.message : String(error)}`);
-        } finally {
-            setIsGeneratingScript(false);
-        }
-    };
-
-    // Creates ONE Jira Task with all test cases as a table
     const handleSaveAllToJira = async () => {
         if (!data?.testCases?.length) return;
         setIsSavingToJira(true);
@@ -140,19 +109,7 @@ export function TestCaseTable({
         }
     };
 
-    const handleDownloadScript = () => {
-        if (!scriptCode || !scriptFileName) return;
-        const blob = new Blob([scriptCode], { type: 'text/typescript;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = scriptFileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        showToast(`Downloaded ${scriptFileName}`);
-    };
+
 
     const renderValue = (value: unknown) => {
         if (value === null || typeof value === 'undefined') return "";
@@ -181,38 +138,6 @@ export function TestCaseTable({
                 <div className="fixed top-4 right-4 z-[100] flex items-center gap-2 bg-gray-900 text-white text-[13px] px-4 py-2.5 rounded-xl shadow-xl max-w-sm">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span className="truncate">{toast}</span>
-                </div>
-            )}
-
-            {/* Script Modal */}
-            {showScriptModal && scriptCode && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div className="max-w-3xl w-full overflow-hidden rounded-3xl bg-white shadow-2xl">
-                        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-                            <div>
-                                <h3 className="text-sm font-semibold text-slate-900">Generated Playwright Script</h3>
-                                <p className="text-xs text-slate-500">{scriptFileName}</p>
-                            </div>
-                            <button onClick={() => setShowScriptModal(false)} className="text-slate-500 hover:text-slate-900 text-sm">Close</button>
-                        </div>
-                        <div className="max-h-[60vh] overflow-auto bg-slate-950 p-4 text-[13px] text-slate-100">
-                            <pre className="whitespace-pre-wrap break-words font-mono">{scriptCode}</pre>
-                        </div>
-                        <div className="flex gap-2 border-t border-gray-200 bg-slate-50 px-5 py-3">
-                            <button
-                                onClick={() => { navigator.clipboard.writeText(scriptCode); showToast('Copied!'); }}
-                                className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 border border-gray-200 hover:bg-slate-100"
-                            >
-                                Copy Code
-                            </button>
-                            <button
-                                onClick={handleDownloadScript}
-                                className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                            >
-                                Download Script
-                            </button>
-                        </div>
-                    </div>
                 </div>
             )}
 
@@ -396,14 +321,6 @@ export function TestCaseTable({
                     <button onClick={() => handleExport("json")} disabled={isExporting}
                         className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 px-3 py-2 rounded-2xl transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50">
                         <FileJson className="w-3.5 h-3.5" /> JSON
-                    </button>
-
-                    <div className="w-px h-6 bg-gray-200" />
-
-                    <button onClick={handleGenerateScript} disabled={isGeneratingScript}
-                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 px-3 py-2 rounded-2xl transition-all text-gray-700 shadow-sm font-medium disabled:opacity-50">
-                        <FileText className="w-3.5 h-3.5" />
-                        {isGeneratingScript ? 'Generating…' : platformType === 'api' ? 'REST API' : 'Playwright'}
                     </button>
 
                     <div className="w-px h-6 bg-gray-200" />

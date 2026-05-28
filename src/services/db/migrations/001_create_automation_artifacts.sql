@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS automation_artifacts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    type VARCHAR(50) NOT NULL DEFAULT 'automation',
+    label VARCHAR(500) NOT NULL,
+    jira_key VARCHAR(100),
+    jira_url VARCHAR(500),
+    linked_id INT,
+    project_key VARCHAR(50) NOT NULL,
+    file_name VARCHAR(255),
+    script_path VARCHAR(500),
+    status VARCHAR(50) DEFAULT 'generated',
+    execution_result JSON,
+    metadata JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_project_key (project_key),
+    INDEX idx_jira_key (jira_key),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
