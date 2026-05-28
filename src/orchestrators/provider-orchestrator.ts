@@ -1,4 +1,4 @@
-export type ProviderType = 'local' | 'cloud';
+export type ProviderType = 'local' | 'cloud' | 'auto';
 
 export type ProviderHealth = 'connecting' | 'connected' | 'error';
 
@@ -10,16 +10,20 @@ export interface ProviderState {
 }
 
 export function resolveProvider(provider: ProviderType, health: ProviderHealth): ProviderType {
-    if (health === 'connected') return provider;
-    return provider === 'local' ? 'cloud' : 'local';
+    if (provider === 'auto') {
+        return health === 'connected' ? 'local' : 'cloud';
+    }
+    return health === 'connected' ? provider : provider === 'local' ? 'cloud' : 'local';
 }
 
 export function getProviderLabel(provider: ProviderType): string {
-    return provider === 'local' ? 'LOCAL' : 'CLOUD';
+    if (provider === 'local') return 'LOCAL';
+    if (provider === 'cloud') return 'CLOUD';
+    return 'AUTO';
 }
 
 export function getProviderDescription(provider: ProviderType): string {
-    return provider === 'local'
-        ? 'Local Ollama inference (free, private)'
-        : 'Cloud OpenRouter inference (scalable, multi-model)';
+    if (provider === 'local') return 'Local Ollama inference (free, private)';
+    if (provider === 'cloud') return 'Cloud OpenRouter inference (scalable, multi-model)';
+    return 'Auto provider selection with local-first fallback';
 }

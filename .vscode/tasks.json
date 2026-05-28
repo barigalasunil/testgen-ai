@@ -4,31 +4,7 @@
 		{
 			"label": "Start Next Dev Server",
 			"type": "shell",
-			"command": "cd /d d:\\TCGen-Buddy && npx next dev --port 3000",
-			"isBackground": true,
-			"problemMatcher": [
-				"$tsc"
-			]
-		},
-		{
-			"label": "Start Next Dev Server",
-			"type": "shell",
-			"command": "cd /d d:\\TCGen-Buddy; npx next dev --port 3000",
-			"isBackground": true,
-			"problemMatcher": [
-				"$tsc"
-			]
-		},
-		{
-			"label": "Start Next Dev Server",
-			"type": "shell",
-			"command": "npx",
-			"args": [
-				"next",
-				"dev",
-				"--port",
-				"3000"
-			],
+			"command": "npx next dev --port 3000",
 			"isBackground": true,
 			"problemMatcher": [
 				"$tsc"

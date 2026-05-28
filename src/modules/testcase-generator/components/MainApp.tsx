@@ -88,6 +88,7 @@ export function MainApp() {
     const [sessions, setSessions] = useState<HistoryItem[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [activePanel, setActivePanel] = useState<'chat' | 'automation' | 'jira' | 'rag' | 'reports' | 'history'>('chat');
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [generatingPrompt, setGeneratingPrompt] = useState("");
     const [generationModelStatus, setGenerationModelStatus] = useState("Using: Auto");
@@ -665,6 +666,8 @@ export function MainApp() {
             <Sidebar
                 history={sessions}
                 activeId={activeId}
+                activePanel={activePanel}
+                onChangePanel={(p) => setActivePanel(p)}
                 onSelect={handleSelectChat}
                 onNewChat={handleNewChat}
                 isOpen={isSidebarOpen}
@@ -673,12 +676,6 @@ export function MainApp() {
                 loading={loading}
                 onRename={handleRename}
                 onDelete={handleDelete}
-                models={models}
-                selectedModel={selectedModel}
-                provider={provider}
-                onModelChange={(m) => { setSelectedModel(m); saveModel(m); }}
-                onProviderChange={(p) => { setProvider(p); saveProvider(p); }}
-                providerStatus={providerStatus}
                 automation={currentThread?.automation}
                 onExecuteSuite={handleExecuteSuite}
                 hasTestCases={!!(currentThread?.result?.testCases?.length)}
