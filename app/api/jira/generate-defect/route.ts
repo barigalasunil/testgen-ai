@@ -48,7 +48,10 @@ Priority must be High, Medium, or Low based on severity.`;
     let parsed: any;
 
     try {
-      let raw = ollamaData.response?.trim() || '';
+      let raw = String(ollamaData.response ?? ollamaData.output ?? '').trim();
+      if (!raw && Array.isArray(ollamaData.outputs)) {
+        raw = ollamaData.outputs.map((item: any) => String(item?.text || item?.response || '')).join('\n').trim();
+      }
       raw = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
       parsed = JSON.parse(raw);
     } catch {

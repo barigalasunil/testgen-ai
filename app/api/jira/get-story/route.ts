@@ -19,7 +19,7 @@ export async function GET(request: Request) {
         const auth = Buffer.from(`${email}:${apiToken}`).toString('base64');
 
         const res = await fetch(
-            `${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issue/${storyId}?fields=summary,description,acceptance-criteria,comment,issuetype,priority,status`,
+            `${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issue/${storyId}?fields=summary,description,issuetype,priority,status`,
             {
                 headers: {
                     Authorization: `Basic ${auth}`,
@@ -40,35 +40,45 @@ export async function GET(request: Request) {
         const fields = data.fields || {};
 
         // Extract plain text from ADF description
-        function extractText(node: any): string {
+        const extractText = (node: any): string => {
             if (!node) return '';
+            if (typeof node === 'string') return node;
+            if (Array.isArray(node)) return node.map(extractText).join(' ');
             if (node.type === 'text') return node.text || '';
-            if (node.content) return node.content.map(extractText).join(' ');
+            if (node.type === 'paragraph' || node.type === 'heading') {
+                return (node.content || []).map(extractText).join('') + '\n\n';
+            }
+            if (Array.isArray(node.content)) {
+                return node.content.map(extractText).join(' ');
+            }
             return '';
-        }
+        };
 
-        const description = extractText(fields.description);
+        const description = extractText(fields.description).trim();
         const summary = fields.summary || '';
         const issueType = fields.issuetype?.name || 'Story';
         const projectKey = storyId.split('-')[0];
 
-        // Extract acceptance criteria — try customfield first, then accept-criteria field
         let acceptanceCriteria = '';
-        const acField = fields['acceptance-criteria'];
-        if (acField) {
-            acceptanceCriteria = typeof acField === 'string' ? acField : extractText(acField);
-        }
         if (!acceptanceCriteria) {
-            // Scan custom fields for acceptance criteria
+            // Scan fields for acceptance criteria values
             for (const key of Object.keys(fields)) {
-                if (key.startsWith('customfield_')) {
-                    const val = fields[key];
-                    if (val && typeof val === 'object' && val.type === 'doc') {
-                        const text = extractText(val);
-                        if (text.length > 50 && (key.toLowerCase().includes('accept') || text.toLowerCase().includes('acceptance'))) {
-                            acceptanceCriteria = text;
-                            break;
-                        }
+                const val = fields[key];
+                if (!val) continue;
+
+                if (typeof val === 'string') {
+                    const text = val.trim();
+                    if (text.length > 50 && (key.toLowerCase().includes('accept') || text.toLowerCase().includes('acceptance'))) {
+                        acceptanceCriteria = text;
+                        break;
+                    }
+                }
+
+                if (typeof val === 'object') {
+                    const text = extractText(val).trim();
+                    if (text.length > 50 && (key.toLowerCase().includes('accept') || text.toLowerCase().includes('acceptance'))) {
+                        acceptanceCriteria = text;
+                        break;
                     }
                 }
             }

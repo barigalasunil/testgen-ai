@@ -23,31 +23,32 @@ export function RagPanel() {
 
   const projectKeys = ['All', 'TCGB', 'TCA', 'AUTH', 'PAY'];
 
-  useEffect(() => {
-    const fetchItems = async () => {
-      setIsLoading(true);
-      try {
-        const params = new URLSearchParams({ projectKey: selectedProject });
-        const res = await fetch(`/api/rag/list?${params.toString()}`);
-        const data = await res.json();
-        if (data.success) {
-          setItems(data.items.map((item: any) => ({
-            id: String(item.id),
-            type: item.type,
-            title: item.title,
-            projectKey: item.project_key,
-            source: item.source,
-            status: 'indexed',
-            timestamp: new Date(item.created_at).toLocaleString(),
-            chunks: item.chunks || 1,
-          })));
-        }
-      } catch (error) {
-        console.error('RAG list fetch failed', error);
-      } finally {
-        setIsLoading(false);
+  const fetchItems = async (projectKey = selectedProject) => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({ projectKey });
+      const res = await fetch(`/api/rag/list?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setItems(data.items.map((item: any) => ({
+          id: String(item.id),
+          type: item.type,
+          title: item.title,
+          projectKey: item.project_key,
+          source: item.source,
+          status: 'indexed',
+          timestamp: new Date(item.created_at).toLocaleString(),
+          chunks: item.chunks || 1,
+        })));
       }
-    };
+    } catch (error) {
+      console.error('RAG list fetch failed', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchItems();
   }, [selectedProject]);
 
@@ -68,7 +69,10 @@ export function RagPanel() {
             <p className="text-xs uppercase tracking-[0.24em] text-slate-400 font-semibold mb-1">DeepMind RAG</p>
             <h2 className="text-lg font-semibold text-slate-900">Knowledge Search</h2>
           </div>
-          <button className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition">
+          <button
+            onClick={() => fetchItems()}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition"
+          >
             <RefreshCcw className="w-3.5 h-3.5" /> Refresh
           </button>
         </div>

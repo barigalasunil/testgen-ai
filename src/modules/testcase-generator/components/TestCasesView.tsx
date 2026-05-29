@@ -16,7 +16,6 @@ type TestCasesViewProps = {
     setResultTab: (tab: 'testCases' | 'scripts' | 'logs') => void;
     platformType: "web" | "mobile" | "api";
     setPlatformType: (t: "web" | "mobile" | "api") => void;
-    loading: boolean;
     textareaRef: React.RefObject<HTMLTextAreaElement | null>;
     messagesEndRef: React.RefObject<HTMLDivElement | null>;
     progressLabel: string;

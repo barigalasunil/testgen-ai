@@ -86,15 +86,12 @@ export async function saveTestCasesToJira(payload: {
 
 export async function fetchJiraStory(storyId: string) {
     const credentials = loadJiraCredentials();
-    if (!credentials) {
-        return { success: false, error: 'No Jira credentials saved. Open settings first.' };
+    const params = new URLSearchParams({ storyId });
+    if (credentials) {
+        params.set('baseUrl', credentials.baseUrl);
+        params.set('email', credentials.email);
+        params.set('apiToken', credentials.apiToken);
     }
-    const params = new URLSearchParams({
-        storyId,
-        baseUrl: credentials.baseUrl,
-        email: credentials.email,
-        apiToken: credentials.apiToken,
-    });
     const res = await fetch(`/api/jira/get-story?${params.toString()}`);
     return res.json();
 }
