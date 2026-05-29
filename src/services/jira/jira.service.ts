@@ -85,13 +85,21 @@ export async function saveTestCasesToJira(payload: {
 }
 
 export async function fetchJiraStory(storyId: string) {
-    const credentials = loadJiraCredentials();
+    // Try to get credentials from environment (server-side)
+    const baseUrl = process.env.JIRA_BASE_URL;
+    const email = process.env.JIRA_EMAIL;
+    const apiToken = process.env.JIRA_API_TOKEN;
+
     const params = new URLSearchParams({ storyId });
-    if (credentials) {
-        params.set('baseUrl', credentials.baseUrl);
-        params.set('email', credentials.email);
-        params.set('apiToken', credentials.apiToken);
-    }
-    const res = await fetch(`/api/jira/get-story?${params.toString()}`);
+    if (baseUrl) params.set('baseUrl', baseUrl);
+    if (email) params.set('email', email);
+    if (apiToken) params.set('apiToken', apiToken);
+
+    // Build absolute URL for server-side fetch
+    const protocol = typeof window === 'undefined' ? 'http' : 'https';
+    const host = typeof window === 'undefined' ? (process.env.VERCEL_URL || 'localhost:3000') : '';
+    const baseUrlPath = typeof window === 'undefined' ? `${protocol}://${host}` : '';
+    
+    const res = await fetch(`${baseUrlPath}/api/jira/get-story?${params.toString()}`);
     return res.json();
 }
