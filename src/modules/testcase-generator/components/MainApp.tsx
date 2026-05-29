@@ -10,6 +10,7 @@ import { InputBox } from "./InputBox";
 import JiraModal from "./JiraModal";
 import { generateTestCases, fetchModels } from "../services";
 import { AiGenerationMeta, AiGenerationOptions, HistoryItem, SuiteKey, TestCase } from "../types";
+import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import {
     saveJiraCredentials,
     loadJiraCredentials,
@@ -88,7 +89,7 @@ export function MainApp() {
     const [sessions, setSessions] = useState<HistoryItem[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [activePanel, setActivePanel] = useState<'chat' | 'automation' | 'jira' | 'rag' | 'reports' | 'history'>('chat');
+    const [activePanel, setActivePanel] = useState<'chat' | 'automation' | 'jira' | 'rag'>('chat');
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [generatingPrompt, setGeneratingPrompt] = useState("");
     const [generationModelStatus, setGenerationModelStatus] = useState("Using: Auto");
@@ -99,7 +100,7 @@ export function MainApp() {
     // Feature states
     const [models, setModels] = useState<string[]>([]);
     const [selectedModel, setSelectedModel] = useState(AUTO_MODEL);
-    const [provider, setProvider] = useState<'local' | 'cloud'>('local');
+    const [provider, setProvider] = useState<'local' | 'cloud' | 'auto'>('local');
     const [providerStatus, setProviderStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
     const [platformType, setPlatformType] = useState<"web" | "mobile" | "api">("web");
 
@@ -286,12 +287,13 @@ export function MainApp() {
         if (!textToSubmit.trim()) return;
 
         const currentPrompt = textToSubmit;
+        const promptJiraStoryId = extractJiraId(currentPrompt) ?? '';
         const generationOptions: AiGenerationOptions = {
             model: overrideOptions?.model ?? selectedModel,
             platformType: overrideOptions?.platformType ?? platformType,
             customPrompt: overrideOptions?.customPrompt ?? '',
             acceptanceCriteria: overrideOptions?.acceptanceCriteria ?? '',
-            jiraStoryId: overrideOptions?.jiraStoryId ?? '',
+            jiraStoryId: overrideOptions?.jiraStoryId ?? promptJiraStoryId,
         };
 
         saveModel(generationOptions.model);
@@ -361,7 +363,8 @@ export function MainApp() {
                 generationOptions.platformType,
                 generationOptions.customPrompt,
                 generationOptions.acceptanceCriteria,
-                provider
+                provider,
+                generationOptions.jiraStoryId
             ) as GenerateApiResponse;
 
             if (data.meta?.message) {
@@ -834,13 +837,29 @@ export function MainApp() {
 
                                         {resultTab === 'scripts' && (
                                             <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                                                <p className="text-slate-500 text-xs">Generate scripts from the Test Cases tab.</p>
+                                                {scriptCode ? (
+                                                    <div className="space-y-3">
+                                                        <p className="text-slate-500 text-xs">Generated script for the current workspace.</p>
+                                                        <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-xs text-slate-700 border border-slate-200 overflow-auto max-h-[420px]">{scriptCode}</pre>
+                                                        {scriptFileName && <p className="text-xs text-slate-500">Filename: {scriptFileName}</p>}
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        <p className="text-slate-500 text-sm">No generated script available yet.</p>
+                                                        <p className="text-slate-500 text-xs">Open the Automation Workspace and generate a script from the current test cases.</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
                                         {resultTab === 'logs' && (
                                             <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                                                {currentThread.error ? (
+                                                {executionLogs.length > 0 ? (
+                                                    <div className="space-y-3">
+                                                        <p className="text-slate-500 text-xs">Execution logs from the last automation run.</p>
+                                                        <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-950 p-3 text-xs text-emerald-200 border border-slate-800 overflow-auto max-h-[420px]">{executionLogs.join("\n")}</pre>
+                                                    </div>
+                                                ) : currentThread.error ? (
                                                     <div className="space-y-3">
                                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                                             <p className="text-sm text-slate-600">Generation failed. Retry uses the same prompt, model mode, platform, Jira ID, and advanced options.</p>
@@ -856,7 +875,7 @@ export function MainApp() {
                                                         <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-xs text-slate-700 border border-slate-200 overflow-auto max-h-96">{currentThread.error}</pre>
                                                     </div>
                                                 ) : (
-                                                    <p className="text-slate-500 text-sm">No errors were captured.</p>
+                                                    <p className="text-slate-500 text-sm">No execution logs yet. Run automation to capture logs here.</p>
                                                 )}
                                             </div>
                                         )}

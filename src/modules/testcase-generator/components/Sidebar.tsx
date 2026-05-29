@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, MessageSquare, Settings, Brain, Zap, FileText, Clock, History } from "lucide-react";
+import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, MessageSquare, Settings, Brain, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HistoryItem, SuiteKey, SuiteExecution } from "../types";
 import { AutomationSidebarContent } from "./AutomationSidebarContent";
@@ -9,9 +9,9 @@ import { AutomationSidebarContent } from "./AutomationSidebarContent";
 interface SidebarProps {
     history: HistoryItem[];
     activeId: string | null;
-    activePanel: 'chat' | 'automation' | 'jira' | 'rag' | 'reports' | 'history';
+    activePanel: 'chat' | 'automation' | 'jira' | 'rag';
     onSelect: (id: string) => void;
-    onChangePanel: (panel: 'chat' | 'automation' | 'jira' | 'rag' | 'reports' | 'history') => void;
+    onChangePanel: (panel: 'chat' | 'automation' | 'jira' | 'rag') => void;
     onNewChat: () => void;
     isOpen: boolean;
     toggleSidebar: () => void;
@@ -84,8 +84,6 @@ export function Sidebar({
         { id: 'automation', label: 'Automation Workspace', icon: Zap },
         { id: 'jira', label: 'Jira Settings', icon: Settings },
         { id: 'rag', label: 'DeepMind RAG', icon: Brain },
-        { id: 'reports', label: 'Reports', icon: FileText },
-        { id: 'history', label: 'Execution History', icon: History },
     ];
 
     return (
@@ -192,21 +190,6 @@ export function Sidebar({
                     />
                 )}
 
-                {activePanel === 'reports' && (
-                    <div className="px-3 py-4 text-xs text-slate-500">
-                        <p className="font-semibold text-slate-700 mb-2">Automation Reports</p>
-                        {reportUrl ? (
-                            <a href={reportUrl} target="_blank" rel="noreferrer"
-                                className="flex items-center gap-2 rounded-lg bg-slate-800 text-white px-3 py-2 text-[11px] font-semibold hover:bg-slate-700 transition">
-                                <FileText className="w-3 h-3" />
-                                Latest Report
-                            </a>
-                        ) : (
-                            <p className="text-slate-400">No reports yet. Run automation to generate one.</p>
-                        )}
-                    </div>
-                )}
-
                 {activePanel === 'jira' && (
                     <div className="px-3 py-4 text-xs text-slate-500">
                         <p className="font-semibold text-slate-700 mb-2">Jira Integration</p>
@@ -231,34 +214,6 @@ export function Sidebar({
                     </div>
                 )}
 
-                {activePanel === 'history' && (
-                    <div className="px-3 py-4 text-xs text-slate-500">
-                        <p className="font-semibold text-slate-700 mb-2">Execution History</p>
-                        {history.filter(s => s.automation && Object.values(s.automation).some(a => a.status !== 'idle')).length === 0 ? (
-                            <p className="text-slate-400">No execution history yet.</p>
-                        ) : (
-                            history.filter(s => s.automation && Object.values(s.automation).some(a => a.status !== 'idle')).map(s => (
-                                <button key={s.id} onClick={() => { onSelect(s.id); onChangePanel('chat'); }}
-                                    className="w-full text-left rounded-lg p-2 hover:bg-slate-100 transition mb-1">
-                                    <div className="flex items-center gap-2">
-                                        <Clock className="w-3 h-3 text-slate-400" />
-                                        <span className="text-xs font-medium text-slate-700 truncate">{s.title || s.prompt}</span>
-                                    </div>
-                                    <div className="flex gap-1.5 mt-1">
-                                        {Object.entries(s.automation || {}).map(([key, val]) => (
-                                            <span key={key} className={cn(
-                                                "text-[9px] uppercase font-bold rounded-full px-1.5 py-0.5",
-                                                val.status === 'completed' ? "bg-emerald-100 text-emerald-700" :
-                                                val.status === 'failed' ? "bg-red-100 text-red-700" :
-                                                'bg-slate-100 text-slate-400'
-                                            )}>{key}</span>
-                                        ))}
-                                    </div>
-                                </button>
-                            ))
-                        )}
-                    </div>
-                )}
             </div>
         </div>
     );

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { OllamaService } from "@/src/services/ai/ollama.service";
 import { promptBuilder, TestType, PlatformType } from "@/src/services/ai/prompt-builder";
 import { responseParser } from "@/src/services/ai/response-parser";
+import { resolveTestCasePrompt } from "@/src/orchestrators/testcase-orchestrator";
 
 const MODEL_CONFIG: Record<string, { num_predict: number; temperature: number; top_p: number }> = {
     "phi3:mini":          { num_predict: 3000, temperature: 0.2,  top_p: 0.9  },
@@ -85,8 +86,11 @@ export async function POST(req: Request) {
             platformType = "web",
             customPrompt,
             acceptanceCriteria,
-            jiraStoryId,
+            jiraStoryId: requestJiraStoryId,
         } = await req.json();
+
+        const resolvedPrompt = await resolveTestCasePrompt(prompt);
+        const resolvedJiraStoryId = requestJiraStoryId || resolvedPrompt.jiraStoryId || null;
 
         // 1. Resolve Model and Config
         let selectedModel = model || "mistral:7b";
@@ -95,14 +99,14 @@ export async function POST(req: Request) {
         }
         const modelConfig = getModelConfig(selectedModel);
 
-        console.log(`[GENERATE] Provider: ${provider}, Model: ${selectedModel}`);
+        console.log(`[GENERATE] Provider: ${provider}, Model: ${selectedModel}, Jira: ${resolvedJiraStoryId || 'none'}`);
 
         const isAutomationMode = platformType === 'automation';
 
         const fullPrompt = isAutomationMode
-            ? promptBuilder.buildAutomationPrompt(prompt, customPrompt, acceptanceCriteria)
+            ? promptBuilder.buildAutomationPrompt(resolvedPrompt.prompt, customPrompt, acceptanceCriteria)
             : promptBuilder.buildPrompt(
-                prompt,
+                resolvedPrompt.prompt,
                 type as TestType,
                 platformType as PlatformType,
                 customPrompt,
@@ -165,8 +169,8 @@ export async function POST(req: Request) {
             );
         }
 
-        const jiraId = jiraStoryId || null;
-        const projectKey = jiraId ? jiraId.split('-')[0] : 'TCGB';
+        const jiraId = resolvedJiraStoryId;
+        const projectKey = jiraId ? jiraId.split('-')[0] : resolvedPrompt.projectKey || 'TCGB';
 
         const sanitized = {
             testCases: (parsedData.testCases || [])
@@ -212,6 +216,7 @@ export async function POST(req: Request) {
                 count: sanitized.testCases.length,
                 type: isAutomationMode ? 'automation' : type,
                 platformType,
+                jiraStoryId: jiraId,
                 message: isAutomationMode
                     ? `Automation Workflow: ${sanitized.testCases.length} automation-ready test cases`
                     : undefined,
