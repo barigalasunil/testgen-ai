@@ -1,23 +1,25 @@
 export async function generateTestCases(
-    prompt: string, 
-    model: string, 
-    type: string = "functional", 
+    prompt: string,
+    model: string,
+    type: string = "functional",
     platformType: string = "web",
     customPrompt?: string,
     acceptanceCriteria?: string,
-    provider: string = "local"
+    provider: string = "local",
+    jiraStoryId?: string
 ) {
     const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-            prompt, 
-            model, 
-            type, 
+            prompt,
+            model,
+            type,
             platformType,
             customPrompt,
             acceptanceCriteria,
-            provider
+            provider,
+            jiraStoryId,
         }),
     });
     return await res.json();

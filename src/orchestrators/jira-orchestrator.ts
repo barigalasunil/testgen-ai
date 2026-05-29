@@ -12,10 +12,14 @@ export interface JiraStoryContext {
 
 export function extractJiraId(input: string): string | null {
     const trimmed = input.trim();
-    const urlMatch = trimmed.match(/\/browse\/([A-Z]+-\d+)/i);
-    if (urlMatch) return urlMatch[1];
-    const idMatch = trimmed.match(/\b([A-Z]+-\d+)\b/i);
-    if (idMatch) return idMatch[0];
+    const urlMatch = trimmed.match(/\/browse\/([A-Z][A-Z0-9]+-\d+)/i);
+    if (urlMatch) return urlMatch[1].toUpperCase();
+
+    const queryMatch = trimmed.match(/(?:[?&](?:selectedIssue|issue|key)=)([A-Z][A-Z0-9]+-\d+)/i);
+    if (queryMatch) return queryMatch[1].toUpperCase();
+
+    const idMatch = trimmed.match(/\b([A-Z][A-Z0-9]+-\d+)\b/);
+    if (idMatch) return idMatch[1].toUpperCase();
     return null;
 }
 
