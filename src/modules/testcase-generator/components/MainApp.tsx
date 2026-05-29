@@ -1,21 +1,18 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Settings } from "lucide-react";
+import { motion } from "framer-motion";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
 import { InputBox } from "./InputBox";
 import JiraModal from "./JiraModal";
+import { RagPanel } from "./RagPanel";
+import { JiraPanel } from "./JiraPanel";
 import { generateTestCases, fetchModels } from "../services";
 import { AiGenerationMeta, AiGenerationOptions, HistoryItem, SuiteKey, TestCase } from "../types";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
-import {
-    saveJiraCredentials,
-    loadJiraCredentials,
-    testConnection,
-} from "@/src/services/jira/jira.service";
 import { getSavedModel, saveModel, getSavedProvider, saveProvider } from "@/src/services/ai/ai-config.service";
 
 type AutomationRunResponse = {
@@ -89,8 +86,7 @@ export function MainApp() {
     const [sessions, setSessions] = useState<HistoryItem[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [activePanel, setActivePanel] = useState<'chat' | 'automation' | 'jira' | 'rag'>('chat');
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [activePanel, setActivePanel] = useState<'automation' | 'jira' | 'rag'>('automation');
     const [generatingPrompt, setGeneratingPrompt] = useState("");
     const [generationModelStatus, setGenerationModelStatus] = useState("Using: Auto");
     const [resultTab, setResultTab] = useState<'testCases' | 'scripts' | 'logs'>('testCases');
@@ -119,17 +115,6 @@ export function MainApp() {
     // Jira modal states
     const [jiraModalOpen, setJiraModalOpen] = useState(false);
     const [jiraTargetCase, setJiraTargetCase] = useState<TestCase | null>(null);
-
-    // Jira settings states
-    const [jiraFields, setJiraFields] = useState({
-        baseUrl: '',
-        email: '',
-        apiToken: '',
-        projectKey: 'TCGB',
-    });
-    const [jiraConnStatus, setJiraConnStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
-    const [jiraConnMsg, setJiraConnMsg] = useState('');
-    const [jiraConnTesting, setJiraConnTesting] = useState(false);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -163,10 +148,6 @@ export function MainApp() {
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('focus', handleFocus);
 
-        // Load saved Jira credentials
-        const savedCreds = loadJiraCredentials();
-        if (savedCreds) setJiraFields(savedCreds);
-
         fetchModels()
             .then(data => {
                 if (data.models && data.models.length > 0) {
@@ -186,10 +167,6 @@ export function MainApp() {
 
     useEffect(() => {
         const loadInitial = async () => {
-            // Load saved Jira credentials
-            const savedCreds = loadJiraCredentials();
-            if (savedCreds) setJiraFields(savedCreds);
-
             const activeProvider = getSavedProvider();
             setProvider(activeProvider);
 
@@ -472,32 +449,6 @@ export function MainApp() {
         setJiraModalOpen(true);
     };
 
-    const handleTestJiraConnection = async () => {
-        setJiraConnTesting(true);
-        setJiraConnStatus('idle');
-        try {
-            const result = await testConnection(jiraFields);
-            if (result.success) {
-                setJiraConnStatus('ok');
-                setJiraConnMsg(`✓ Connected as ${result.displayName}`);
-            } else {
-                setJiraConnStatus('fail');
-                setJiraConnMsg(`✕ ${result.error}`);
-            }
-        } catch {
-            setJiraConnStatus('fail');
-            setJiraConnMsg(`✕ Connection failed`);
-        } finally {
-            setJiraConnTesting(false);
-        }
-    };
-
-    const handleSaveJiraCredentials = () => {
-        saveJiraCredentials(jiraFields);
-        setIsSettingsOpen(false);
-        setJiraConnStatus('idle');
-    };
-
     const handleGenerateScript = async () => {
         const testCases = currentThread?.result?.testCases;
         if (!testCases?.length) return;
@@ -675,7 +626,6 @@ export function MainApp() {
                 onNewChat={handleNewChat}
                 isOpen={isSidebarOpen}
                 toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-                onOpenSettings={() => setIsSettingsOpen(true)}
                 loading={loading}
                 onRename={handleRename}
                 onDelete={handleDelete}
@@ -777,8 +727,8 @@ export function MainApp() {
                 {/* Body */}
                 <div className="flex flex-1 min-h-0 overflow-hidden">
 
-                    {/* Chat area */}
-                    <div className="flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden">
+                    {/* Automation area */}
+                    <div className={cn("flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden", activePanel !== 'automation' && 'hidden')}>
                         <section className="flex-1 min-h-0 overflow-y-auto px-4 py-4 lg:px-6">
                             <div className="mx-auto flex max-w-6xl flex-col gap-4 pb-6">
                                 {currentThread?.prompt ? (
@@ -915,6 +865,16 @@ export function MainApp() {
                         </div>
                     </div>
 
+                    {activePanel === 'jira' && (
+                        <div className="flex-1 min-h-0 overflow-hidden">
+                            <JiraPanel />
+                        </div>
+                    )}
+                    {activePanel === 'rag' && (
+                        <div className="flex-1 min-h-0 overflow-hidden">
+                            <RagPanel />
+                        </div>
+                    )}
                 </div>
             </main>
 
@@ -926,73 +886,6 @@ export function MainApp() {
                 requirementId={currentThread?.aiOptions?.jiraStoryId || undefined}
             />
 
-            {/* Settings Modal */}
-            <AnimatePresence>
-                {isSettingsOpen && (
-                    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md overflow-hidden"
-                        >
-                            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                                <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                                    <Settings className="w-4 h-4" /> Jira Integration Settings
-                                </h2>
-                                <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-gray-900">
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            <div className="p-5 flex flex-col gap-4">
-                                {[
-                                    { label: "Jira Base URL", key: "baseUrl", type: "text", placeholder: "https://yourcompany.atlassian.net" },
-                                    { label: "Email", key: "email", type: "text", placeholder: "name@company.com" },
-                                    { label: "API Token", key: "apiToken", type: "password", placeholder: "••••••••••••••••" },
-                                    { label: "Project Key", key: "projectKey", type: "text", placeholder: "TCGB" },
-                                ].map(field => (
-                                    <div key={field.key}>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-                                        <input
-                                            type={field.type}
-                                            placeholder={field.placeholder}
-                                            value={jiraFields[field.key as keyof typeof jiraFields]}
-                                            onChange={e => setJiraFields(prev => ({ ...prev, [field.key]: e.target.value }))}
-                                            className="w-full border border-gray-300 rounded-md p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#10A37F]/50"
-                                        />
-                                    </div>
-                                ))}
-
-                                {jiraConnStatus !== 'idle' && (
-                                    <div className={cn(
-                                        'rounded-md px-3 py-2 text-sm font-medium',
-                                        jiraConnStatus === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
-                                    )}>
-                                        {jiraConnMsg}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="p-4 border-t border-gray-200 flex justify-between items-center">
-                                <button
-                                    onClick={handleTestJiraConnection}
-                                    disabled={jiraConnTesting}
-                                    className="border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-                                >
-                                    {jiraConnTesting ? 'Testing...' : 'Test Connection'}
-                                </button>
-                                <button
-                                    onClick={handleSaveJiraCredentials}
-                                    className="bg-[#10A37F] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-600 transition-colors"
-                                >
-                                    Save Credentials
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
         </div>
     );
 }
