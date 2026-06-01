@@ -166,24 +166,3 @@ export function TestCasesView({
         </div>
     );
 }
-```
-
-Wait, I need to re-read the file to get the exact content properly. Let me be more careful with the TestCasesView - I should extract only the main content area.
-
-Actually, looking at the MainApp.tsx, I can see the main content area (chat + input). Let me fix the TestCasesView to be more complete. Let me also check what the InputBox props look like.
-
-Looking at MainApp, I see:
-- `resultTab` state
-- `platformType` state
-- `textareaRef`
-- `messagesEndRef`
-- `progressLabel` 
-- `generationModelStatus`
-- `generatingPrompt`
-- `currentThread`
-
-The TestCasesView needs these. Also I need to check the InputBox interface.
-```tool
-TOOL_NAME: read_file
-BEGIN_ARG: filepath
-src/modules/testcase-generator/components/InputBox.tsx

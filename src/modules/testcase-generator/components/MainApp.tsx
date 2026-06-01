@@ -229,6 +229,11 @@ export function MainApp() {
     }, [activeSessionId, activeSession]);
 
     useEffect(() => {
+        setScriptCode(activeSession?.generatedScript ?? null);
+        setScriptFileName(activeSession?.scriptFileName ?? null);
+    }, [activeSession?.generatedScript, activeSession?.scriptFileName]);
+
+    useEffect(() => {
         const loadStatus = async () => {
             setProviderStatus('connecting');
             try {
@@ -303,6 +308,8 @@ export function MainApp() {
                     requestedModel: generationOptions.model,
                     message: generationOptions.model === AUTO_MODEL ? "Using: Auto (local fallback enabled)" : `Using: ${generationOptions.model}`,
                 },
+                generatedScript: undefined,
+                scriptFileName: undefined,
                 automation: {
                     smoke: { status: 'idle' },
                     sanity: { status: 'idle' },
@@ -321,6 +328,8 @@ export function MainApp() {
                         platform: generationOptions.platformType,
                         result: null,
                         error: null,
+                        generatedScript: undefined,
+                        scriptFileName: undefined,
                         aiOptions: generationOptions,
                         aiMeta: {
                             requestedModel: generationOptions.model,
@@ -401,6 +410,8 @@ export function MainApp() {
             platform: 'web',
             result: null,
             error: null,
+            generatedScript: undefined,
+            scriptFileName: undefined,
             automation: {
                 smoke: { status: 'idle' },
                 sanity: { status: 'idle' },
@@ -411,6 +422,7 @@ export function MainApp() {
             updatedAt: new Date().toISOString(),
         }, ...prev]);
         setActiveId(id);
+        setActivePanel('automation');
         setValue("");
         if (window.innerWidth < 768) setIsSidebarOpen(false);
     };
@@ -451,7 +463,7 @@ export function MainApp() {
 
     const handleGenerateScript = async () => {
         const testCases = currentThread?.result?.testCases;
-        if (!testCases?.length) return;
+        if (!testCases?.length || !activeId) return;
         const storyId = currentThread?.aiOptions?.jiraStoryId || '';
         setIsGeneratingScript(true);
         try {
@@ -466,8 +478,15 @@ export function MainApp() {
             });
             const payload = await response.json();
             if (!response.ok || payload.error) throw new Error(payload.message || 'Script generation failed');
-            setScriptCode(payload.code || '');
-            setScriptFileName(payload.fileName || 'generated.spec.ts');
+            const generatedCode = payload.code || '';
+            const generatedFileName = payload.fileName || 'generated.spec.ts';
+            setScriptCode(generatedCode);
+            setScriptFileName(generatedFileName);
+            setSessions(prev => prev.map(s =>
+                s.id === activeId
+                    ? { ...s, generatedScript: generatedCode, scriptFileName: generatedFileName, updatedAt: new Date().toISOString() }
+                    : s
+            ));
         } catch (error) {
             console.error('Script generation failed:', error);
         } finally {
@@ -781,6 +800,11 @@ export function MainApp() {
                                                 platformType={currentThread.platform}
                                                 onCopy={copyTableData}
                                                 onRegenerate={() => handleSend(currentThread.prompt, currentThread.aiOptions)}
+                                                onGenerateScript={handleGenerateScript}
+                                                onRunAutomation={handleRunGeneratedScript}
+                                                hasGeneratedScript={!!scriptCode}
+                                                isGeneratingScript={isGeneratingScript}
+                                                isRunningAutomation={isRunningAutomation}
                                                 onOpenJira={handleOpenJira}
                                             />
                                         )}

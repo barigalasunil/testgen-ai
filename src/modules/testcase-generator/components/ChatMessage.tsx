@@ -22,6 +22,11 @@ interface ChatMessageProps {
     platformType?: "web" | "mobile" | "api" | "automation";
     onCopy?: () => void;
     onRegenerate?: () => void;
+    onGenerateScript?: () => void;
+    onRunAutomation?: () => void;
+    hasGeneratedScript?: boolean;
+    isGeneratingScript?: boolean;
+    isRunningAutomation?: boolean;
     onOpenJira?: (testCase: TestCase) => void;
     isLoading?: boolean;
 }
@@ -35,6 +40,11 @@ export function ChatMessage({
     platformType,
     onCopy, 
     onRegenerate, 
+    onGenerateScript,
+    onRunAutomation,
+    hasGeneratedScript,
+    isGeneratingScript,
+    isRunningAutomation,
     isLoading,
     onOpenJira,
 }: ChatMessageProps) {
@@ -68,6 +78,11 @@ export function ChatMessage({
                                 platformType={platformType}
                                 onCopy={onCopy || (() => {})} 
                                 onRegenerate={onRegenerate || (() => {})}
+                                onGenerateScript={onGenerateScript}
+                                onRunAutomation={onRunAutomation}
+                                hasGeneratedScript={hasGeneratedScript}
+                                isGeneratingScript={isGeneratingScript}
+                                isRunningAutomation={isRunningAutomation}
                                 onOpenJira={onOpenJira}
                             />
                         ) : (

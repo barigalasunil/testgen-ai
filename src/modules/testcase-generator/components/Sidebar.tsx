@@ -83,6 +83,12 @@ export function Sidebar({
         { id: 'rag', label: 'DeepMind RAG', icon: Brain },
     ];
 
+    const automationState = automation ?? {
+        smoke: { status: 'idle' },
+        sanity: { status: 'idle' },
+        regression: { status: 'idle' },
+    };
+
     return (
         <div className={cn(
             "fixed md:static inset-y-0 left-0 z-40 bg-[#f9f9f9] border-r border-gray-200 w-[240px] flex flex-col transition-transform duration-300 ease-in-out shrink-0",
@@ -163,6 +169,27 @@ export function Sidebar({
                         </button>
                     ))}
                 </div>
+
+                {activePanel === 'automation' && (
+                    <AutomationSidebarContent
+                        automation={automationState}
+                        onExecuteSuite={onExecuteSuite}
+                        scriptCode={scriptCode}
+                        hasTestCases={hasTestCases}
+                        onGenerateScript={onGenerateScript}
+                        onRunAutomation={onRunAutomation}
+                        isGeneratingScript={isGeneratingScript}
+                        isRunningAutomation={isRunningAutomation}
+                        executionLogs={executionLogs}
+                        executionSummary={executionSummary}
+                        passedTests={passedTests}
+                        failedTests={failedTests}
+                        headed={headed}
+                        onHeadedChange={onHeadedChange}
+                        reportUrl={reportUrl}
+                        platformType={platformType}
+                    />
+                )}
             </div>
         </div>
     );

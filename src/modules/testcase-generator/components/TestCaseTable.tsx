@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { 
     AlertCircle, CheckCircle2, Copy, ExternalLink, FileText,
-    Bug, FileSpreadsheet, FileJson, Tag, RefreshCw, ThumbsUp, Link
+    Bug, FileSpreadsheet, FileJson, Tag, RefreshCw, ThumbsUp, Link,
+    ShieldCheck, Play
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TestCase } from "../types";
@@ -25,6 +26,11 @@ interface TestCaseTableProps {
     platformType?: 'web' | 'mobile' | 'api' | 'automation';
     onCopy: () => void;
     onRegenerate: () => void;
+    onGenerateScript?: () => void;
+    onRunAutomation?: () => void;
+    hasGeneratedScript?: boolean;
+    isGeneratingScript?: boolean;
+    isRunningAutomation?: boolean;
     onScriptGenerated?: (code: string, fileName: string) => void;
     onOpenJira?: (testCase: TestCase) => void;
 }
@@ -35,6 +41,11 @@ export function TestCaseTable({
     platformType,
     onCopy,
     onRegenerate,
+    onGenerateScript,
+    onRunAutomation,
+    hasGeneratedScript,
+    isGeneratingScript,
+    isRunningAutomation,
     onOpenJira,
 }: TestCaseTableProps) {
     const [liked, setLiked] = useState(false);
@@ -347,6 +358,36 @@ export function TestCaseTable({
                     >
                         <Copy className="w-3.5 h-3.5" /> Copy
                     </button>
+                    {onGenerateScript && (
+                        <button
+                            onClick={onGenerateScript}
+                            disabled={isGeneratingScript}
+                            className={cn(
+                                'flex items-center gap-1.5 text-xs rounded-2xl px-3 py-2 transition-all font-medium shadow-sm',
+                                isGeneratingScript
+                                    ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'bg-violet-600 border border-violet-600 text-white hover:bg-violet-700'
+                            )}
+                        >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            {isGeneratingScript ? 'Generating...' : 'Generate Script'}
+                        </button>
+                    )}
+                    {onRunAutomation && (
+                        <button
+                            onClick={onRunAutomation}
+                            disabled={!hasGeneratedScript || isRunningAutomation}
+                            className={cn(
+                                'flex items-center gap-1.5 text-xs rounded-2xl px-3 py-2 transition-all font-medium shadow-sm',
+                                !hasGeneratedScript || isRunningAutomation
+                                    ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'bg-amber-500 border border-amber-500 text-white hover:bg-amber-600'
+                            )}
+                        >
+                            <Play className="w-3.5 h-3.5" />
+                            {isRunningAutomation ? 'Running...' : 'Run Automation'}
+                        </button>
+                    )}
                     <button onClick={onRegenerate}
                         className="flex items-center justify-center bg-white border border-gray-200 hover:bg-gray-50 w-9 h-9 rounded-2xl transition-colors text-gray-700 shadow-sm">
                         <RefreshCw className="w-3.5 h-3.5" />

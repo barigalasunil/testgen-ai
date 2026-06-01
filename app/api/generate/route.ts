@@ -124,14 +124,25 @@ export async function POST(req: Request) {
                 rawResponse = await ollama.generateWithOpenRouter(fullPrompt, model !== 'auto' ? model : undefined);
             } else if (provider === 'local') {
                 console.log('[GENERATE] Routing to Ollama (LOCAL)');
-                const response = await ollama.generate({
-                    model: selectedModel,
-                    prompt: fullPrompt,
-                    format: "json",
-                    stream: false,
-                    options: modelConfig,
-                });
-                rawResponse = response.response;
+                try {
+                    const response = await ollama.generate({
+                        model: selectedModel,
+                        prompt: fullPrompt,
+                        format: "json",
+                        stream: false,
+                        options: modelConfig,
+                    });
+                    rawResponse = response.response;
+                } catch (error: any) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    console.warn('[GENERATE] Local Ollama failed:', message);
+                    if (process.env.OPENROUTER_API_KEY) {
+                        console.log('[GENERATE] Falling back to OpenRouter because local provider failed');
+                        rawResponse = await ollama.generateWithOpenRouter(fullPrompt, model !== 'auto' ? model : undefined);
+                    } else {
+                        throw error;
+                    }
+                }
             } else {
                 // AUTO mode or Fallback
                 try {
