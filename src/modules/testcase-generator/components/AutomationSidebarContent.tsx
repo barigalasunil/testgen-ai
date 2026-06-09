@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Copy, Download, FileText, Play, ShieldCheck, TerminalSquare } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock3, Copy, Download, FileText, Play, ShieldCheck, TerminalSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SuiteExecution, SuiteKey } from '../types';
 
@@ -30,6 +30,44 @@ function formatDuration(ms?: number) {
     return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
+const suites: { key: SuiteKey; name: string; description: string; cta: string }[] = [
+    {
+        key: 'smoke',
+        name: 'Smoke Suite',
+        description: 'Run critical high-priority validation tests.',
+        cta: 'Run Smoke',
+    },
+    {
+        key: 'sanity',
+        name: 'Sanity Suite',
+        description: 'Run key functional validation tests.',
+        cta: 'Run Sanity',
+    },
+    {
+        key: 'regression',
+        name: 'Regression Suite',
+        description: 'Run full regression validation suite.',
+        cta: 'Run Regression',
+    },
+];
+
+function formatTimestamp(timestamp?: string) {
+    if (!timestamp) return 'Never run';
+    return new Date(timestamp).toLocaleString();
+}
+
+function formatSuiteStatus(status: SuiteExecution['status']) {
+    if (status === 'completed') return 'Passed';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function suiteStatusClass(status: SuiteExecution['status']) {
+    if (status === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (status === 'failed') return 'bg-red-50 text-red-700 border-red-200';
+    if (status === 'running') return 'bg-blue-50 text-blue-700 border-blue-200';
+    return 'bg-slate-50 text-slate-600 border-slate-200';
+}
+
 function Card({
     title,
     description,
@@ -54,6 +92,8 @@ function Card({
 }
 
 export function AutomationSidebarContent({
+    automation,
+    onExecuteSuite,
     scriptCode,
     hasTestCases,
     onGenerateScript,
@@ -64,6 +104,8 @@ export function AutomationSidebarContent({
     executionSummary,
     passedTests,
     failedTests,
+    headed,
+    onHeadedChange,
     reportUrl,
     onCopyScript,
     onDownloadScript,
@@ -78,6 +120,92 @@ export function AutomationSidebarContent({
                 <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400 font-semibold">Automation</p>
                 <h1 className="mt-1 text-xl font-semibold text-slate-900">Automation Dashboard</h1>
             </div>
+
+            <section className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 className="text-sm font-semibold text-slate-900">Automation Suites</h2>
+                        <p className="mt-1 text-xs text-slate-500">Run smoke, sanity, and regression suites directly.</p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+                        <input
+                            type="checkbox"
+                            checked={headed}
+                            onChange={(event) => onHeadedChange(event.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300"
+                        />
+                        Headed run
+                    </label>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                    {suites.map((suite) => {
+                        const state = automation[suite.key];
+                        const isRunning = state.status === 'running';
+
+                        return (
+                            <article key={suite.key} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex min-h-[92px] flex-col justify-between gap-3">
+                                    <div>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <h3 className="text-sm font-semibold text-slate-900">{suite.name}</h3>
+                                            <span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-semibold', suiteStatusClass(state.status))}>
+                                                {formatSuiteStatus(state.status)}
+                                            </span>
+                                        </div>
+                                        <p className="mt-2 text-xs leading-5 text-slate-500">{suite.description}</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 space-y-2 text-xs text-slate-500">
+                                    <div className="flex items-center gap-2">
+                                        <Clock3 className="h-3.5 w-3.5" />
+                                        <span>Last run: {formatTimestamp(state.lastRunAt)}</span>
+                                    </div>
+                                    {state.durationMs !== undefined && (
+                                        <div>Duration: {formatDuration(state.durationMs)}</div>
+                                    )}
+                                    {state.status === 'failed' && state.message && (
+                                        <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700">{state.message}</div>
+                                    )}
+                                </div>
+
+                                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => onExecuteSuite(suite.key, headed)}
+                                        disabled={isRunning}
+                                        className={cn(
+                                            'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
+                                            isRunning
+                                                ? 'cursor-not-allowed bg-slate-100 text-slate-400'
+                                                : 'bg-slate-900 text-white hover:bg-slate-800'
+                                        )}
+                                    >
+                                        {isRunning ? (
+                                            <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                                        ) : (
+                                            <Play className="h-4 w-4" />
+                                        )}
+                                        {isRunning ? 'Running...' : suite.cta}
+                                    </button>
+                                    {state.reportUrl && (
+                                        <a
+                                            href={state.reportUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                        >
+                                            <FileText className="h-4 w-4" />
+                                            Report
+                                        </a>
+                                    )}
+                                </div>
+                            </article>
+                        );
+                    })}
+                </div>
+            </section>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <Card

@@ -9,7 +9,7 @@ import JiraModal from "./JiraModal";
 import { JiraPanel } from "./JiraPanel";
 import { AutomationSidebarContent } from "./AutomationSidebarContent";
 import { generateTestCases, fetchModels } from "../services";
-import { AiGenerationMeta, AiGenerationOptions, HistoryItem, SuiteKey, TestCase } from "../types";
+import { AiGenerationMeta, AiGenerationOptions, HistoryItem, SuiteExecution, SuiteKey, TestCase } from "../types";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import { getSavedModel, saveModel, getSavedProvider, saveProvider } from "@/src/services/ai/ai-config.service";
 
@@ -80,6 +80,12 @@ const GENERATION_STEPS = [
 
 const AUTO_MODEL = "auto";
 
+const initialAutomationState: Record<SuiteKey, SuiteExecution> = {
+    smoke: { status: 'idle' },
+    sanity: { status: 'idle' },
+    regression: { status: 'idle' },
+};
+
 export function MainApp() {
     const [value, setValue] = useState("");
     const [loading, setLoading] = useState(false);
@@ -111,6 +117,7 @@ export function MainApp() {
     const [headed, setHeaded] = useState(false);
     const [reportUrl, setReportUrl] = useState<string | null>(null);
     const [automationError, setAutomationError] = useState<string | null>(null);
+    const [dashboardAutomation, setDashboardAutomation] = useState<Record<SuiteKey, SuiteExecution>>(initialAutomationState);
 
     // Jira modal states
     const [jiraModalOpen, setJiraModalOpen] = useState(false);
@@ -262,11 +269,7 @@ export function MainApp() {
     // Removed legacy status labels
 
     const currentThread = sessions.find(s => s.id === activeId);
-    const automationState = currentThread?.automation ?? {
-        smoke: { status: 'idle' as const },
-        sanity: { status: 'idle' as const },
-        regression: { status: 'idle' as const },
-    };
+    const automationState = currentThread?.automation ?? dashboardAutomation;
 
     const handleSend = async (overridePrompt?: string, overrideOptions?: Partial<AiGenerationOptions>) => {
         if (loading) return;
@@ -622,13 +625,19 @@ export function MainApp() {
     };
 
     const handleExecuteSuite = async (suite: SuiteKey, headed: boolean = false) => {
-        if (!activeId) return;
+        const targetId = activeId;
         const startedAt = new Date().toISOString();
-        setSessions(prev => prev.map(s =>
-            s.id === activeId
-                ? { ...s, automation: { ...s.automation, [suite]: { ...s.automation[suite], status: 'running', lastRunAt: startedAt } }, updatedAt: startedAt }
-                : s
-        ));
+        const runningState: SuiteExecution = { status: 'running', lastRunAt: startedAt };
+
+        if (targetId) {
+            setSessions(prev => prev.map(s =>
+                s.id === targetId
+                    ? { ...s, automation: { ...s.automation, [suite]: { ...s.automation[suite], ...runningState } }, updatedAt: startedAt }
+                    : s
+            ));
+        } else {
+            setDashboardAutomation(prev => ({ ...prev, [suite]: { ...prev[suite], ...runningState } }));
+        }
 
         try {
             const response = await fetch('/api/automation/run', {
@@ -638,49 +647,62 @@ export function MainApp() {
             });
             const payload = (await response.json()) as AutomationRunResponse;
             const finishedAt = payload.finishedAt || new Date().toISOString();
+            const suiteState: SuiteExecution = {
+                status: response.ok && !payload.error ? payload.status : 'failed',
+                lastRunAt: finishedAt,
+                reportUrl: payload.reportUrl,
+                message: payload.message,
+                durationMs: payload.durationMs,
+                output: payload.output,
+                stderr: payload.stderr,
+            };
 
-            setSessions(prev => prev.map(s =>
-                s.id === activeId
-                    ? {
-                        ...s,
-                        automation: {
-                            ...s.automation,
-                            [suite]: {
-                                status: response.ok && !payload.error ? payload.status : 'failed',
-                                lastRunAt: finishedAt,
-                                reportUrl: payload.reportUrl,
-                                message: payload.message,
-                                durationMs: payload.durationMs,
-                                output: payload.output,
-                                stderr: payload.stderr,
+            if (targetId) {
+                setSessions(prev => prev.map(s =>
+                    s.id === targetId
+                        ? {
+                            ...s,
+                            automation: {
+                                ...s.automation,
+                                [suite]: suiteState,
                             },
-                        },
-                        reports: payload.reportUrl
-                            ? Array.from(new Set([...(s.reports || []), payload.reportUrl]))
-                            : s.reports,
-                        updatedAt: finishedAt,
-                    }
-                    : s
-            ));
+                            reports: payload.reportUrl
+                                ? Array.from(new Set([...(s.reports || []), payload.reportUrl]))
+                                : s.reports,
+                            updatedAt: finishedAt,
+                        }
+                        : s
+                ));
+            } else {
+                setDashboardAutomation(prev => ({ ...prev, [suite]: suiteState }));
+            }
         } catch (error) {
             const finishedAt = new Date().toISOString();
-            setSessions(prev => prev.map(s =>
-                s.id === activeId
-                    ? {
-                        ...s,
-                        automation: {
-                            ...s.automation,
-                            [suite]: {
-                                ...s.automation[suite],
-                                status: 'failed',
-                                lastRunAt: finishedAt,
-                                message: error instanceof Error ? error.message : String(error),
+            const failedState = {
+                status: 'failed' as const,
+                lastRunAt: finishedAt,
+                message: error instanceof Error ? error.message : String(error),
+            };
+
+            if (targetId) {
+                setSessions(prev => prev.map(s =>
+                    s.id === targetId
+                        ? {
+                            ...s,
+                            automation: {
+                                ...s.automation,
+                                [suite]: {
+                                    ...s.automation[suite],
+                                    ...failedState,
+                                },
                             },
-                        },
-                        updatedAt: finishedAt,
-                    }
-                    : s
-            ));
+                            updatedAt: finishedAt,
+                        }
+                        : s
+                ));
+            } else {
+                setDashboardAutomation(prev => ({ ...prev, [suite]: { ...prev[suite], ...failedState } }));
+            }
         }
     };
 

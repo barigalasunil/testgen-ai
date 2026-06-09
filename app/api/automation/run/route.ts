@@ -7,10 +7,10 @@ import os from 'os';
 const VALID_SUITES = ['smoke', 'sanity', 'regression'] as const;
 type SuiteName = (typeof VALID_SUITES)[number];
 
-const SUITE_GREP: Record<SuiteName, string> = {
-    smoke: 'SauceDemo Smoke',
-    sanity: 'SauceDemo Sanity',
-    regression: 'SauceDemo Regression',
+const SUITE_PATHS: Record<SuiteName, string[]> = {
+    smoke: ['tests', 'smoke'],
+    sanity: ['tests', 'sanity'],
+    regression: ['tests', 'regression'],
 };
 
 type PlaywrightRunResult = {
@@ -114,14 +114,18 @@ async function runPlaywrightSuite(suite: SuiteName, headed: boolean): Promise<Pl
     const automationDir = join(rootDir, 'automation');
     const reportDir = join(rootDir, 'public', 'automation-reports', suite);
     const configPath = join(automationDir, 'playwright.config.ts');
+    const suitePath = join(automationDir, ...SUITE_PATHS[suite]);
+
+    if (!existsSync(suitePath)) {
+        throw new Error(`Automation suite path not found: ${suitePath}`);
+    }
 
     return runPlaywright([
         'playwright',
         'test',
+        suitePath,
         '--config',
         configPath,
-        '--grep',
-        SUITE_GREP[suite],
     ], reportDir, headed);
 }
 
