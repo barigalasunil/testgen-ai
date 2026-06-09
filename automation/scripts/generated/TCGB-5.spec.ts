@@ -1,111 +1,41 @@
-import { test, expect } from '@playwright/test';
+{
 
-test('Happy path checkout flow with valid user information and correct order summary', async ({ page }) => {
-  await page.goto('https://www.saucedemo.com/');
-  await page.getByTestId('username').fill('standard_user');
-  await page.getByTestId('password').fill('secret_sauce');
-  await page.getByTestId('login-button').click();
-  await page.locator('.inventory_item').nth(0).locator('button').click();
-  await page.locator('.inventory_item').nth(1).locator('button').click();
-  await page.locator('.shopping_cart_link').click();
-  await page.getByTestId('checkout').click();
-  await page.getByTestId('firstName').fill('John');
-  await page.getByTestId('lastName').fill('Doe');
-  await page.getByTestId('postal-code').fill('12345');
-  await page.getByTestId('continue').click();
-  await expect(page.locator('.inventory_item_name')).toContainText(['Sauce Labs Backpack', 'Sauce Labs Bike Light']);
-  await expect(page.locator('.summary_subtotal_label')).toHaveText('Item total: $50.00');
-  await expect(page.locator('.summary_tax_label')).toHaveText('Tax: $5.00');
-  await expect(page.locator('.summary_total_label')).toHaveText('Total: $55.00');
-  await page.getByTestId('finish').click();
-  await expect(page.locator('.complete-header')).toHaveText('THANK YOU FOR YOUR ORDER');
-});
 
-test('Prevent navigation when First Name is left blank', async ({ page }) => {
-  await page.goto('https://www.saucedemo.com/');
-  await page.getByTestId('username').fill('standard_user');
-  await page.getByTestId('password').fill('secret_sauce');
-  await page.getByTestId('login-button').click();
-  await page.locator('.inventory_item').first().locator('button').click();
-  await page.locator('.shopping_cart_link').click();
-  await page.getByTestId('checkout').click();
-  await page.getByTestId('firstName').fill('');
-  await page.getByTestId('lastName').fill('Doe');
-  await page.getByTestId('postal-code').fill('12345');
-  await page.getByTestId('continue').click();
-  await expect(page.getByTestId('error')).toHaveText(/First Name is required/);
-  await expect(page.getByTestId('firstName')).toBeVisible();
-});
-
-test('Display error for invalid Zip Code format', async ({ page }) => {
-  await page.goto('https://www.saucedemo.com/');
-  await page.getByTestId('username').fill('standard_user');
-  await page.getByTestId('password').fill('secret_sauce');
-  await page.getByTestId('login-button').click();
-  await page.locator('.inventory_item').first().locator('button').click();
-  await page.locator('.shopping_cart_link').click();
-  await page.getByTestId('checkout').click();
-  await page.getByTestId('firstName').fill('John');
-  await page.getByTestId('lastName').fill('Doe');
-  await page.getByTestId('postal-code').fill('12AB');
-  await page.getByTestId('continue').click();
-  await expect(page.getByTestId('error')).toHaveText(/Zip Code must be numeric/);
-});
-
-test('Validate Zip Code length boundary (4 digits should be rejected)', async ({ page }) => {
-  await page.goto('https://www.saucedemo.com/');
-  await page.getByTestId('username').fill('standard_user');
-  await page.getByTestId('password').fill('secret_sauce');
-  await page.getByTestId('login-button').click();
-  await page.locator('.inventory_item').first().locator('button').click();
-  await page.locator('.shopping_cart_link').click();
-  await page.getByTestId('checkout').click();
-  await page.getByTestId('firstName').fill('Jane');
-  await page.getByTestId('lastName').fill('Smith');
-  await page.getByTestId('postal-code').fill('1234');
-  await page.getByTestId('continue').click();
-  await expect(page.getByTestId('error')).toHaveText(/Zip Code must be 5 digits/);
-});
-
-test('Prevent direct URL access to Overview without completing User Info', async ({ page }) => {
-  await page.goto('https://www.saucedemo.com/checkout-step-two.html');
-  await expect(page).toHaveURL(/checkout-step-one/);
-});
-
-test('Preserve entered user information when using browser Back button from Overview', async ({ page }) => {
-  await page.goto('https://www.saucedemo.com/');
-  await page.getByTestId('username').fill('standard_user');
-  await page.getByTestId('password').fill('secret_sauce');
-  await page.getByTestId('login-button').click();
-  await page.locator('.inventory_item').first().locator('button').click();
-  await page.locator('.shopping_cart_link').click();
-  await page.getByTestId('checkout').click();
-  await page.getByTestId('firstName').fill('John');
-  await page.getByTestId('lastName').fill('Doe');
-  await page.getByTestId('postal-code').fill('12345');
-  await page.getByTestId('continue').click();
-  await page.goBack();
-  await expect(page.getByTestId('firstName')).toHaveValue('John');
-  await expect(page.getByTestId('lastName')).toHaveValue('Doe');
-  await expect(page.getByTestId('postal-code')).toHaveValue('12345');
-  await page.getByTestId('continue').click();
-  await expect(page.locator('.summary_total_label')).toBeVisible();
-});
-
-test('Cancel checkout at Overview and verify context is preserved on forward navigation', async ({ page }) => {
-  await page.goto('https://www.saucedemo.com/');
-  await page.getByTestId('username').fill('standard_user');
-  await page.getByTestId('password').fill('secret_sauce');
-  await page.getByTestId('login-button').click();
-  await page.locator('.inventory_item').first().locator('button').click();
-  await page.locator('.shopping_cart_link').click();
-  await page.getByTestId('checkout').click();
-  await page.getByTestId('firstName').fill('John');
-  await page.getByTestId('lastName').fill('Doe');
-  await page.getByTestId('postal-code').fill('12345');
-  await page.getByTestId('continue').click();
-  await page.getByRole('button', { name: 'Cancel' }).click();
-  await page.goForward();
-  await expect(page.locator('.summary_total_label')).toBeVisible();
-  await expect(page.locator('.inventory_item_name')).toContainText(['Sauce Labs Backpack']);
-});
+    "testCases": [
+        {
+            "title": "Happy path checkout flow with valid user information and correct order summary",
+            "steps": "1. Click the \"Checkout\" button on the Cart page.\n2. On the User Info page, enter First Name \"John\".\n3. Enter Last Name \"Doe\".\n4. Enter Zip Code \"12345\".\n5. Click the \"Continue\" button.\n6. On the Overview page, verify that Item A and Item B are listed.\n7. Verify Item Total displays $50.00.\n8. Verify Tax displays $5.00 (10% of $50.00).\n9. Verify Total displays $55.00.\n10. Click the \"Finish\" button.\n11. Verify the Order Confirmation page shows the message \"THANK YOU FOR YOUR ORDER\".",
+            "expectedResult": "User proceeds from Cart to Order Confirmation without errors; product list matches cart items; calculations are correct; confirmation message is displayed."
+        },
+        {
+            "title": "Prevent navigation when First Name is left blank",
+            "steps": "1. Click the \"Checkout\" button on the Cart page.\n2. On the User Info page, leave First Name empty.\n3. Enter Last Name \"Doe\".\n4. Enter Zip Code \"12345\".\n5. Click the \"Continue\" button.",
+            "expectedResult": "The Continue button remains disabled or an error message \"First Name is required\" appears; First Name field is highlighted; user does not navigate to the Overview page."
+        },
+        {
+            "title": "Display error for invalid Zip Code format",
+            "steps": "1. Click the \"Checkout\" button on the Cart page.\n2. On the User Info page, enter First Name \"John\".\n3. Enter Last Name \"Doe\".\n4. Enter Zip Code \"12AB\".\n5. Click the \"Continue\" button.",
+            "expectedResult": "An error message \"Zip Code must be numeric\" is displayed; Zip Code field is highlighted; navigation to Overview is blocked."
+        },
+        {
+            "title": "Validate Zip Code length boundary (4 digits should be rejected)",
+            "steps": "1. Click the \"Checkout\" button on the Cart page.\n2. On the User Info page, enter First Name \"Jane\".\n3. Enter Last Name \"Smith\".\n4. Enter Zip Code \"1234\".\n5. Click the \"Continue\" button.",
+            "expectedResult": "An error message \"Zip Code must be 5 digits\" is displayed; Zip Code field is highlighted; user cannot proceed to Overview."
+        },
+        {
+            "title": "Prevent direct URL access to Overview without completing User Info",
+            "steps": "1. In the browser address bar, navigate directly to the Overview page URL (e.g., https://ecommerce.example.com/checkout-step-two).",
+            "expectedResult": "System redirects the user to the User Info step or shows an access denied message; no JavaScript errors occur."
+        },
+        {
+            "title": "Preserve entered user information when using browser Back button from Overview",
+            "steps": "1. Click the browser Back button.\n2. Verify the User Info page displays First Name \"John\", Last Name \"Doe\", and Zip Code \"12345\".\n3. Click the \"Continue\" button again.\n4. Verify the Overview page loads without errors and shows the correct order summary.",
+            "expectedResult": "All previously entered fields retain their values; navigation back and forward works without script failures; order summary remains accurate."
+        },
+        {
+            "title": "Cancel checkout at Overview and verify context is preserved on forward navigation",
+            "steps": "1. Click the \"Cancel\" button on the Overview page (returns to Cart).\n2. Click the browser Forward button.\n3. Verify the Overview page reappears with the same product list and order summary.\n4. Verify no error messages or script breaks are shown.",
+            "expectedResult": "The Overview page restores correctly with preserved data; no errors are displayed."
+        }
+    ]
+}

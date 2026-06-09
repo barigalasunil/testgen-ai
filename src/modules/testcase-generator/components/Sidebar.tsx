@@ -1,17 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, MessageSquare, Settings, Brain, Zap } from "lucide-react";
+import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HistoryItem, SuiteKey, SuiteExecution } from "../types";
-import { AutomationSidebarContent } from "./AutomationSidebarContent";
 
 interface SidebarProps {
     history: HistoryItem[];
     activeId: string | null;
-    activePanel: 'automation' | 'jira' | 'rag';
+    activePanel: 'testcases' | 'automation' | 'jira';
     onSelect: (id: string) => void;
-    onChangePanel: (panel: 'automation' | 'jira' | 'rag') => void;
+    onChangePanel: (panel: 'automation' | 'jira') => void;
     onNewChat: () => void;
     isOpen: boolean;
     toggleSidebar: () => void;
@@ -34,6 +33,8 @@ interface SidebarProps {
     reportUrl: string | null;
     onGenerateScript: () => void;
     onRunAutomation: () => void;
+    onCopyScript: () => void;
+    onDownloadScript: () => void;
     platformType: string;
 }
 
@@ -49,22 +50,6 @@ export function Sidebar({
     loading,
     onRename,
     onDelete,
-    automation,
-    onExecuteSuite,
-    hasTestCases,
-    scriptCode,
-    isGeneratingScript,
-    isRunningAutomation,
-    executionLogs,
-    executionSummary,
-    passedTests,
-    failedTests,
-    headed,
-    onHeadedChange,
-    reportUrl,
-    onGenerateScript,
-    onRunAutomation,
-    platformType,
 }: SidebarProps) {
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -78,16 +63,9 @@ export function Sidebar({
     };
 
     const navItems = [
-        { id: 'automation', label: 'Automation Workspace', icon: Zap },
+        { id: 'automation', label: 'Automation Dashboard', icon: Zap },
         { id: 'jira', label: 'Jira Settings', icon: Settings },
-        { id: 'rag', label: 'DeepMind RAG', icon: Brain },
     ];
-
-    const automationState = automation ?? {
-        smoke: { status: 'idle' },
-        sanity: { status: 'idle' },
-        regression: { status: 'idle' },
-    };
 
     return (
         <div className={cn(
@@ -156,7 +134,7 @@ export function Sidebar({
                     {navItems.map((item) => (
                         <button
                             key={item.id}
-                            onClick={() => onChangePanel(item.id as any)}
+                            onClick={() => onChangePanel(item.id as 'automation' | 'jira')}
                             className={cn(
                                 "w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-xs font-semibold transition-colors mb-0.5",
                                 activePanel === item.id
@@ -170,26 +148,6 @@ export function Sidebar({
                     ))}
                 </div>
 
-                {activePanel === 'automation' && (
-                    <AutomationSidebarContent
-                        automation={automationState}
-                        onExecuteSuite={onExecuteSuite}
-                        scriptCode={scriptCode}
-                        hasTestCases={hasTestCases}
-                        onGenerateScript={onGenerateScript}
-                        onRunAutomation={onRunAutomation}
-                        isGeneratingScript={isGeneratingScript}
-                        isRunningAutomation={isRunningAutomation}
-                        executionLogs={executionLogs}
-                        executionSummary={executionSummary}
-                        passedTests={passedTests}
-                        failedTests={failedTests}
-                        headed={headed}
-                        onHeadedChange={onHeadedChange}
-                        reportUrl={reportUrl}
-                        platformType={platformType}
-                    />
-                )}
             </div>
         </div>
     );

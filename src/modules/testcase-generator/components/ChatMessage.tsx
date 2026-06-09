@@ -9,8 +9,8 @@ interface TestCaseResult {
     testCases: TestCase[];
 }
 
-function isTestCaseResult(data: any): data is TestCaseResult {
-    return data && typeof data === 'object' && Array.isArray(data.testCases);
+function isTestCaseResult(data: unknown): data is TestCaseResult {
+    return Boolean(data && typeof data === 'object' && Array.isArray((data as { testCases?: unknown }).testCases));
 }
 
 interface ChatMessageProps {
@@ -24,6 +24,8 @@ interface ChatMessageProps {
     onRegenerate?: () => void;
     onGenerateScript?: () => void;
     onRunAutomation?: () => void;
+    onCopyScript?: () => void;
+    onDownloadScript?: () => void;
     hasGeneratedScript?: boolean;
     isGeneratingScript?: boolean;
     isRunningAutomation?: boolean;
@@ -42,6 +44,8 @@ export function ChatMessage({
     onRegenerate, 
     onGenerateScript,
     onRunAutomation,
+    onCopyScript,
+    onDownloadScript,
     hasGeneratedScript,
     isGeneratingScript,
     isRunningAutomation,
@@ -80,6 +84,8 @@ export function ChatMessage({
                                 onRegenerate={onRegenerate || (() => {})}
                                 onGenerateScript={onGenerateScript}
                                 onRunAutomation={onRunAutomation}
+                                onCopyScript={onCopyScript}
+                                onDownloadScript={onDownloadScript}
                                 hasGeneratedScript={hasGeneratedScript}
                                 isGeneratingScript={isGeneratingScript}
                                 isRunningAutomation={isRunningAutomation}

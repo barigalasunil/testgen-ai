@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { spawn } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { join, basename } from 'path';
-import { existsSync, mkdirSync, copyFileSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, copyFileSync, unlinkSync, writeFileSync } from 'fs';
 import os from 'os';
 
 const VALID_SUITES = ['smoke', 'sanity', 'regression'] as const;
@@ -11,6 +11,13 @@ const SUITE_GREP: Record<SuiteName, string> = {
     smoke: 'SauceDemo Smoke',
     sanity: 'SauceDemo Sanity',
     regression: 'SauceDemo Regression',
+};
+
+type PlaywrightRunResult = {
+    success: boolean;
+    output: string;
+    durationMs: number;
+    stderr?: string;
 };
 
 function getReportUrl(suite: SuiteName) {
@@ -28,60 +35,34 @@ function getProjectRoot(): string {
 async function validateEnvironment() {
     const rootDir = getProjectRoot();
     const automationDir = join(rootDir, 'automation');
-    
-    // Check if Playwright is installed
     const isWindows = process.platform === 'win32';
     const cmd = isWindows ? 'npx.cmd' : 'npx';
-    const { execSync } = require('child_process');
-
     try {
         execSync(`${cmd} playwright --version`, { cwd: automationDir });
-    } catch (e) {
-        throw new Error('Playwright is not installed. Please run: npm install @playwright/test');
+    } catch {
+        throw new Error('Playwright is not installed. Run: npm install @playwright/test');
     }
 
-    // Check for browser binaries (Chromium)
     try {
-        // This command returns a non-zero exit code if browsers are missing
-        execSync(`${cmd} playwright test --list --config playwright.config.ts`, { 
+        execSync(`${cmd} playwright test --list --config playwright.config.ts`, {
             cwd: automationDir,
-            env: { ...process.env, PW_REPORT_DIR: os.tmpdir() } 
+            env: { ...process.env, PW_REPORT_DIR: os.tmpdir() },
         });
-    } catch (e) {
-        throw new Error('Playwright browser binaries not installed. Please run: npx playwright install chromium');
+    } catch {
+        throw new Error('Playwright browser binaries are missing. Run: npx playwright install chromium');
     }
 }
 
-async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
+function runPlaywright(args: string[], reportDir: string, headed: boolean): Promise<PlaywrightRunResult> {
     const rootDir = getProjectRoot();
-    const reportDir = join(rootDir, 'public', 'automation-reports', suite);
     const automationDir = join(rootDir, 'automation');
-    const configPath = join(automationDir, 'playwright.config.ts');
-
-    console.log('[AUTOMATION] Suite:', suite, '| Headed:', headed);
 
     if (!existsSync(reportDir)) {
         mkdirSync(reportDir, { recursive: true });
     }
 
-    const grepPattern = SUITE_GREP[suite];
-
-    const args = [
-        'playwright',
-        'test',
-        '--config', configPath,
-        '--grep', grepPattern,
-    ];
-
-    return new Promise<{
-        success: boolean;
-        output: string;
-        durationMs: number;
-        stderr?: string;
-    }>((resolvePromise, reject) => {
+    return new Promise((resolve, reject) => {
         const start = Date.now();
-        const isWindows = process.platform === 'win32';
-
         const child = spawn('npx', args, {
             cwd: automationDir,
             shell: true,
@@ -97,23 +78,15 @@ async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
             },
         });
 
-        if (isWindows) {
-            child.unref();
-        }
-
         let stdout = '';
         let stderr = '';
 
         child.stdout?.on('data', (chunk) => {
-            const text = chunk.toString();
-            stdout += text;
-            console.log('[STDOUT]', text.trim());
+            stdout += chunk.toString();
         });
 
         child.stderr?.on('data', (chunk) => {
-            const text = chunk.toString();
-            stderr += text;
-            console.error('[STDERR]', text.trim());
+            stderr += chunk.toString();
         });
 
         child.on('error', (error) => {
@@ -121,114 +94,104 @@ async function runPlaywrightSuite(suite: SuiteName, headed: boolean) {
         });
 
         const timeoutHandle = setTimeout(() => {
-            console.error('[AUTOMATION] Timeout — killing process');
             child.kill();
         }, 30 * 60 * 1000);
 
         child.on('close', (code) => {
             clearTimeout(timeoutHandle);
-            const durationMs = Date.now() - start;
-            console.log('[AUTOMATION] Exit code:', code, 'Duration:', durationMs, 'ms');
-            resolvePromise({
+            resolve({
                 success: code === 0,
                 output: stdout,
-                durationMs,
                 stderr,
+                durationMs: Date.now() - start,
             });
         });
     });
 }
 
-async function runGeneratedScript(scriptFile: string, headed: boolean, jiraStoryId?: string) {
+async function runPlaywrightSuite(suite: SuiteName, headed: boolean): Promise<PlaywrightRunResult> {
+    const rootDir = getProjectRoot();
+    const automationDir = join(rootDir, 'automation');
+    const reportDir = join(rootDir, 'public', 'automation-reports', suite);
+    const configPath = join(automationDir, 'playwright.config.ts');
+
+    return runPlaywright([
+        'playwright',
+        'test',
+        '--config',
+        configPath,
+        '--grep',
+        SUITE_GREP[suite],
+    ], reportDir, headed);
+}
+
+async function runGeneratedScript(scriptFile: string, headed: boolean, scriptCode?: string): Promise<PlaywrightRunResult> {
     const rootDir = getProjectRoot();
     const automationDir = join(rootDir, 'automation');
     const configPath = join(automationDir, 'playwright.config.ts');
-    const scriptPath = join(automationDir, 'scripts', 'generated', scriptFile);
+    const safeScriptFile = basename(scriptFile);
+    const generatedDir = join(automationDir, 'scripts', 'generated');
+    const scriptPath = join(generatedDir, safeScriptFile);
+    const reportDir = join(rootDir, 'public', 'automation-reports', 'generated');
+
+    if (scriptCode?.trim()) {
+        if (!existsSync(generatedDir)) {
+            mkdirSync(generatedDir, { recursive: true });
+        }
+        writeFileSync(scriptPath, scriptCode, 'utf-8');
+    }
 
     if (!existsSync(scriptPath)) {
         throw new Error(`Generated script not found: ${scriptPath}`);
     }
 
-    console.log('[AUTOMATION] Running generated script:', scriptPath);
-
-    // Ensure report dir exists
-    const reportDir = join(automationDir, '..', 'public', 'automation-reports', 'generated');
-    if (!existsSync(reportDir)) {
-        mkdirSync(reportDir, { recursive: true });
-    }
-
-    // Copy to tests/ directory so Playwright's testDir picks it up
-    const tempTestFile = `_generated_${basename(scriptFile)}`;
+    const tempTestFile = `_generated_${safeScriptFile}`;
     const testDir = join(automationDir, 'tests');
     const tempTestPath = join(testDir, tempTestFile);
     copyFileSync(scriptPath, tempTestPath);
-    console.log('[AUTOMATION] Copied to tests dir:', tempTestPath);
 
-    const cleanup = () => {
-        try { unlinkSync(tempTestPath); } catch {}
-    };
-
-    return new Promise<{
-        success: boolean;
-        output: string;
-        durationMs: number;
-        stderr?: string;
-    }>((resolvePromise, reject) => {
-        const start = Date.now();
-
-        const child = spawn('npx', [
+    try {
+        return await runPlaywright([
             'playwright',
             'test',
             tempTestFile,
-            '--config', configPath,
-        ], {
-            cwd: automationDir,
-            shell: true,
-            stdio: ['pipe', 'pipe', 'pipe'],
-            windowsHide: false,
-            detached: false,
-            env: {
-                ...process.env,
-                FORCE_COLOR: '0',
-                PW_REPORT_DIR: reportDir,
-                PW_HEADED: headed ? 'true' : 'false',
-            },
-        });
+            '--config',
+            configPath,
+        ], reportDir, headed);
+    } finally {
+        try {
+            unlinkSync(tempTestPath);
+        } catch {
+            // Temporary generated spec may already be removed.
+        }
+    }
+}
 
-        let stdout = '';
-        let stderr = '';
+function summarizePlaywrightResult(result: PlaywrightRunResult) {
+    const combinedOutput = `${result.output || ''}\n${result.stderr || ''}`;
+    const passed: string[] = [];
+    const failed: string[] = [];
 
-        child.stdout?.on('data', (chunk) => {
-            const text = chunk.toString();
-            stdout += text;
-        });
+    for (const line of combinedOutput.split('\n')) {
+        const passMatch = line.match(/[✓√].*›\s(.+)/) || line.match(/\b(?:ok|passed)\b.*›\s(.+)/i);
+        const failMatch = line.match(/[✘✕×x].*›\s(.+)/i) || line.match(/\bfailed\b.*›\s(.+)/i);
+        if (passMatch) passed.push(passMatch[1].trim());
+        if (failMatch) failed.push(failMatch[1].trim());
+    }
 
-        child.stderr?.on('data', (chunk) => {
-            const text = chunk.toString();
-            stderr += text;
-        });
+    const totalFromOutput = [...combinedOutput.matchAll(/(\d+)\s+(passed|failed)/gi)]
+        .reduce((total, match) => total + Number(match[1] || 0), 0);
+    const total = passed.length + failed.length || totalFromOutput || (result.success ? 1 : 0);
+    const failedCount = failed.length || (result.success ? 0 : Math.max(totalFromOutput, 1));
+    const passedCount = passed.length || (result.success ? total : 0);
 
-        child.on('error', (error) => {
-            cleanup();
-            reject({ error, durationMs: Date.now() - start, stdout, stderr });
-        });
-
-        const timeoutHandle = setTimeout(() => {
-            child.kill();
-        }, 30 * 60 * 1000);
-
-        child.on('close', (code) => {
-            clearTimeout(timeoutHandle);
-            cleanup();
-            const durationMs = Date.now() - start;
-            resolvePromise({
-                success: code === 0,
-                output: stdout,
-                durationMs,
-                stderr,
-            });
-        });
-    });
+    return {
+        total,
+        passed: passedCount,
+        failed: failedCount,
+        passedTests: passed,
+        failedTests: failed,
+    };
 }
 
 export async function POST(request: Request) {
@@ -237,68 +200,68 @@ export async function POST(request: Request) {
         const type = body?.type as string;
         const suite = body?.suite as string;
         const scriptFile = body?.scriptFile as string;
+        const scriptCode = typeof body?.scriptCode === 'string' ? body.scriptCode : undefined;
         const headed = body?.headed === true;
 
-        // Handle generated script execution with streaming
         if (type === 'generated' && scriptFile) {
             const encoder = new TextEncoder();
             const stream = new ReadableStream({
                 async start(controller) {
-                    const addLog = (msg: string) => {
-                        controller.enqueue(encoder.encode(msg + '\n'));
+                    const addLog = (message: string) => {
+                        controller.enqueue(encoder.encode(`${message}\n`));
                     };
-
                     const addResult = (data: object) => {
-                        controller.enqueue(encoder.encode('__RESULT__:' + JSON.stringify(data) + '\n'));
+                        controller.enqueue(encoder.encode(`__RESULT__:${JSON.stringify(data)}\n`));
                     };
 
-                    addLog('Launching browser...');
-                    addLog(`Script: ${scriptFile}`);
+                    addLog('Launching automation execution...');
+                    addLog(`Script: ${basename(scriptFile)}`);
 
                     try {
+                        await validateEnvironment();
                         addLog('Running generated Playwright script...');
-                        const result = await runGeneratedScript(scriptFile, headed, body?.jiraStoryId);
-
-                        // Parse Playwright output for structured results
-                        const passed: string[] = [];
-                        const failed: string[] = [];
-                        const lines = (result.output || '').split('\n');
-                        for (const line of lines) {
-                            const passMatch = line.match(/✓.*›\s(.+)/);
-                            const failMatch = line.match(/✘.*›\s(.+)/);
-                            if (passMatch) passed.push(passMatch[1].trim());
-                            if (failMatch) failed.push(failMatch[1].trim());
-                        }
+                        const result = await runGeneratedScript(scriptFile, headed, scriptCode);
+                        const summary = summarizePlaywrightResult(result);
+                        const reportUrl = '/automation-reports/generated/index.html';
 
                         addResult({
                             type: 'summary',
-                            total: passed.length + failed.length,
-                            passed: passed.length,
-                            failed: failed.length,
+                            total: summary.total,
+                            passed: summary.passed,
+                            failed: summary.failed,
                             durationMs: result.durationMs,
-                            reportUrl: `/automation-reports/generated/index.html`,
+                            reportUrl,
                         });
 
-                        if (result.success) {
-                            addLog(`✓ All ${passed.length} tests passed in ${(result.durationMs / 1000).toFixed(1)}s`);
-                        } else {
-                            addLog(`✕ ${failed.length} failed, ${passed.length} passed in ${(result.durationMs / 1000).toFixed(1)}s`);
+                        if (summary.passedTests.length > 0) {
+                            addResult({ type: 'passed', tests: summary.passedTests });
+                        }
+                        if (summary.failedTests.length > 0) {
+                            addResult({ type: 'failed', tests: summary.failedTests });
                         }
 
-                        // Send individual test results
-                        if (passed.length > 0) {
-                            addResult({ type: 'passed', tests: passed });
-                        }
-                        if (failed.length > 0) {
-                            addResult({ type: 'failed', tests: failed });
-                        }
+                        addLog(`Passed: ${summary.passed}`);
+                        addLog(`Failed: ${summary.failed}`);
+                        addLog(`Duration: ${(result.durationMs / 1000).toFixed(1)}s`);
+                        addLog(`Report: ${reportUrl}`);
 
-                        // Raw output for debugging
                         if (result.output) {
-                            result.output.split('\n').filter(Boolean).forEach(line => addLog(line));
+                            result.output.split('\n').filter(Boolean).forEach(addLog);
                         }
-                    } catch (error: any) {
-                        addLog(`✕ Execution error: ${error.message || String(error)}`);
+                        if (result.stderr) {
+                            result.stderr.split('\n').filter(Boolean).forEach(addLog);
+                        }
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : String(error);
+                        addLog(`Execution error: ${message}`);
+                        addResult({
+                            type: 'summary',
+                            total: 1,
+                            passed: 0,
+                            failed: 1,
+                            durationMs: 0,
+                            reportUrl: '/automation-reports/generated/index.html',
+                        });
                     } finally {
                         controller.close();
                     }
@@ -331,7 +294,6 @@ export async function POST(request: Request) {
 
         const startedAt = new Date().toISOString();
         const reportUrl = getReportUrl(suite as SuiteName);
-
         const result = await runPlaywrightSuite(suite as SuiteName, headed);
 
         if (!result.success) {
@@ -362,7 +324,6 @@ export async function POST(request: Request) {
             reportUrl,
             message: 'Execution succeeded.',
         });
-
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error('[API ERROR]', msg);

@@ -15,7 +15,7 @@ export async function POST(req: Request) {
         // Logic to identify project key and trigger automation:
         // 1. Identify project key from issue.key
         // 2. Check for specific labels (e.g., 'UAT_TCs')
-        // 3. Trigger background jobs (TC Gen, RAG Ingestion)
+        // 3. Trigger background jobs for test case generation
 
         return NextResponse.json({ success: true, message: 'Webhook received' });
     } catch (error) {

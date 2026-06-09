@@ -28,6 +28,8 @@ interface TestCaseTableProps {
     onRegenerate: () => void;
     onGenerateScript?: () => void;
     onRunAutomation?: () => void;
+    onCopyScript?: () => void;
+    onDownloadScript?: () => void;
     hasGeneratedScript?: boolean;
     isGeneratingScript?: boolean;
     isRunningAutomation?: boolean;
@@ -43,6 +45,8 @@ export function TestCaseTable({
     onRegenerate,
     onGenerateScript,
     onRunAutomation,
+    onCopyScript,
+    onDownloadScript,
     hasGeneratedScript,
     isGeneratingScript,
     isRunningAutomation,
@@ -370,7 +374,25 @@ export function TestCaseTable({
                             )}
                         >
                             <ShieldCheck className="w-3.5 h-3.5" />
-                            {isGeneratingScript ? 'Generating...' : 'Generate Script'}
+                            {isGeneratingScript ? 'Generating...' : 'Generate Playwright Script'}
+                        </button>
+                    )}
+                    {hasGeneratedScript && onCopyScript && (
+                        <button
+                            onClick={onCopyScript}
+                            className="flex items-center gap-1.5 text-xs rounded-2xl px-3 py-2 transition-all font-medium shadow-sm bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                        >
+                            <Copy className="w-3.5 h-3.5" />
+                            Copy Code
+                        </button>
+                    )}
+                    {hasGeneratedScript && onDownloadScript && (
+                        <button
+                            onClick={onDownloadScript}
+                            className="flex items-center gap-1.5 text-xs rounded-2xl px-3 py-2 transition-all font-medium shadow-sm bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                        >
+                            <FileText className="w-3.5 h-3.5" />
+                            Download Script
                         </button>
                     )}
                     {onRunAutomation && (

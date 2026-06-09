@@ -1,7 +1,27 @@
 import { NextResponse } from 'next/server';
 
+type AdfNode = {
+    type: string;
+    version?: number;
+    attrs?: Record<string, unknown>;
+    content?: AdfNode[];
+    text?: string;
+    marks?: { type: string }[];
+};
+
+type JiraIssuePayload = {
+    fields: {
+        project: { key: string };
+        summary: string;
+        issuetype: { name: string };
+        description: AdfNode;
+        labels: string[];
+        priority?: { name: string };
+    };
+};
+
 // ── ADF Builder ─────────────────────────────────────────────────────────────
-function toADF(text: string) {
+function toADF(text: string): AdfNode {
     const t = text?.trim() || '';
 
     // Detect code content anywhere in the text — check body lines after any header
@@ -95,13 +115,13 @@ export async function POST(request: Request) {
         const adfDescription = toADF(description || 'No description provided');
 
         if (storyId) {
-            (adfDescription.content as any[]).push({
+            adfDescription.content?.push({
                 type: 'paragraph',
                 content: [{ type: 'text', text: `Related Story: ${storyId}` }],
             });
         }
 
-        const payload: Record<string, any> = {
+        const payload: JiraIssuePayload = {
             fields: {
                 project: { key: projectKey },
                 summary: finalSummary,
@@ -112,7 +132,7 @@ export async function POST(request: Request) {
         };
 
         if (traceability?.sourceId) {
-            (payload.fields.description.content as any[]).push({
+            payload.fields.description.content?.push({
                 type: 'paragraph',
                 content: [{ type: 'text', text: `Traceability: Source=${traceability.sourceId}${traceability.testCaseId ? ', TestCase=' + traceability.testCaseId : ''}` }],
             });
@@ -179,23 +199,6 @@ export async function POST(request: Request) {
             } catch (linkErr) {
                 console.warn('[JIRA LINK ERROR]', linkErr);
             }
-        }
-
-        // Persist in MySQL for tracking (non-blocking)
-        try {
-            const { MySqlService } = await import('@/src/services/db/mysql.service');
-            await MySqlService.insert('defects', {
-                jira_defect_id: issueKey,
-                linked_test_case_id: traceability?.testCaseId || null,
-                linked_requirement_id: storyId || null,
-                status: 'Open',
-                project_key: projectKey,
-                title: finalSummary,
-                severity: priority,
-                metadata: JSON.stringify({ issueUrl }),
-            });
-        } catch (dbError) {
-            console.error('[DATABASE] Failed to log defect:', dbError);
         }
 
         return NextResponse.json({ success: true, issueKey, issueUrl });

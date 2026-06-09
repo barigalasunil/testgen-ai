@@ -1,12 +1,12 @@
 import { BaseWorker, Job } from './types';
 
 /**
- * Worker to handle Jira ingestion in the background.
+ * Worker to handle Jira story processing in the background.
  */
 export class JiraIngestionWorker extends BaseWorker {
     async process(job: Job<{ jiraStoryId: string, projectKey: string }>) {
         console.log(`[JiraIngestionWorker] Processing job ${job.id} for story ${job.payload.jiraStoryId}`);
-        // Logic to pull from Jira and store in RAG
+        // Logic to pull from Jira and trigger test case generation jobs.
     }
 }
 

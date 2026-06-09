@@ -11,8 +11,7 @@
     "test:automation:smoke": "npx playwright test --config automation/playwright.config.ts automation/tests/smoke",
     "test:automation:sanity": "npx playwright test --config automation/playwright.config.ts automation/tests/sanity",
     "test:automation:regression": "npx playwright test --config automation/playwright.config.ts automation/tests/regression",
-    "playwright:install": "npx playwright install",
-    "db:migrate": "npx tsx src/services/db/migrate.ts"
+    "playwright:install": "npx playwright install"
   },
   "dependencies": {
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -22,7 +21,6 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",
-    "mysql2": "^3.22.3",
     "next": "16.2.4",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",

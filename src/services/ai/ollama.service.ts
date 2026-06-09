@@ -18,6 +18,8 @@ export interface OllamaResponse {
     eval_count?: number;
 }
 
+import { cloudProviderService } from './cloud-provider.service';
+
 // Always use 127.0.0.1 — localhost fails on this Windows setup
 const OLLAMA_BASE = 'http://127.0.0.1:11434';
 
@@ -122,43 +124,8 @@ export class OllamaService {
     }
 
     async generateWithOpenRouter(prompt: string, modelOverride?: string): Promise<string> {
-        const apiKey = process.env.OPENROUTER_API_KEY;
-        const defaultModel = process.env.OPENROUTER_MODEL || 'openrouter/auto';
-        const targetModel = modelOverride || defaultModel;
-
-        if (!apiKey) throw new Error('OPENROUTER_API_KEY not set in .env.local');
-
-        console.log(`[OPENROUTER] Calling model: ${targetModel}`);
-
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'http://localhost:3000',
-                'X-Title': 'TCGen-Buddy QA Platform',
-            },
-            body: JSON.stringify({
-                model: targetModel,
-                messages: [{ role: 'user', content: prompt }],
-                max_tokens: 4000,
-                temperature: 0.2,
-            }),
-            signal: AbortSignal.timeout(60000),
-        });
-
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`OpenRouter error ${res.status}: ${errText}`);
-        }
-
-        const data = await res.json() as {
-            choices: { message: { content: string } }[];
-        };
-
-        const content = data.choices?.[0]?.message?.content?.trim() || '';
-        console.log(`[OPENROUTER] Response length: ${content.length}`);
-        return content;
+        const result = await cloudProviderService.generateWithOpenRouter(prompt, modelOverride);
+        return result.content;
     }
 }
 export const ollamaService = new OllamaService();

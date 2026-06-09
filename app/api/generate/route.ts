@@ -3,6 +3,20 @@ import { OllamaService } from "@/src/services/ai/ollama.service";
 import { promptBuilder, TestType, PlatformType } from "@/src/services/ai/prompt-builder";
 import { responseParser } from "@/src/services/ai/response-parser";
 import { resolveTestCasePrompt } from "@/src/orchestrators/testcase-orchestrator";
+import { cloudProviderService } from "@/src/services/ai/cloud-provider.service";
+import { TestCase } from "@/src/modules/testcase-generator/types";
+
+type ParsedModelTestCase = Partial<Record<keyof TestCase, unknown>>;
+
+function normalizeTestType(value: unknown): TestCase['testType'] {
+    const allowed: TestCase['testType'][] = ['E2E', 'Negative', 'Edge', 'Security', 'Boundary', 'Resilience', 'Persona'];
+    return allowed.includes(value as TestCase['testType']) ? value as TestCase['testType'] : 'E2E';
+}
+
+function normalizePriority(value: unknown): TestCase['priority'] {
+    const allowed: TestCase['priority'][] = ['P1', 'P2', 'P3'];
+    return allowed.includes(value as TestCase['priority']) ? value as TestCase['priority'] : 'P2';
+}
 
 const MODEL_CONFIG: Record<string, { num_predict: number; temperature: number; top_p: number }> = {
     "phi3:mini":          { num_predict: 3000, temperature: 0.2,  top_p: 0.9  },
@@ -118,10 +132,34 @@ export async function POST(req: Request) {
         }
 
         let rawResponse: string;
+        let providerMessage = '';
+        let fallbackUsed = false;
+        let activeProvider: 'OpenRouter' | 'Groq' | 'Ollama' = 'Ollama';
+        let attempts: {
+            model: string;
+            status: 'success' | 'failed' | 'skipped';
+            reason?: string;
+        }[] | undefined;
+
         try {
-            if (provider === 'cloud' && process.env.OPENROUTER_API_KEY) {
-                console.log('[GENERATE] Routing to OpenRouter (CLOUD)');
-                rawResponse = await ollama.generateWithOpenRouter(fullPrompt, model !== 'auto' ? model : undefined);
+            if (provider === 'cloud') {
+                console.log('[GENERATE] Routing to Cloud: OpenRouter primary, Groq fallback');
+                const cloudResult = await cloudProviderService.generateWithFallback(
+                    fullPrompt,
+                    model !== 'auto' ? model : undefined
+                );
+                rawResponse = cloudResult.content;
+                activeProvider = cloudResult.provider;
+                fallbackUsed = cloudResult.fallbackUsed;
+                selectedModel = cloudResult.model;
+                providerMessage = cloudResult.fallbackUsed
+                    ? `CLOUD FALLBACK: Groq (${cloudResult.model})`
+                    : `CLOUD: OpenRouter (${cloudResult.model})`;
+                attempts = cloudResult.attempts.map((attempt) => ({
+                    model: `${attempt.provider}: ${attempt.model}`,
+                    status: attempt.status,
+                    reason: attempt.reason,
+                }));
             } else if (provider === 'local') {
                 console.log('[GENERATE] Routing to Ollama (LOCAL)');
                 try {
@@ -133,18 +171,15 @@ export async function POST(req: Request) {
                         options: modelConfig,
                     });
                     rawResponse = response.response;
-                } catch (error: any) {
+                    activeProvider = 'Ollama';
+                    providerMessage = `LOCAL: Ollama (${selectedModel})`;
+                } catch (error) {
                     const message = error instanceof Error ? error.message : String(error);
                     console.warn('[GENERATE] Local Ollama failed:', message);
-                    if (process.env.OPENROUTER_API_KEY) {
-                        console.log('[GENERATE] Falling back to OpenRouter because local provider failed');
-                        rawResponse = await ollama.generateWithOpenRouter(fullPrompt, model !== 'auto' ? model : undefined);
-                    } else {
-                        throw error;
-                    }
+                    throw error;
                 }
             } else {
-                // AUTO mode or Fallback
+                // AUTO mode: preserve local-first behavior, then cloud cascade.
                 try {
                     console.log('[GENERATE] Auto-Mode: Trying LOCAL first');
                     const response = await ollama.generate({
@@ -155,12 +190,31 @@ export async function POST(req: Request) {
                         options: modelConfig,
                     });
                     rawResponse = response.response;
-                } catch {
+                    activeProvider = 'Ollama';
+                    providerMessage = `LOCAL: Ollama (${selectedModel})`;
+                } catch (localError) {
+                    const localReason = localError instanceof Error ? localError.message : String(localError);
+                    const localModel = selectedModel;
                     console.log('[GENERATE] Auto-Mode: LOCAL failed, falling back to CLOUD');
-                    rawResponse = await ollama.generateWithOpenRouter(fullPrompt);
+                    const cloudResult = await cloudProviderService.generateWithFallback(fullPrompt);
+                    rawResponse = cloudResult.content;
+                    activeProvider = cloudResult.provider;
+                    fallbackUsed = true;
+                    selectedModel = cloudResult.model;
+                    providerMessage = cloudResult.fallbackUsed
+                        ? `CLOUD FALLBACK: Groq (${cloudResult.model})`
+                        : `CLOUD: OpenRouter (${cloudResult.model})`;
+                    attempts = [
+                        { model: `Ollama: ${localModel}`, status: 'failed', reason: localReason },
+                        ...cloudResult.attempts.map((attempt) => ({
+                            model: `${attempt.provider}: ${attempt.model}`,
+                            status: attempt.status,
+                            reason: attempt.reason,
+                        })),
+                    ];
                 }
             }
-        } catch (error: any) {
+        } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             console.error("[GENERATE] Provider error:", msg);
             return NextResponse.json(
@@ -185,13 +239,13 @@ export async function POST(req: Request) {
 
         const sanitized = {
             testCases: (parsedData.testCases || [])
-                .map((tc: any, index: number) => {
+                .map((tc: ParsedModelTestCase, index: number) => {
                     const num = String(index + 1).padStart(3, "0");
                     return {
                         testCaseId: String(tc.testCaseId || `${jiraId || 'TC'}-${num}`),
                         scenarioTitle: String(tc.scenarioTitle || ""),
-                        testType: String(tc.testType || "E2E"),
-                        priority: String(tc.priority || "P2"),
+                        testType: normalizeTestType(tc.testType),
+                        priority: normalizePriority(tc.priority),
                         preconditions: String(tc.preconditions || "None"),
                         testData: String(tc.testData || ""),
                         testSteps: String(tc.testSteps || ""),
@@ -200,10 +254,10 @@ export async function POST(req: Request) {
                         // Traceability link
                         linkedRequirementId: jiraId,
                         projectKey: projectKey,
-                        executionStatus: 'Untested'
+                        executionStatus: 'Untested' as const,
                     };
                 })
-                .filter((tc: any) =>
+                .filter((tc: TestCase) =>
                     tc.scenarioTitle.trim().length > 0 &&
                     tc.testSteps.trim().length > 0 &&
                     tc.expectedResult.trim().length > 0
@@ -224,13 +278,16 @@ export async function POST(req: Request) {
             result: sanitized,
             meta: {
                 model: selectedModel,
+                activeModel: selectedModel,
                 count: sanitized.testCases.length,
                 type: isAutomationMode ? 'automation' : type,
                 platformType,
                 jiraStoryId: jiraId,
+                fallbackUsed,
+                attempts,
                 message: isAutomationMode
-                    ? `Automation Workflow: ${sanitized.testCases.length} automation-ready test cases`
-                    : undefined,
+                    ? `Automation Workflow: ${sanitized.testCases.length} automation-ready test cases (${providerMessage || activeProvider})`
+                    : providerMessage,
             },
         });
 

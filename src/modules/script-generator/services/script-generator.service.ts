@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { ollamaService } from '@/src/services/ai/ollama.service';
+import { cloudProviderService } from '@/src/services/ai/cloud-provider.service';
 import { scriptPromptBuilder } from './prompt-builder';
 import { parseGeneratedScript } from '../utils/response-parser';
 import { ScriptGenerationResult, ScriptPlatform } from '../types';
@@ -17,7 +18,7 @@ function resolveFileName(jiraStoryId?: string): string {
 
 function validateGeneratedCode(code: string): { valid: boolean; error?: string } {
   // Strip string literals, template literals, and comments to avoid false positives
-  let stripped = code
+  const stripped = code
     .replace(/\/\/.*$/gm, '')               // single-line comments
     .replace(/\/\*[\s\S]*?\*\//g, '')       // multi-line comments
     .replace(/'[^'\\]*(?:\\.[^'\\]*)*'/g, '')  // single-quoted strings
@@ -123,23 +124,24 @@ export class ScriptGeneratorService {
         options: { num_predict: 8192 },
       });
       code = await fixBrokenCode(parseGeneratedScript(response.response), prompt, targetModel);
-    } catch {
-      // Fallback to OpenRouter if available
-      if (process.env.OPENROUTER_API_KEY) {
-        const raw = await ollamaService.generateWithOpenRouter(
+    } catch (error) {
+      const localReason = error instanceof Error ? error.message : String(error);
+      try {
+        const cloudResult = await cloudProviderService.generateWithFallback(
           `${prompt}\n\nReturn ONLY valid Playwright TypeScript code. No explanation.`,
           process.env.OPENROUTER_MODEL || 'openrouter/auto'
         );
-        code = parseGeneratedScript(raw);
+        console.log(`[SCRIPT-GEN] Cloud provider used: ${cloudResult.fallbackUsed ? 'Groq fallback' : 'OpenRouter'}`);
+        code = parseGeneratedScript(cloudResult.content);
         const fallbackValidation = validateGeneratedCode(code);
         if (!fallbackValidation.valid) {
-          console.warn('[SCRIPT-GEN] OpenRouter syntax error:', fallbackValidation.error);
+          console.warn('[SCRIPT-GEN] Cloud syntax error:', fallbackValidation.error);
         }
-      } else {
+      } catch (cloudError) {
+        const cloudReason = cloudError instanceof Error ? cloudError.message : String(cloudError);
         throw new Error(
-          `Ollama unavailable and no cloud fallback configured.\n` +
-          `Ensure Ollama is running with: ollama serve\n` +
-          `Or set OPENROUTER_API_KEY in .env.local`
+          `Script generation failed. Ollama error: ${localReason}. ` +
+          `Cloud fallback error: ${cloudReason}`
         );
       }
     }

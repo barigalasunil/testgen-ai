@@ -1,15 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
-import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { ChatMessage } from "./ChatMessage";
 import { InputBox } from "./InputBox";
 import JiraModal from "./JiraModal";
-import { RagPanel } from "./RagPanel";
 import { JiraPanel } from "./JiraPanel";
+import { AutomationSidebarContent } from "./AutomationSidebarContent";
 import { generateTestCases, fetchModels } from "../services";
 import { AiGenerationMeta, AiGenerationOptions, HistoryItem, SuiteKey, TestCase } from "../types";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
@@ -38,6 +36,8 @@ type ParsedTestCaseResult = {
     testCases: TestCase[];
     raw?: string;
 };
+
+type ActivePanel = 'testcases' | 'automation' | 'jira';
 
 function isParsedTestCaseResult(value: unknown): value is ParsedTestCaseResult {
     return Boolean(
@@ -86,11 +86,10 @@ export function MainApp() {
     const [sessions, setSessions] = useState<HistoryItem[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [activePanel, setActivePanel] = useState<'automation' | 'jira' | 'rag'>('automation');
+    const [activePanel, setActivePanel] = useState<ActivePanel>('testcases');
     const [generatingPrompt, setGeneratingPrompt] = useState("");
     const [generationModelStatus, setGenerationModelStatus] = useState("Using: Auto");
     const [resultTab, setResultTab] = useState<'testCases' | 'scripts' | 'logs'>('testCases');
-    const [ollamaStatus, setOllamaStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
     const [activityIndex, setActivityIndex] = useState(0);
 
     // Feature states
@@ -111,6 +110,7 @@ export function MainApp() {
     const [failedTests, setFailedTests] = useState<string[]>([]);
     const [headed, setHeaded] = useState(false);
     const [reportUrl, setReportUrl] = useState<string | null>(null);
+    const [automationError, setAutomationError] = useState<string | null>(null);
 
     // Jira modal states
     const [jiraModalOpen, setJiraModalOpen] = useState(false);
@@ -262,6 +262,11 @@ export function MainApp() {
     // Removed legacy status labels
 
     const currentThread = sessions.find(s => s.id === activeId);
+    const automationState = currentThread?.automation ?? {
+        smoke: { status: 'idle' as const },
+        sanity: { status: 'idle' as const },
+        regression: { status: 'idle' as const },
+    };
 
     const handleSend = async (overridePrompt?: string, overrideOptions?: Partial<AiGenerationOptions>) => {
         if (loading) return;
@@ -422,13 +427,14 @@ export function MainApp() {
             updatedAt: new Date().toISOString(),
         }, ...prev]);
         setActiveId(id);
-        setActivePanel('automation');
+        setActivePanel('testcases');
         setValue("");
         if (window.innerWidth < 768) setIsSidebarOpen(false);
     };
 
     const handleSelectChat = (id: string) => {
         setActiveId(id);
+        setActivePanel('testcases');
         if (window.innerWidth < 768) setIsSidebarOpen(false);
     };
 
@@ -463,8 +469,12 @@ export function MainApp() {
 
     const handleGenerateScript = async () => {
         const testCases = currentThread?.result?.testCases;
-        if (!testCases?.length || !activeId) return;
+        if (!testCases?.length || !activeId) {
+            setAutomationError('Generate test cases before creating a Playwright script.');
+            return;
+        }
         const storyId = currentThread?.aiOptions?.jiraStoryId || '';
+        setAutomationError(null);
         setIsGeneratingScript(true);
         try {
             const response = await fetch('/api/automation/generate', {
@@ -480,24 +490,34 @@ export function MainApp() {
             if (!response.ok || payload.error) throw new Error(payload.message || 'Script generation failed');
             const generatedCode = payload.code || '';
             const generatedFileName = payload.fileName || 'generated.spec.ts';
+            if (!generatedCode.trim()) {
+                throw new Error('Script generator returned an empty script.');
+            }
             setScriptCode(generatedCode);
             setScriptFileName(generatedFileName);
+            setResultTab('scripts');
             setSessions(prev => prev.map(s =>
                 s.id === activeId
                     ? { ...s, generatedScript: generatedCode, scriptFileName: generatedFileName, updatedAt: new Date().toISOString() }
                     : s
             ));
         } catch (error) {
-            console.error('Script generation failed:', error);
+            const message = error instanceof Error ? error.message : String(error);
+            setAutomationError(`Script generation failed: ${message}`);
+            setExecutionLogs(prev => [...prev, `Script generation failed: ${message}`]);
         } finally {
             setIsGeneratingScript(false);
         }
     };
 
     const handleRunGeneratedScript = async () => {
-        if (!scriptCode || !scriptFileName) return;
+        if (!scriptCode || !scriptFileName) {
+            setAutomationError('Generate a Playwright script before running automation.');
+            return;
+        }
         const storyId = currentThread?.aiOptions?.jiraStoryId || '';
         setIsRunningAutomation(true);
+        setAutomationError(null);
         setExecutionLogs([]);
         setExecutionSummary(null);
         setPassedTests([]);
@@ -521,10 +541,16 @@ export function MainApp() {
                 body: JSON.stringify({
                     type: 'generated',
                     scriptFile: scriptFileName,
+                    scriptCode,
                     jiraStoryId: storyId,
                     headed,
                 }),
             });
+
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || `Automation request failed with HTTP ${response.status}`);
+            }
 
             addLog('Execution started...');
 
@@ -565,10 +591,34 @@ export function MainApp() {
                 }
             }
         } catch (error) {
-            addLog(`✕ Execution error: ${error instanceof Error ? error.message : String(error)}`);
+            const message = error instanceof Error ? error.message : String(error);
+            setAutomationError(`Execution failed: ${message}`);
+            addLog(`Execution error: ${message}`);
         } finally {
             setIsRunningAutomation(false);
         }
+    };
+
+    const handleCopyScript = async () => {
+        if (!scriptCode) {
+            setAutomationError('No generated script is available to copy.');
+            return;
+        }
+        await navigator.clipboard.writeText(scriptCode);
+    };
+
+    const handleDownloadScript = () => {
+        if (!scriptCode) {
+            setAutomationError('No generated script is available to download.');
+            return;
+        }
+        const blob = new Blob([scriptCode], { type: 'text/typescript;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = scriptFileName || 'generated.spec.ts';
+        anchor.click();
+        URL.revokeObjectURL(url);
     };
 
     const handleExecuteSuite = async (suite: SuiteKey, headed: boolean = false) => {
@@ -663,6 +713,8 @@ export function MainApp() {
                 reportUrl={reportUrl}
                 onGenerateScript={handleGenerateScript}
                 onRunAutomation={handleRunGeneratedScript}
+                onCopyScript={handleCopyScript}
+                onDownloadScript={handleDownloadScript}
                 platformType={platformType}
             />
 
@@ -746,8 +798,40 @@ export function MainApp() {
                 {/* Body */}
                 <div className="flex flex-1 min-h-0 overflow-hidden">
 
-                    {/* Automation area */}
-                    <div className={cn("flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden", activePanel !== 'automation' && 'hidden')}>
+                    {activePanel === 'automation' && (
+                        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 lg:px-6">
+                            <div className="mx-auto max-w-6xl">
+                                <AutomationSidebarContent
+                                    automation={automationState}
+                                    onExecuteSuite={handleExecuteSuite}
+                                    scriptCode={scriptCode}
+                                    hasTestCases={!!(currentThread?.result?.testCases?.length)}
+                                    onGenerateScript={handleGenerateScript}
+                                    onRunAutomation={handleRunGeneratedScript}
+                                    onCopyScript={handleCopyScript}
+                                    onDownloadScript={handleDownloadScript}
+                                    isGeneratingScript={isGeneratingScript}
+                                    isRunningAutomation={isRunningAutomation}
+                                    executionLogs={executionLogs}
+                                    executionSummary={executionSummary}
+                                    passedTests={passedTests}
+                                    failedTests={failedTests}
+                                    headed={headed}
+                                    onHeadedChange={setHeaded}
+                                    reportUrl={reportUrl}
+                                    platformType={platformType}
+                                />
+                                {automationError && (
+                                    <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                        {automationError}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Test case workspace area */}
+                    <div className={cn("flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden", activePanel !== 'testcases' && 'hidden')}>
                         <section className="flex-1 min-h-0 overflow-y-auto px-4 py-4 lg:px-6">
                             <div className="mx-auto flex max-w-6xl flex-col gap-4 pb-6">
                                 {currentThread?.prompt ? (
@@ -802,6 +886,8 @@ export function MainApp() {
                                                 onRegenerate={() => handleSend(currentThread.prompt, currentThread.aiOptions)}
                                                 onGenerateScript={handleGenerateScript}
                                                 onRunAutomation={handleRunGeneratedScript}
+                                                onCopyScript={handleCopyScript}
+                                                onDownloadScript={handleDownloadScript}
                                                 hasGeneratedScript={!!scriptCode}
                                                 isGeneratingScript={isGeneratingScript}
                                                 isRunningAutomation={isRunningAutomation}
@@ -813,7 +899,14 @@ export function MainApp() {
                                             <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
                                                 {scriptCode ? (
                                                     <div className="space-y-3">
-                                                        <p className="text-slate-500 text-xs">Generated script for the current workspace.</p>
+                                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                                            <p className="text-slate-500 text-xs">Generated script for the current workspace.</p>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                <button type="button" onClick={handleCopyScript} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Copy Code</button>
+                                                                <button type="button" onClick={handleDownloadScript} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Download Script</button>
+                                                                <button type="button" onClick={handleRunGeneratedScript} disabled={isRunningAutomation} className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50">{isRunningAutomation ? 'Running...' : 'Run Automation'}</button>
+                                                            </div>
+                                                        </div>
                                                         <pre className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-xs text-slate-700 border border-slate-200 overflow-auto max-h-[420px]">{scriptCode}</pre>
                                                         {scriptFileName && <p className="text-xs text-slate-500">Filename: {scriptFileName}</p>}
                                                     </div>
@@ -851,6 +944,12 @@ export function MainApp() {
                                                 ) : (
                                                     <p className="text-slate-500 text-sm">No execution logs yet. Run automation to capture logs here.</p>
                                                 )}
+                                            </div>
+                                        )}
+
+                                        {automationError && (
+                                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                                {automationError}
                                             </div>
                                         )}
                                     </div>
@@ -892,11 +991,6 @@ export function MainApp() {
                     {activePanel === 'jira' && (
                         <div className="flex-1 min-h-0 overflow-hidden">
                             <JiraPanel />
-                        </div>
-                    )}
-                    {activePanel === 'rag' && (
-                        <div className="flex-1 min-h-0 overflow-hidden">
-                            <RagPanel />
                         </div>
                     )}
                 </div>
