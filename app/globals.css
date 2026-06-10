@@ -35,34 +35,6 @@
   --font-mono: "Source Code Pro", monospace;
 }
 
-/* DARK MODE */
-
-.dark {
-  --background: #1a1a1a;
-  --foreground: #e0e0e0;
-
-  --card: #2a2a2a;
-  --card-foreground: #e0e0e0;
-
-  --primary: #e53935;
-  --primary-foreground: #ffffff;
-
-  --secondary: #689f38;
-  --secondary-foreground: #000000;
-
-  --accent: #64b5f6;
-  --accent-foreground: #000000;
-
-  --muted: #252525;
-  --muted-foreground: #a0a0a0;
-
-  --border: #4a4a4a;
-  --input: #4a4a4a;
-
-  --destructive: #ffa000;
-  --destructive-foreground: #000000;
-}
-
 /* BASE */
 
 body {

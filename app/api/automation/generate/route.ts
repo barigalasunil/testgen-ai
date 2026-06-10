@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { scriptGeneratorService } from '@/src/modules/script-generator/services/script-generator.service';
 import { TestCase } from '@/src/modules/testcase-generator/types';
+import { AiProviderId, ProviderSettings } from '@/src/services/ai/provider-orchestrator';
 
 interface ApiRequestBody {
   testCases: TestCase[];
   platform?: 'web' | 'api' | 'mobile' | 'automation';
   jiraStoryId?: string;
   model?: string;
+  provider?: AiProviderId;
+  providerSettings?: ProviderSettings;
 }
 
 export async function POST(request: Request) {
@@ -21,7 +24,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: true, message: 'No test cases provided.' }, { status: 400 });
     }
 
-    const { fileName, code } = await scriptGeneratorService.generateScript(testCases, platform, jiraStoryId, model);
+    const { fileName, code } = await scriptGeneratorService.generateScript(
+      testCases,
+      platform,
+      jiraStoryId,
+      model,
+      body.provider || 'auto',
+      body.providerSettings
+    );
     const savedPath = await scriptGeneratorService.saveGeneratedScript(fileName, code);
 
     return NextResponse.json({ error: false, fileName, code, savedPath });

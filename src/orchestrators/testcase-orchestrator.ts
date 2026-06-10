@@ -26,7 +26,18 @@ export async function resolveTestCasePrompt(prompt: string): Promise<ResolvedJir
         };
     }
 
-    const jiraResult = await fetchJiraStory(jiraStoryId);
+    let jiraResult;
+    try {
+        jiraResult = await fetchJiraStory(jiraStoryId);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[JIRA] Story lookup skipped for ${jiraStoryId}: ${message}`);
+        return {
+            jiraStoryId,
+            projectKey: deriveProjectKey(jiraStoryId),
+            prompt,
+        };
+    }
     if (!jiraResult?.success) {
         return {
             jiraStoryId,

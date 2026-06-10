@@ -1,3 +1,5 @@
+import { AiProviderId } from "@/src/services/ai/provider-orchestrator";
+
 export type TestCase = {
     testCaseId: string;
     scenarioTitle: string;
@@ -31,6 +33,8 @@ export type AiGenerationMeta = {
     model?: string;
     requestedModel?: string;
     activeModel?: string | null;
+    provider?: AiProviderId;
+    providerUsed?: string;
     fallbackUsed?: boolean;
     message?: string;
     attempts?: {
@@ -38,12 +42,15 @@ export type AiGenerationMeta = {
         status: 'success' | 'failed' | 'skipped';
         reason?: string;
     }[];
+    chunkingApplied?: boolean;
+    chunkCount?: number;
 };
 
 export type PlatformType = 'web' | 'mobile' | 'api' | 'automation';
 
 export type AiGenerationOptions = {
     model: string;
+    provider: AiProviderId;
     platformType: PlatformType;
     customPrompt?: string;
     acceptanceCriteria?: string;

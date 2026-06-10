@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle, Play, Terminal, Bug, ExternalLink, FileCode, ListChecks, Shield, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getSavedModel, getAiLabel, getSavedProvider } from "@/src/services/ai/ai-config.service";
+import { getSavedModel, getAiLabel, getSavedProvider, loadProviderSettings } from "@/src/services/ai/ai-config.service";
 import { loadJiraCredentials } from '@/src/services/jira/jira.service';
 
 type TestType = 'restassured' | 'scenarios' | 'manual' | 'playwright' | 'newman';
@@ -189,6 +189,8 @@ export default function ApiTestingPage() {
                     rawMethod: inputMode === 'raw' ? rawMethod : null,
                     rawPayload: inputMode === 'raw' ? rawPayload.trim() || null : null,
                     model: activeModel,
+                    provider: getSavedProvider(),
+                    providerSettings: loadProviderSettings(),
                     testType,
                     inputMode,
                 }),

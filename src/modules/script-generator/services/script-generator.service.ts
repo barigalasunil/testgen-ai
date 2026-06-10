@@ -1,7 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { ollamaService } from '@/src/services/ai/ollama.service';
-import { cloudProviderService } from '@/src/services/ai/cloud-provider.service';
+import { aiProviderOrchestrator, AiProviderId, ProviderSettings } from '@/src/services/ai/provider-orchestrator';
 import { scriptPromptBuilder } from './prompt-builder';
 import { parseGeneratedScript } from '../utils/response-parser';
 import { ScriptGenerationResult, ScriptPlatform } from '../types';
@@ -75,7 +74,13 @@ async function resolveAvailableModel(): Promise<string> {
   }
 }
 
-function fixBrokenCode(code: string, prompt: string, model: string): Promise<string> {
+function fixBrokenCode(
+  code: string,
+  prompt: string,
+  provider: AiProviderId,
+  model: string | undefined,
+  providerSettings?: ProviderSettings
+): Promise<string> {
   return new Promise(async (resolve) => {
     const validation = validateGeneratedCode(code);
     if (validation.valid) {
@@ -86,13 +91,14 @@ function fixBrokenCode(code: string, prompt: string, model: string): Promise<str
     console.warn('[SCRIPT-GEN] Retrying with fix prompt...');
     const fixPrompt = `${prompt}\n\nThe previous generation had a syntax error: ${validation.error}.\nThe broken code was:\n\`\`\`typescript\n${code.slice(0, 500)}\`\`\`\nPlease regenerate the ENTIRE script ensuring all strings, quotes, braces, and parentheses are properly closed. Return ONLY valid TypeScript Playwright code.`;
     try {
-      const retry = await ollamaService.generate({
-        model,
+      const retry = await aiProviderOrchestrator.generate(provider, {
         prompt: fixPrompt,
-        stream: false,
-        options: { num_predict: 8192 },
+        model,
+        settings: providerSettings,
+        maxTokens: 8192,
+        temperature: 0.2,
       });
-      const fixed = parseGeneratedScript(retry.response);
+      const fixed = parseGeneratedScript(retry.content);
       const retryValidation = validateGeneratedCode(fixed);
       if (retryValidation.valid) {
         console.log('[SCRIPT-GEN] Retry succeeded — syntax is valid');
@@ -108,42 +114,37 @@ function fixBrokenCode(code: string, prompt: string, model: string): Promise<str
 }
 
 export class ScriptGeneratorService {
-  async generateScript(testCases: TestCase[], platform: ScriptPlatform, jiraStoryId?: string, model?: string): Promise<ScriptGenerationResult> {
+  async generateScript(
+    testCases: TestCase[],
+    platform: ScriptPlatform,
+    jiraStoryId?: string,
+    model?: string,
+    provider: AiProviderId = 'auto',
+    providerSettings?: ProviderSettings
+  ): Promise<ScriptGenerationResult> {
     const prompt = scriptPromptBuilder.buildPrompt(testCases, platform);
-    const targetModel = model || await resolveAvailableModel();
+    const targetModel = model && model !== 'auto'
+      ? model
+      : provider === 'ollama'
+        ? await resolveAvailableModel()
+        : undefined;
 
     const fileName = resolveFileName(jiraStoryId);
 
     let code: string;
 
     try {
-      const response = await ollamaService.generate({
+      const response = await aiProviderOrchestrator.generate(provider, {
         model: targetModel,
         prompt,
-        stream: false,
-        options: { num_predict: 8192 },
+        settings: providerSettings,
+        maxTokens: 8192,
+        temperature: 0.2,
       });
-      code = await fixBrokenCode(parseGeneratedScript(response.response), prompt, targetModel);
+      code = await fixBrokenCode(parseGeneratedScript(response.content), prompt, provider, targetModel, providerSettings);
     } catch (error) {
-      const localReason = error instanceof Error ? error.message : String(error);
-      try {
-        const cloudResult = await cloudProviderService.generateWithFallback(
-          `${prompt}\n\nReturn ONLY valid Playwright TypeScript code. No explanation.`,
-          process.env.OPENROUTER_MODEL || 'openrouter/auto'
-        );
-        console.log(`[SCRIPT-GEN] Cloud provider used: ${cloudResult.fallbackUsed ? 'Groq fallback' : 'OpenRouter'}`);
-        code = parseGeneratedScript(cloudResult.content);
-        const fallbackValidation = validateGeneratedCode(code);
-        if (!fallbackValidation.valid) {
-          console.warn('[SCRIPT-GEN] Cloud syntax error:', fallbackValidation.error);
-        }
-      } catch (cloudError) {
-        const cloudReason = cloudError instanceof Error ? cloudError.message : String(cloudError);
-        throw new Error(
-          `Script generation failed. Ollama error: ${localReason}. ` +
-          `Cloud fallback error: ${cloudReason}`
-        );
-      }
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`Script generation failed: ${reason}`);
     }
 
     return { fileName, code };

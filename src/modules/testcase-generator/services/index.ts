@@ -1,3 +1,5 @@
+import { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
+
 export async function generateTestCases(
     prompt: string,
     model: string,
@@ -5,8 +7,9 @@ export async function generateTestCases(
     platformType: string = "web",
     customPrompt?: string,
     acceptanceCriteria?: string,
-    provider: string = "local",
-    jiraStoryId?: string
+    provider: AiProviderId = "auto",
+    jiraStoryId?: string,
+    providerSettings?: ProviderSettings
 ) {
     const res = await fetch("/api/generate", {
         method: "POST",
@@ -20,12 +23,24 @@ export async function generateTestCases(
             acceptanceCriteria,
             provider,
             jiraStoryId,
+            providerSettings,
         }),
     });
-    return await res.json();
+    const contentType = res.headers.get("content-type") || "";
+    const payload = contentType.includes("application/json") ? await res.json() : { error: await res.text() };
+
+    if (!res.ok || payload?.success === false) {
+        const message = payload?.error || payload?.message || payload?.result || `Generation failed with HTTP ${res.status}`;
+        throw Object.assign(new Error(String(message)), {
+            status: res.status,
+            payload,
+        });
+    }
+
+    return payload;
 }
 
-export async function fetchModels(provider: string = 'local') {
+export async function fetchModels(provider: AiProviderId = 'auto') {
     const res = await fetch(`/api/models?provider=${provider}`);
     return await res.json();
 }

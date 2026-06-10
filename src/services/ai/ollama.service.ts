@@ -18,7 +18,6 @@ export interface OllamaResponse {
     eval_count?: number;
 }
 
-import { cloudProviderService } from './cloud-provider.service';
 
 // Always use 127.0.0.1 — localhost fails on this Windows setup
 const OLLAMA_BASE = 'http://127.0.0.1:11434';
@@ -123,9 +122,5 @@ export class OllamaService {
         }
     }
 
-    async generateWithOpenRouter(prompt: string, modelOverride?: string): Promise<string> {
-        const result = await cloudProviderService.generateWithOpenRouter(prompt, modelOverride);
-        return result.content;
-    }
 }
 export const ollamaService = new OllamaService();

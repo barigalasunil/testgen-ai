@@ -7,23 +7,23 @@ import { JiraPanel } from "../JiraPanel";
 import JiraModal from "../JiraModal";
 import { useTCGenWorkspace } from "../../hooks/useTCGenWorkspace";
 import { AutomationSidebarContent } from "../AutomationSidebarContent";
+import { ApiTestingWorkspace } from "@/src/modules/api-testing/ApiTestingWorkspace";
 import { 
   X, 
   ChevronLeft, 
   ChevronRight, 
   RefreshCw, 
   Settings, 
-  Terminal, 
-  CheckCircle2, 
-  AlertCircle 
+  AlertCircle,
+  Plus,
+  Send
 } from "lucide-react";
 
 interface LayoutProps {
     workspace: ReturnType<typeof useTCGenWorkspace>;
-    controls: React.ReactNode;
 }
 
-export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
+export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
     const {
         value, setValue,
         loading,
@@ -33,12 +33,14 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
         activePanel, setActivePanel,
         generatingPrompt,
         generationModelStatus,
-        resultTab, setResultTab,
         progressLabel,
+        generationProgress,
+        generationFailed,
         models,
         selectedModel, setSelectedModel,
         provider, setProvider,
         providerStatus,
+        providerStatusInfo,
         platformType, setPlatformType,
         scriptCode,
         scriptFileName,
@@ -69,18 +71,44 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
         copyTableData,
         handleCopyScript,
         handleDownloadScript,
+        attachedDocuments,
+        handleAttachDocuments,
+        handleRemoveAttachment,
         saveProvider,
         saveModel
     } = workspace;
 
-    const isTestCases = activePanel === 'testcases';
+    const providerOptions = [
+        { value: 'auto', label: 'Auto' },
+        { value: 'nvidia', label: 'NVIDIA' },
+        { value: 'openrouter', label: 'OpenRouter' },
+        { value: 'groq', label: 'Groq' },
+        { value: 'opencode', label: 'OpenCode' },
+        { value: 'ollama', label: 'Ollama Local' },
+    ] as const;
+    const platformOptions = ['web', 'api', 'mobile'] as const;
+
+    const statusClasses = providerStatusInfo.status === 'fallback'
+        ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-900/30'
+        : providerStatus === 'connected'
+            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900/30'
+            : providerStatus === 'connecting'
+                ? 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/30';
+    const statusDotClass = providerStatusInfo.status === 'fallback'
+        ? 'bg-yellow-500'
+        : providerStatus === 'connected'
+            ? 'bg-green-500'
+            : providerStatus === 'connecting'
+                ? 'bg-slate-400'
+                : 'bg-red-500';
 
     return (
         <div className="flex h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-200">
             <Sidebar
                 history={sessions}
                 activeId={activeId}
-                activePanel={activePanel as 'testcases' | 'automation' | 'jira'}
+                activePanel={activePanel}
                 onSelect={handleSelectChat}
                 onChangePanel={setActivePanel}
                 onNewChat={handleNewChat}
@@ -129,48 +157,13 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        {/* Provider Toggle */}
-                        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 hidden sm:flex border border-gray-200 dark:border-gray-700">
-                            {(['local', 'auto', 'cloud'] as const).map((p) => (
-                                <button
-                                    key={p}
-                                    onClick={() => {
-                                        if (p === 'auto') return;
-                                        setProvider(p);
-                                        saveProvider(p);
-                                    }}
-                                    className={cn(
-                                        "px-2 py-1 text-[10px] font-bold rounded-md transition-all",
-                                        provider === p
-                                            ? "bg-white dark:bg-gray-700 text-slate-900 dark:text-white shadow-sm"
-                                            : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                    )}
-                                >
-                                    {p.toUpperCase()}
-                                </button>
-                            ))}
+                        <div className={cn("flex max-w-[300px] items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold", statusClasses)}>
+                            <span className={cn("h-2 w-2 rounded-full", statusDotClass)} />
+                            <span className="truncate">
+                                {providerStatusInfo.message}
+                                {providerStatusInfo.model ? ` - ${providerStatusInfo.model}` : ''}
+                            </span>
                         </div>
-
-                        {providerStatus === 'connecting' && (
-                            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-xs font-semibold animate-pulse border border-amber-100 dark:border-amber-900/30">
-                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                Connecting
-                            </div>
-                        )}
-                        {providerStatus === 'connected' && (
-                            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-xs font-semibold border border-green-100 dark:border-green-900/30">
-                                <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                                Online
-                            </div>
-                        )}
-                        {providerStatus === 'error' && (
-                            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-semibold border border-red-100 dark:border-red-900/30">
-                                <AlertCircle className="w-3.5 h-3.5" />
-                                Offline
-                            </div>
-                        )}
-
-                        {controls}
                     </div>
                 </header>
 
@@ -178,7 +171,10 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
                     <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                         {/* Status bar */}
                         {loading && (
-                            <div className="absolute top-0 left-0 right-0 z-20 bg-[#10A37F] dark:bg-[#10A37F]/80 text-white text-[11px] font-bold py-1.5 px-4 flex items-center justify-between shadow-md">
+                            <div className={cn(
+                                "absolute top-0 left-0 right-0 z-20 text-white text-[11px] font-bold py-1.5 px-4 flex items-center justify-between shadow-md",
+                                providerStatusInfo.status === 'fallback' ? "bg-yellow-500" : "bg-[#2563eb]"
+                            )}>
                                 <div className="flex items-center gap-2">
                                     <RefreshCw className="w-3 h-3 animate-spin" />
                                     {progressLabel}
@@ -186,8 +182,12 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
                                 <div className="flex items-center gap-3">
                                     <span className="opacity-80">Provider: {provider.toUpperCase()}</span>
                                     <div className="w-24 h-1 bg-white/20 rounded-full overflow-hidden">
-                                        <div className="h-full bg-white animate-[progress_2s_ease-in-out_infinite]" />
+                                        <div
+                                            className="h-full bg-white transition-all duration-500"
+                                            style={{ width: `${generationProgress}%` }}
+                                        />
                                     </div>
+                                    <span className="tabular-nums">{generationProgress}%</span>
                                 </div>
                             </div>
                         )}
@@ -225,12 +225,16 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
                                 </div>
                             )}
 
+                            {activePanel === 'api-testing' && (
+                                <ApiTestingWorkspace />
+                            )}
+
                             {activePanel === 'jira' && (
                                 <div className="p-4 md:p-8 max-w-5xl mx-auto">
                                     <div className="mb-6 flex items-center justify-between">
                                         <div>
-                                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Jira Traceability</h2>
-                                            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Configure your Jira integration and traceability rules.</p>
+                                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h2>
+                                            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage AI providers and Jira credentials.</p>
                                         </div>
                                     </div>
                                     <div className="bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
@@ -283,27 +287,26 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
                                                         <Settings className="w-4 h-4 text-white" />
                                                     </div>
                                                     <div className="flex-1 pt-1 space-y-6">
-                                                        {/* Tab system */}
-                                                        <div className="flex gap-4 border-b border-gray-100 dark:border-gray-800 overflow-x-auto pb-px scrollbar-none">
-                                                            {(['testCases', 'scripts', 'logs'] as const).map((tab) => (
-                                                                <button
-                                                                    key={tab}
-                                                                    onClick={() => setResultTab(tab)}
-                                                                    className={cn(
-                                                                        "pb-3 text-xs font-bold uppercase tracking-widest transition-colors relative whitespace-nowrap",
-                                                                        resultTab === tab 
-                                                                            ? "text-[#10A37F]" 
-                                                                            : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                                                                    )}
-                                                                >
-                                                                    {tab.replace(/([A-Z])/g, ' $1')}
-                                                                    {resultTab === tab && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#10A37F] rounded-full" />}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-
-                                                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden min-h-[400px]">
-                                                            {resultTab === 'testCases' && (
+                                                        {currentThread.error ? (
+                                                            <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 p-5 text-sm text-red-700 dark:text-red-300 shadow-sm">
+                                                                <div className="flex items-start gap-3">
+                                                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <p className="font-semibold">Generation failed</p>
+                                                                        <p className="mt-1 text-red-600 dark:text-red-300">{currentThread.error}</p>
+                                                                        <button
+                                                                            onClick={() => handleSend(currentThread.prompt, currentThread.aiOptions)}
+                                                                            disabled={loading}
+                                                                            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-60"
+                                                                        >
+                                                                            <RefreshCw className="h-3.5 w-3.5" />
+                                                                            Retry
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden min-h-[400px]">
                                                                 <ChatMessage
                                                                     role="assistant"
                                                                     isTable
@@ -321,49 +324,8 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
                                                                     isRunningAutomation={isRunningAutomation}
                                                                     onOpenJira={handleOpenJira}
                                                                 />
-                                                            )}
-
-                                                            {resultTab === 'scripts' && (
-                                                                <div className="p-6 space-y-6">
-                                                                    {scriptCode ? (
-                                                                        <>
-                                                                            <div className="flex items-center justify-between border-b dark:border-gray-800 pb-4">
-                                                                                <div>
-                                                                                    <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-tighter flex items-center gap-2">
-                                                                                        <Terminal className="w-4 h-4 text-[#10A37F]" />
-                                                                                        {scriptFileName}
-                                                                                    </h4>
-                                                                                </div>
-                                                                                <div className="flex gap-2">
-                                                                                    <button onClick={handleCopyScript} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500" title="Copy Script"><Settings className="w-4 h-4" /></button>
-                                                                                </div>
-                                                                            </div>
-                                                                            <pre className="bg-gray-900 rounded-lg p-6 text-[13px] text-gray-300 overflow-auto max-h-[500px] font-mono leading-relaxed border border-gray-800 shadow-inner">{scriptCode}</pre>
-                                                                        </>
-                                                                    ) : (
-                                                                        <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-4">
-                                                                            <Terminal className="w-12 h-12 opacity-20" />
-                                                                            <p className="text-sm font-medium">No script generated. Click 'Generate Script' below the table.</p>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-
-                                                            {resultTab === 'logs' && (
-                                                                <div className="p-6">
-                                                                    {executionLogs.length > 0 ? (
-                                                                        <div className="bg-gray-900 rounded-lg p-6 text-[13px] text-green-400 font-mono overflow-auto max-h-[500px] border border-gray-800 shadow-inner">
-                                                                            {executionLogs.map((log, i) => <div key={i} className="mb-0.5 line-clamp-1">{log}</div>)}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-4">
-                                                                            <Settings className="w-12 h-12 opacity-20" />
-                                                                            <p className="text-sm font-medium">Automation logs will appear here when running scripts.</p>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}
@@ -378,14 +340,58 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
                         {activePanel === 'testcases' && (
                             <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-gray-50 dark:from-gray-950 via-gray-50 dark:via-gray-950 to-transparent pt-12 z-20 transition-colors duration-200">
                                 <div className="max-w-4xl mx-auto relative">
-                                    <div className="relative flex items-end w-full bg-white dark:bg-gray-900 rounded-xl border border-gray-300 dark:border-gray-700 shadow-lg focus-within:border-[#10A37F] focus-within:ring-2 focus-within:ring-[#10A37F]/10 transition-all">
+                                    {loading && generatingPrompt && (
+                                        <div className={cn(
+                                            "mb-3 rounded-xl border bg-white dark:bg-gray-900 p-3 shadow-lg",
+                                            generationFailed
+                                                ? "border-red-200 dark:border-red-900/50"
+                                                : providerStatusInfo.status === 'fallback'
+                                                    ? "border-yellow-200 dark:border-yellow-900/50"
+                                                    : "border-blue-200 dark:border-blue-900/50"
+                                        )}>
+                                            <div className="flex items-center justify-between gap-3 text-xs">
+                                                <div className="min-w-0">
+                                                    <p className={cn(
+                                                        "font-bold",
+                                                        providerStatusInfo.status === 'fallback' ? "text-yellow-700 dark:text-yellow-300" : "text-blue-700 dark:text-blue-300"
+                                                    )}>
+                                                        {generationModelStatus} - {generationProgress}%
+                                                    </p>
+                                                    <p className="mt-1 truncate text-gray-500 dark:text-gray-400">Current step: {progressLabel}</p>
+                                                </div>
+                                                <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-blue-600 dark:text-blue-300" />
+                                            </div>
+                                            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                                                <div
+                                                    className={cn(
+                                                        "h-full rounded-full transition-all duration-500",
+                                                        providerStatusInfo.status === 'fallback' ? "bg-yellow-500" : "bg-blue-600"
+                                                    )}
+                                                    style={{ width: `${generationProgress}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                    {attachedDocuments.length > 0 && (
+                                        <div className="mb-2 flex flex-wrap gap-2">
+                                            {attachedDocuments.map((doc) => (
+                                                <span key={doc.name} className="inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 shadow-sm">
+                                                    {doc.name}
+                                                    <button onClick={() => handleRemoveAttachment(doc.name)} className="text-gray-400 hover:text-red-500" title="Remove attachment">
+                                                        <X className="h-3 w-3" />
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="relative flex w-full flex-col rounded-3xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg focus-within:border-[#10A37F] focus-within:ring-2 focus-within:ring-[#10A37F]/10 transition-all">
                                         <textarea
                                             ref={textareaRef}
                                             value={value}
                                             onChange={(e) => {
                                                 setValue(e.target.value);
                                                 if(textareaRef.current) {
-                                                    textareaRef.current.style.height = "52px";
+                                                    textareaRef.current.style.height = "56px";
                                                     textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + "px";
                                                 }
                                             }}
@@ -395,34 +401,68 @@ export function ClassicWorkspaceLayout({ workspace, controls }: LayoutProps) {
                                                     handleSend();
                                                 }
                                             }}
-                                            placeholder="Describe feature or functionality to generate test cases..."
-                                            className="w-full bg-transparent text-gray-800 dark:text-gray-200 placeholder-gray-400 m-0 border-0 outline-none resize-none py-4 px-5 text-[15px] max-h-[200px]"
+                                            placeholder="Ask TCGen-Buddy to generate test cases..."
+                                            className="w-full resize-none border-0 bg-transparent px-5 pb-2 pt-4 text-[15px] text-gray-800 dark:text-gray-200 outline-none placeholder-gray-400"
                                             rows={1}
                                             disabled={loading}
-                                            style={{ height: "52px" }}
+                                            style={{ height: "56px" }}
                                         />
-                                        <div className="flex items-center gap-2 pr-3 pb-3">
-                                            <select
-                                                value={selectedModel}
-                                                onChange={(e) => { setSelectedModel(e.target.value); saveModel(e.target.value); }}
-                                                className="bg-gray-100 dark:bg-gray-800 text-[10px] font-bold text-gray-600 dark:text-gray-400 border-none rounded-md px-2 py-1.5 focus:ring-1 focus:ring-[#10A37F]"
-                                            >
-                                                <option value="auto">AUTO</option>
-                                                {models.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-                                            </select>
-                                            <button
-                                                onClick={() => setPlatformType(platformType === 'web' ? 'mobile' : platformType === 'mobile' ? 'api' : 'web')}
-                                                className="bg-gray-100 dark:bg-gray-800 text-[10px] font-bold text-gray-600 dark:text-gray-400 rounded-md px-2 py-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors uppercase"
-                                            >
-                                                {platformType}
-                                            </button>
-                                            <button
-                                                onClick={() => handleSend()}
-                                                disabled={loading || !value.trim()}
-                                                className="p-2 rounded-lg text-white transition-all bg-[#10A37F] hover:bg-[#10A37F]/90 disabled:bg-gray-200 dark:disabled:bg-gray-800 disabled:text-gray-400 shadow-md active:scale-95"
-                                            >
-                                                <ChevronRight className="w-5 h-5" />
-                                            </button>
+                                        <div className="flex items-center justify-between gap-2 px-3 pb-3">
+                                            <label className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-700" title="Attach document">
+                                                <Plus className="h-4 w-4" />
+                                                <input
+                                                    type="file"
+                                                    multiple
+                                                    accept=".pdf,.docx,.txt,.md,.json,.yaml,.yml"
+                                                    className="hidden"
+                                                    onChange={(event) => {
+                                                        if (event.target.files) {
+                                                            handleAttachDocuments(event.target.files);
+                                                            event.target.value = '';
+                                                        }
+                                                    }}
+                                                />
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    value={provider}
+                                                    onChange={(e) => {
+                                                        const nextProvider = e.target.value as typeof provider;
+                                                        setProvider(nextProvider);
+                                                        saveProvider(nextProvider);
+                                                    }}
+                                                    className="h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F]"
+                                                >
+                                                    {providerOptions.map(option => (
+                                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    value={platformType}
+                                                    onChange={(e) => setPlatformType(e.target.value as typeof platformType)}
+                                                    className="h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F]"
+                                                >
+                                                    {platformOptions.map(option => (
+                                                        <option key={option} value={option}>{option.toUpperCase()}</option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    value={selectedModel}
+                                                    onChange={(e) => { setSelectedModel(e.target.value); saveModel(e.target.value); }}
+                                                    className="hidden h-9 max-w-[170px] rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F] sm:block"
+                                                >
+                                                    <option value="auto">Auto Model</option>
+                                                    {models.map(m => <option key={m} value={m}>{m}</option>)}
+                                                </select>
+                                                <button
+                                                    onClick={() => handleSend()}
+                                                    disabled={loading || !value.trim()}
+                                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[#10A37F] text-white shadow-md transition-all hover:bg-[#10A37F]/90 disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-gray-800 active:scale-95"
+                                                    title="Send"
+                                                >
+                                                    <Send className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                     <p className="mt-3 text-center text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-[0.2em]">

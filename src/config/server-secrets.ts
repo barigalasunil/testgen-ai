@@ -6,11 +6,17 @@ export const SERVER_SECRETS = {
     projectKey: process.env.JIRA_PROJECT_KEY || 'TCGB',
   },
   llm: {
-    nvidiaBaseUrl: process.env.NVIDIA_OPENAI_BASE_URL || 'https://integrate.api.nvidia.com/v1',
-    nvidiaApiKey: process.env.NVIDIA_OPENAI_API_KEY || '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',
-    nvidiaModel: process.env.NVIDIA_OPENAI_MODEL || 'qwen/qwen3-coder-480b-a35b-instruct',
+    nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
+    nvidiaApiKey: process.env.NVIDIA_API_KEY || '',
+    nvidiaModel: process.env.NVIDIA_MODEL || '',
     openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
     openRouterModel: process.env.OPENROUTER_MODEL || 'openrouter/auto',
+    groqApiKey: process.env.GROQ_API_KEY || '',
+    groqModel: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+    opencodeApiKey: process.env.OPENCODE_API_KEY || '',
+    opencodeModel: process.env.OPENCODE_MODEL || '',
+    ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+    ollamaModel: process.env.OLLAMA_MODEL || '',
   },
 };
 

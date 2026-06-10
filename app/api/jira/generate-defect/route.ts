@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server';
+import { aiProviderOrchestrator, AiProviderId, ProviderSettings } from '@/src/services/ai/provider-orchestrator';
 
 export async function POST(request: Request) {
   try {
-    const { testCaseTitle, testCaseSteps, expectedResult, actualResult, model } = await request.json();
+    const { testCaseTitle, testCaseSteps, expectedResult, actualResult, model, provider = 'auto', providerSettings } = await request.json() as {
+      testCaseTitle: string;
+      testCaseSteps: string;
+      expectedResult: string;
+      actualResult?: string;
+      model?: string;
+      provider?: AiProviderId;
+      providerSettings?: ProviderSettings;
+    };
 
-    const selectedModel = model || 'mistral:7b';
+    const selectedModel = model || 'auto';
 
     const prompt = `You are a QA engineer writing a professional Jira bug report.
 Return ONLY valid JSON, no markdown, no explanation.
@@ -25,33 +34,23 @@ Return this exact JSON structure:
 
 Priority must be High, Medium, or Low based on severity.`;
 
-    const ollamaRes = await fetch('http://127.0.0.1:11434/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: selectedModel,
-        prompt,
-        format: 'json',
-        stream: false,
-        options: { num_predict: 1000, temperature: 0.2 },
-      }),
+    const aiResult = await aiProviderOrchestrator.generate(provider, {
+      prompt,
+      model: selectedModel,
+      settings: providerSettings,
+      responseFormat: 'json',
+      maxTokens: 1000,
+      temperature: 0.2,
     });
-
-    if (!ollamaRes.ok) {
-      return NextResponse.json(
-        { success: false, error: 'Ollama not reachable. Make sure it is running.' },
-        { status: 503 }
-      );
-    }
-
-    const ollamaData = await ollamaRes.json();
-    let parsed: any;
+    let parsed: {
+      summary?: string;
+      description?: string;
+      priority?: string;
+      labels?: unknown;
+    };
 
     try {
-      let raw = String(ollamaData.response ?? ollamaData.output ?? '').trim();
-      if (!raw && Array.isArray(ollamaData.outputs)) {
-        raw = ollamaData.outputs.map((item: any) => String(item?.text || item?.response || '')).join('\n').trim();
-      }
+      let raw = aiResult.content.trim();
       raw = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
       parsed = JSON.parse(raw);
     } catch {

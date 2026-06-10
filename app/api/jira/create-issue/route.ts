@@ -21,6 +21,21 @@ type JiraIssuePayload = {
 };
 
 // ── ADF Builder ─────────────────────────────────────────────────────────────
+function normalizeJiraError(responseText: string, status: number): string {
+    try {
+        const errorJson = JSON.parse(responseText);
+        const messages = Array.isArray(errorJson.errorMessages) ? errorJson.errorMessages : [];
+        const errors = Object.entries(errorJson.errors || {}).map(([field, value]) => `${field}: ${String(value)}`);
+        const combined = [...messages, ...errors].filter(Boolean).join(', ');
+        if (combined) return `Jira rejected the request (${status}): ${combined}`;
+    } catch {}
+
+    if (status === 400) return 'Jira rejected the request. Check required fields, project key, issue type, and description format.';
+    if (status === 401 || status === 403) return 'Jira authentication failed. Check Jira email, API token, and project permissions.';
+    if (status === 404) return 'Jira project or endpoint was not found. Check Jira base URL and project key.';
+    return `Jira API error ${status}. Check Jira settings and project permissions.`;
+}
+
 function toADF(text: string): AdfNode {
     const t = text?.trim() || '';
 
@@ -160,14 +175,7 @@ export async function POST(request: Request) {
         console.log('[JIRA] Response status:', res.status);
 
         if (!res.ok) {
-            let errorMsg = `Jira API error ${res.status}`;
-            try {
-                const errorJson = JSON.parse(responseText);
-                const messages = errorJson.errorMessages || [];
-                const errors = Object.values(errorJson.errors || {});
-                errorMsg = [...messages, ...errors].join(', ') || errorMsg;
-            } catch { }
-            return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+            return NextResponse.json({ success: false, error: normalizeJiraError(responseText, res.status) }, { status: res.status });
         }
 
         const data = JSON.parse(responseText);

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Copy, Download, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getSavedModel, getAiLabel } from "@/src/services/ai/ai-config.service";
+import { getSavedModel, getAiLabel, getSavedProvider, loadProviderSettings } from "@/src/services/ai/ai-config.service";
 
 type TestType = 'restassured' | 'scenarios' | 'playwright';
 type ParsedSpec = {
@@ -86,6 +86,8 @@ export default function ApiTestingPage() {
                     swaggerUrl: inputMode === 'url' ? swaggerUrl : undefined,
                     swaggerJson: inputMode === 'paste' ? swaggerJson : undefined,
                     model,
+                    provider: getSavedProvider(),
+                    providerSettings: loadProviderSettings(),
                     testType,
                 }),
             });

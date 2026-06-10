@@ -1,12 +1,36 @@
 import { NextResponse } from "next/server";
-import { OllamaService } from "@/src/services/ai/ollama.service";
 import { promptBuilder, TestType, PlatformType } from "@/src/services/ai/prompt-builder";
 import { responseParser } from "@/src/services/ai/response-parser";
 import { resolveTestCasePrompt } from "@/src/orchestrators/testcase-orchestrator";
-import { cloudProviderService } from "@/src/services/ai/cloud-provider.service";
 import { TestCase } from "@/src/modules/testcase-generator/types";
+import { aiProviderOrchestrator, AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
+import { AiProviderError } from "@/src/services/ai/providers/types";
+import { chunkRequirement } from "@/src/services/ai/requirement-chunker";
 
 type ParsedModelTestCase = Partial<Record<keyof TestCase, unknown>>;
+
+function generationStatusFor(error: unknown): number {
+    const code = (error as { code?: string }).code;
+    const status = (error as { status?: number }).status;
+
+    if (status === 401 || status === 403 || code === 'MISSING_API_KEY') return 401;
+    if (code === 'TIMEOUT') return 408;
+    if (code === 'RATE_LIMIT' || code === 'QUOTA_EXCEEDED' || code === 'TOKEN_LIMIT') return 429;
+    if (code === 'OLLAMA_OFFLINE' || code === 'NETWORK_ERROR' || code === 'PROVIDER_ERROR') return 503;
+    if (code === 'MISSING_MODEL') return 400;
+    return 500;
+}
+
+function providerErrorMessage(provider: string, error: unknown): string {
+    const code = (error as { code?: string }).code;
+    if (provider === 'ollama' && code === 'OLLAMA_OFFLINE') {
+        return 'Ollama Local Offline';
+    }
+    if (provider === 'nvidia' && code === 'TIMEOUT') {
+        return 'NVIDIA request timed out';
+    }
+    return error instanceof Error ? error.message : String(error);
+}
 
 function normalizeTestType(value: unknown): TestCase['testType'] {
     const allowed: TestCase['testType'][] = ['E2E', 'Negative', 'Edge', 'Security', 'Boundary', 'Resilience', 'Persona'];
@@ -16,26 +40,6 @@ function normalizeTestType(value: unknown): TestCase['testType'] {
 function normalizePriority(value: unknown): TestCase['priority'] {
     const allowed: TestCase['priority'][] = ['P1', 'P2', 'P3'];
     return allowed.includes(value as TestCase['priority']) ? value as TestCase['priority'] : 'P2';
-}
-
-const MODEL_CONFIG: Record<string, { num_predict: number; temperature: number; top_p: number }> = {
-    "phi3:mini":          { num_predict: 3000, temperature: 0.2,  top_p: 0.9  },
-    "mistral:7b":         { num_predict: 6000, temperature: 0.3,  top_p: 0.95 },
-    "gemma4:e4b":         { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
-    "gemma3:12b":         { num_predict: 6000, temperature: 0.25, top_p: 0.92 },
-    "qwen3:1.7b":         { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
-    "qwen3:1.7b-q4_K_M":  { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
-    "granite3.3:2b":      { num_predict: 4000, temperature: 0.25, top_p: 0.92 },
-    "stablelm2":          { num_predict: 2000, temperature: 0.2,  top_p: 0.9  },
-};
-
-const DEFAULT_CONFIG = { num_predict: 4096, temperature: 0.3, top_p: 0.95 };
-
-function getModelConfig(model: string) {
-    const key = Object.keys(MODEL_CONFIG).find(k =>
-        model.startsWith(k.split(':')[0])
-    );
-    return key ? MODEL_CONFIG[key] : DEFAULT_CONFIG;
 }
 
 async function resolveModel(requested: string): Promise<string> {
@@ -89,13 +93,12 @@ async function resolveModel(requested: string): Promise<string> {
 }
 
 export async function POST(req: Request) {
-    const ollama = new OllamaService();
-
     try {
         const {
             prompt,
             model,
-            provider = "local",
+            provider = "auto",
+            providerSettings,
             type = "functional",
             platformType = "web",
             customPrompt,
@@ -103,24 +106,34 @@ export async function POST(req: Request) {
             jiraStoryId: requestJiraStoryId,
         } = await req.json();
 
+        if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+            return NextResponse.json(
+                { success: false, error: 'Prompt is required', code: 'INVALID_REQUEST' },
+                { status: 400 }
+            );
+        }
+
         const resolvedPrompt = await resolveTestCasePrompt(prompt);
         const resolvedJiraStoryId = requestJiraStoryId || resolvedPrompt.jiraStoryId || null;
 
-        // 1. Resolve Model and Config
-        let selectedModel = model || "mistral:7b";
-        if (provider === 'local') {
+        let selectedModel = model || "auto";
+        if (provider === 'ollama' && selectedModel !== 'auto') {
             selectedModel = await resolveModel(selectedModel);
         }
-        const modelConfig = getModelConfig(selectedModel);
 
-        console.log(`[GENERATE] Provider: ${provider}, Model: ${selectedModel}, Jira: ${resolvedJiraStoryId || 'none'}`);
+        console.log(`[GENERATE] Provider: ${provider}, Jira: ${resolvedJiraStoryId || 'none'}`);
 
         const isAutomationMode = platformType === 'automation';
 
+        const chunkedRequirement = chunkRequirement(resolvedPrompt.prompt);
+        if (chunkedRequirement.chunkingApplied) {
+            console.log(`[GENERATE] Requirement chunked into ${chunkedRequirement.chunks.length} chunks`);
+        }
+
         const fullPrompt = isAutomationMode
-            ? promptBuilder.buildAutomationPrompt(resolvedPrompt.prompt, customPrompt, acceptanceCriteria)
+            ? promptBuilder.buildAutomationPrompt(chunkedRequirement.prompt, customPrompt, acceptanceCriteria)
             : promptBuilder.buildPrompt(
-                resolvedPrompt.prompt,
+                chunkedRequirement.prompt,
                 type as TestType,
                 platformType as PlatformType,
                 customPrompt,
@@ -134,92 +147,64 @@ export async function POST(req: Request) {
         let rawResponse: string;
         let providerMessage = '';
         let fallbackUsed = false;
-        let activeProvider: 'OpenRouter' | 'Groq' | 'Ollama' = 'Ollama';
+        let providerUsed = '';
         let attempts: {
+            provider?: string;
             model: string;
             status: 'success' | 'failed' | 'skipped';
+            code?: string;
             reason?: string;
         }[] | undefined;
 
         try {
-            if (provider === 'cloud') {
-                console.log('[GENERATE] Routing to Cloud: OpenRouter primary, Groq fallback');
-                const cloudResult = await cloudProviderService.generateWithFallback(
-                    fullPrompt,
-                    model !== 'auto' ? model : undefined
-                );
-                rawResponse = cloudResult.content;
-                activeProvider = cloudResult.provider;
-                fallbackUsed = cloudResult.fallbackUsed;
-                selectedModel = cloudResult.model;
-                providerMessage = cloudResult.fallbackUsed
-                    ? `CLOUD FALLBACK: Groq (${cloudResult.model})`
-                    : `CLOUD: OpenRouter (${cloudResult.model})`;
-                attempts = cloudResult.attempts.map((attempt) => ({
-                    model: `${attempt.provider}: ${attempt.model}`,
-                    status: attempt.status,
-                    reason: attempt.reason,
-                }));
-            } else if (provider === 'local') {
-                console.log('[GENERATE] Routing to Ollama (LOCAL)');
-                try {
-                    const response = await ollama.generate({
-                        model: selectedModel,
-                        prompt: fullPrompt,
-                        format: "json",
-                        stream: false,
-                        options: modelConfig,
-                    });
-                    rawResponse = response.response;
-                    activeProvider = 'Ollama';
-                    providerMessage = `LOCAL: Ollama (${selectedModel})`;
-                } catch (error) {
-                    const message = error instanceof Error ? error.message : String(error);
-                    console.warn('[GENERATE] Local Ollama failed:', message);
-                    throw error;
-                }
-            } else {
-                // AUTO mode: preserve local-first behavior, then cloud cascade.
-                try {
-                    console.log('[GENERATE] Auto-Mode: Trying LOCAL first');
-                    const response = await ollama.generate({
-                        model: selectedModel,
-                        prompt: fullPrompt,
-                        format: "json",
-                        stream: false,
-                        options: modelConfig,
-                    });
-                    rawResponse = response.response;
-                    activeProvider = 'Ollama';
-                    providerMessage = `LOCAL: Ollama (${selectedModel})`;
-                } catch (localError) {
-                    const localReason = localError instanceof Error ? localError.message : String(localError);
-                    const localModel = selectedModel;
-                    console.log('[GENERATE] Auto-Mode: LOCAL failed, falling back to CLOUD');
-                    const cloudResult = await cloudProviderService.generateWithFallback(fullPrompt);
-                    rawResponse = cloudResult.content;
-                    activeProvider = cloudResult.provider;
-                    fallbackUsed = true;
-                    selectedModel = cloudResult.model;
-                    providerMessage = cloudResult.fallbackUsed
-                        ? `CLOUD FALLBACK: Groq (${cloudResult.model})`
-                        : `CLOUD: OpenRouter (${cloudResult.model})`;
-                    attempts = [
-                        { model: `Ollama: ${localModel}`, status: 'failed', reason: localReason },
-                        ...cloudResult.attempts.map((attempt) => ({
-                            model: `${attempt.provider}: ${attempt.model}`,
-                            status: attempt.status,
-                            reason: attempt.reason,
-                        })),
-                    ];
-                }
-            }
+            const aiResult = await aiProviderOrchestrator.generate(provider as AiProviderId, {
+                prompt: fullPrompt,
+                model: selectedModel,
+                settings: providerSettings as ProviderSettings | undefined,
+                responseFormat: 'json',
+                maxTokens: 4096,
+                temperature: 0.2,
+            });
+            rawResponse = aiResult.content;
+            fallbackUsed = aiResult.fallbackUsed;
+            selectedModel = aiResult.modelUsed;
+            providerUsed = aiResult.providerUsed;
+            providerMessage = provider === 'auto'
+                ? fallbackUsed
+                    ? `AUTO -> ${providerUsed} Fallback (${selectedModel})`
+                    : `AUTO -> ${providerUsed} Connected (${selectedModel})`
+                : `${providerUsed} Connected (${selectedModel})`;
+            attempts = aiResult.attempts.map((attempt) => ({
+                provider: attempt.provider,
+                model: `${attempt.provider}: ${attempt.model}`,
+                status: attempt.status,
+                code: attempt.code,
+                reason: attempt.reason,
+            }));
         } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
+            const msg = providerErrorMessage(String(provider), error);
+            const attemptedProviders = (error as { attempts?: typeof attempts }).attempts || [];
+            const code = error instanceof AiProviderError ? error.code : (error as { code?: string }).code || 'PROVIDER_ERROR';
+            const status = generationStatusFor(error);
             console.error("[GENERATE] Provider error:", msg);
             return NextResponse.json(
-                { error: true, result: `Generation error: ${msg}` },
-                { status: 503 }
+                {
+                    success: false,
+                    error: msg,
+                    code,
+                    provider,
+                    attemptedProviders,
+                    result: msg,
+                    message: msg,
+                    meta: {
+                        provider,
+                        providerUsed: null,
+                        fallbackUsed: false,
+                        attempts: attemptedProviders,
+                        message: provider === 'auto' ? 'All AI providers failed' : msg,
+                    },
+                },
+                { status }
             );
         }
 
@@ -229,8 +214,8 @@ export async function POST(req: Request) {
         } catch (parseError) {
             console.error("[GENERATE] Parse error:", parseError);
             return NextResponse.json(
-                { error: true, result: `Could not parse model response. Try again or switch models.` },
-                { status: 422 }
+                { success: false, error: 'Could not parse model response. Try again or switch models.', code: 'INVALID_RESPONSE', result: 'Could not parse model response. Try again or switch models.' },
+                { status: 500 }
             );
         }
 
@@ -266,27 +251,35 @@ export async function POST(req: Request) {
 
         if (sanitized.testCases.length === 0) {
             return NextResponse.json(
-                { error: true, result: "Model returned 0 valid test cases. Try a more specific prompt." },
-                { status: 422 }
+                { success: false, error: "Model returned 0 valid test cases. Try a more specific prompt.", code: 'INVALID_RESPONSE', result: "Model returned 0 valid test cases. Try a more specific prompt." },
+                { status: 500 }
             );
         }
 
         console.log(`[GENERATE] Success: ${sanitized.testCases.length} test cases via ${selectedModel}`);
 
         return NextResponse.json({
+            success: true,
             error: false,
+            testCases: sanitized.testCases,
+            providerUsed,
+            modelUsed: selectedModel,
             result: sanitized,
             meta: {
                 model: selectedModel,
                 activeModel: selectedModel,
+                provider,
+                providerUsed,
                 count: sanitized.testCases.length,
                 type: isAutomationMode ? 'automation' : type,
                 platformType,
                 jiraStoryId: jiraId,
                 fallbackUsed,
                 attempts,
+                chunkingApplied: chunkedRequirement.chunkingApplied,
+                chunkCount: chunkedRequirement.chunks.length,
                 message: isAutomationMode
-                    ? `Automation Workflow: ${sanitized.testCases.length} automation-ready test cases (${providerMessage || activeProvider})`
+                    ? `Automation Workflow: ${sanitized.testCases.length} automation-ready test cases (${providerMessage || providerUsed})`
                     : providerMessage,
             },
         });
@@ -295,7 +288,7 @@ export async function POST(req: Request) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error("[GENERATE] Unexpected error:", msg);
         return NextResponse.json(
-            { error: true, result: `Unexpected error: ${msg}` },
+            { success: false, error: `Unexpected error: ${msg}`, code: 'UNEXPECTED_ERROR', result: `Unexpected error: ${msg}` },
             { status: 500 }
         );
     }

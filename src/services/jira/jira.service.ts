@@ -1,3 +1,5 @@
+import { getSavedModel, getSavedProvider, loadProviderSettings } from '@/src/services/ai/ai-config.service';
+
 export type JiraCredentials = {
     baseUrl: string;
     email: string;
@@ -64,7 +66,12 @@ export async function generateDefect(payload: {
     const res = await fetch('/api/jira/generate-defect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+            ...payload,
+            model: payload.model || getSavedModel(),
+            provider: getSavedProvider(),
+            providerSettings: loadProviderSettings(),
+        }),
     });
     return res.json();
 }
@@ -85,21 +92,21 @@ export async function saveTestCasesToJira(payload: {
 }
 
 export async function fetchJiraStory(storyId: string) {
-    // Try to get credentials from environment (server-side)
-    const baseUrl = process.env.JIRA_BASE_URL;
-    const email = process.env.JIRA_EMAIL;
-    const apiToken = process.env.JIRA_API_TOKEN;
+    if (typeof window === 'undefined') {
+        const { fetchJiraStoryDirect } = await import('@/app/api/jira/get-story/route');
+        return fetchJiraStoryDirect(storyId);
+    }
 
-    const params = new URLSearchParams({ storyId });
-    if (baseUrl) params.set('baseUrl', baseUrl);
-    if (email) params.set('email', email);
-    if (apiToken) params.set('apiToken', apiToken);
+    const credentials = loadJiraCredentials();
+    const res = await fetch('/api/jira/get-story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyId, credentials }),
+    });
 
-    // Build absolute URL for server-side fetch
-    const protocol = typeof window === 'undefined' ? 'http' : 'https';
-    const host = typeof window === 'undefined' ? (process.env.VERCEL_URL || 'localhost:3000') : '';
-    const baseUrlPath = typeof window === 'undefined' ? `${protocol}://${host}` : '';
-    
-    const res = await fetch(`${baseUrlPath}/api/jira/get-story?${params.toString()}`);
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        return { success: false, error: 'Jira story lookup returned a non-JSON response.' };
+    }
     return res.json();
 }

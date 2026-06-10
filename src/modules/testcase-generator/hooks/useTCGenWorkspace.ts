@@ -4,14 +4,17 @@ import { useState, useEffect, useRef } from "react";
 import { HistoryItem, SuiteExecution, SuiteKey, TestCase, AiGenerationOptions, AiGenerationMeta } from "../types";
 import { generateTestCases, fetchModels } from "../services";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
-import { getSavedModel, saveModel, getSavedProvider, saveProvider } from "@/src/services/ai/ai-config.service";
+import { getSavedModel, saveModel, getSavedProvider, saveProvider, loadProviderSettings } from "@/src/services/ai/ai-config.service";
+import { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
 
 const AUTO_MODEL = "auto";
 const GENERATION_STEPS = [
-    'Generating functional scenarios...',
-    'Creating negative validations...',
-    'Building edge cases...',
-    'Formatting export structure...',
+    { label: 'Fetching Jira story...', percent: 10, jiraOnly: true },
+    { label: 'Analyzing requirement...', percent: 25 },
+    { label: 'Chunking requirement...', percent: 40 },
+    { label: 'Planning coverage...', percent: 60 },
+    { label: 'Generating test cases...', percent: 80 },
+    { label: 'Formatting results...', percent: 100 },
 ];
 
 const initialAutomationState: Record<SuiteKey, SuiteExecution> = {
@@ -50,9 +53,35 @@ type AutomationRunResponse = {
 };
 
 type GenerateApiResponse = {
+    success?: boolean;
     error?: unknown;
     result?: unknown;
     meta?: AiGenerationMeta;
+};
+
+type GenerationError = Error & {
+    status?: number;
+    payload?: {
+        error?: unknown;
+        message?: unknown;
+        result?: unknown;
+        code?: string;
+        meta?: AiGenerationMeta;
+    };
+};
+
+type AttachedDocument = {
+    name: string;
+    type: string;
+    text?: string;
+};
+
+type ProviderStatusInfo = {
+    connected: boolean;
+    status: 'connecting' | 'connected' | 'error' | 'fallback';
+    message: string;
+    providerUsed?: string;
+    model?: string;
 };
 
 type ParsedTestCaseResult = {
@@ -82,18 +111,26 @@ export function useTCGenWorkspace() {
     const [sessions, setSessions] = useState<HistoryItem[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [activePanel, setActivePanel] = useState<'testcases' | 'automation' | 'jira'>('testcases');
+    const [activePanel, setActivePanel] = useState<'testcases' | 'api-testing' | 'automation' | 'jira'>('testcases');
     const [generatingPrompt, setGeneratingPrompt] = useState("");
     const [generationModelStatus, setGenerationModelStatus] = useState("Using: Auto");
-    const [resultTab, setResultTab] = useState<'testCases' | 'scripts' | 'logs'>('testCases');
     const [activityIndex, setActivityIndex] = useState(0);
+    const [generationHasJira, setGenerationHasJira] = useState(false);
+    const [generationFailed, setGenerationFailed] = useState(false);
 
     // Feature states
     const [models, setModels] = useState<string[]>([]);
     const [selectedModel, setSelectedModel] = useState(AUTO_MODEL);
-    const [provider, setProvider] = useState<'local' | 'cloud' | 'auto'>('local');
+    const [provider, setProvider] = useState<AiProviderId>('auto');
+    const [providerSettings, setProviderSettings] = useState<ProviderSettings>(() => loadProviderSettings());
     const [providerStatus, setProviderStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
+    const [providerStatusInfo, setProviderStatusInfo] = useState<ProviderStatusInfo>({
+        connected: false,
+        status: 'connecting',
+        message: 'Checking provider...',
+    });
     const [platformType, setPlatformType] = useState<"web" | "mobile" | "api">("web");
+    const [attachedDocuments, setAttachedDocuments] = useState<AttachedDocument[]>([]);
 
     // Automation states
     const [scriptCode, setScriptCode] = useState<string | null>(null);
@@ -116,6 +153,7 @@ export function useTCGenWorkspace() {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const restoredSessionIdRef = useRef<string | null>(null);
+    const providerFailureCountRef = useRef(0);
 
     useEffect(() => {
         const loadSessions = () => {
@@ -163,6 +201,7 @@ export function useTCGenWorkspace() {
         const loadInitial = async () => {
             const activeProvider = getSavedProvider();
             setProvider(activeProvider);
+            setProviderSettings(loadProviderSettings());
 
             try {
                 const data = await fetchModels(activeProvider);
@@ -182,6 +221,12 @@ export function useTCGenWorkspace() {
     }, []);
 
     useEffect(() => {
+        const handleSettingsUpdated = () => setProviderSettings(loadProviderSettings());
+        window.addEventListener('tcgen-provider-settings-updated', handleSettingsUpdated);
+        return () => window.removeEventListener('tcgen-provider-settings-updated', handleSettingsUpdated);
+    }, []);
+
+    useEffect(() => {
         fetchModels(provider)
             .then(data => {
                 setModels(data.models || []);
@@ -190,19 +235,23 @@ export function useTCGenWorkspace() {
                 }
             })
             .catch(err => console.error("Failed to update models for provider", err));
-    }, [provider]);
+    }, [provider, selectedModel]);
 
     useEffect(() => {
         localStorage.setItem("testgen-sessions", JSON.stringify(sessions));
     }, [sessions]);
 
+    const activeGenerationSteps = generationHasJira
+        ? GENERATION_STEPS
+        : GENERATION_STEPS.filter(step => !step.jiraOnly);
+
     useEffect(() => {
         if (!loading) { setActivityIndex(0); return; }
         const interval = window.setInterval(() => {
-            setActivityIndex((v) => (v + 1) % GENERATION_STEPS.length);
+            setActivityIndex((v) => Math.min(v + 1, activeGenerationSteps.length - 1));
         }, 2200);
         return () => window.clearInterval(interval);
-    }, [loading]);
+    }, [loading, activeGenerationSteps.length]);
 
     const activeSession = sessions.find((s) => s.id === activeId) || null;
     const activeSessionId = activeSession?.id;
@@ -213,6 +262,7 @@ export function useTCGenWorkspace() {
 
         if (activeSession?.aiOptions) {
             setSelectedModel(activeSession.aiOptions.model);
+            setProvider(activeSession.aiOptions.provider || getSavedProvider());
             setPlatformType(activeSession.aiOptions.platformType as "web" | "mobile" | "api");
             setValue('');
         } else if (activeSession?.platform) {
@@ -228,19 +278,101 @@ export function useTCGenWorkspace() {
 
     useEffect(() => {
         const loadStatus = async () => {
-            setProviderStatus('connecting');
+            setProviderStatusInfo(prev => (
+                prev.status === 'connecting'
+                    ? prev
+                    : { ...prev, message: prev.message || 'Checking provider...' }
+            ));
             try {
-                const res = await fetch(`/api/health?provider=${provider}`);
+                const res = await fetch('/api/health', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider, providerSettings }),
+                });
                 const payload = await res.json();
-                setProviderStatus(res.ok && payload.connected ? 'connected' : 'error');
+                const connected = Boolean(payload.connected);
+                const status = payload.status === 'fallback'
+                    ? 'fallback'
+                    : connected
+                        ? 'connected'
+                        : 'error';
+
+                if (connected || payload.status === 'fallback') {
+                    providerFailureCountRef.current = 0;
+                } else {
+                    providerFailureCountRef.current += 1;
+                }
+
+                if (connected || payload.status === 'fallback') {
+                    setProviderStatus('connected');
+                } else if (providerFailureCountRef.current >= 3) {
+                    setProviderStatus('error');
+                }
+
+                if (!connected && payload.status !== 'fallback' && providerFailureCountRef.current < 3) {
+                    return;
+                }
+
+                setProviderStatusInfo({
+                    connected,
+                    status,
+                    message: payload.message || (connected ? 'Provider connected' : 'Provider offline'),
+                    providerUsed: payload.providerUsed,
+                    model: payload.model,
+                });
             } catch {
-                setProviderStatus('error');
+                providerFailureCountRef.current += 1;
+                if (providerFailureCountRef.current >= 3) {
+                    setProviderStatus('error');
+                    setProviderStatusInfo({
+                        connected: false,
+                        status: 'error',
+                        message: 'Provider status unavailable',
+                    });
+                }
             }
         };
         loadStatus();
-        const interval = window.setInterval(loadStatus, 20000);
+        const interval = window.setInterval(loadStatus, 60000);
         return () => window.clearInterval(interval);
-    }, [provider]);
+    }, [provider, providerSettings]);
+
+    const refreshProviderSettings = () => {
+        setProviderSettings(loadProviderSettings());
+    };
+
+    const buildPromptWithAttachments = (prompt: string) => {
+        if (attachedDocuments.length === 0) return prompt;
+        const documentContext = attachedDocuments.map((doc) => {
+            const body = doc.text?.trim()
+                ? doc.text.trim().slice(0, 12000)
+                : '[Document uploaded; text extraction unavailable in browser for this file type.]';
+            return `Document: ${doc.name}\n${body}`;
+        }).join('\n\n---\n\n');
+        return `${prompt}\n\nAttached document context:\n${documentContext}`;
+    };
+
+    const handleAttachDocuments = async (files: FileList | File[]) => {
+        const allowedExtensions = ['pdf', 'docx', 'txt', 'md', 'json', 'yaml', 'yml'];
+        const nextDocs: AttachedDocument[] = [];
+        for (const file of Array.from(files)) {
+            const extension = file.name.split('.').pop()?.toLowerCase() || '';
+            if (!allowedExtensions.includes(extension)) continue;
+            const canReadText = ['txt', 'md', 'json', 'yaml', 'yml'].includes(extension);
+            nextDocs.push({
+                name: file.name,
+                type: file.type || extension,
+                text: canReadText ? await file.text() : undefined,
+            });
+        }
+        if (nextDocs.length > 0) {
+            setAttachedDocuments(prev => [...prev, ...nextDocs]);
+        }
+    };
+
+    const handleRemoveAttachment = (name: string) => {
+        setAttachedDocuments(prev => prev.filter(doc => doc.name !== name));
+    };
 
     const handleSend = async (overridePrompt?: string, overrideOptions?: Partial<AiGenerationOptions>) => {
         if (loading) return;
@@ -249,8 +381,12 @@ export function useTCGenWorkspace() {
 
         const currentPrompt = textToSubmit;
         const promptJiraStoryId = extractJiraId(currentPrompt) ?? '';
+        setGenerationHasJira(Boolean(promptJiraStoryId || overrideOptions?.jiraStoryId));
+        setGenerationFailed(false);
+        setActivityIndex(0);
         const generationOptions: AiGenerationOptions = {
             model: overrideOptions?.model ?? selectedModel,
+            provider: overrideOptions?.provider ?? provider,
             platformType: overrideOptions?.platformType ?? platformType,
             customPrompt: overrideOptions?.customPrompt ?? '',
             acceptanceCriteria: overrideOptions?.acceptanceCriteria ?? '',
@@ -258,11 +394,12 @@ export function useTCGenWorkspace() {
         };
 
         saveModel(generationOptions.model);
+        saveProvider(generationOptions.provider);
         setGeneratingPrompt(currentPrompt);
         setGenerationModelStatus(
-            generationOptions.model === AUTO_MODEL
-                ? "Using: Auto (local fallback enabled)"
-                : `Using: ${generationOptions.model}`
+            generationOptions.provider === 'auto'
+                ? "Auto fallback enabled"
+                : `Using: ${generationOptions.provider}`
         );
         setLoading(true);
         setValue("");
@@ -284,7 +421,8 @@ export function useTCGenWorkspace() {
                 aiOptions: generationOptions,
                 aiMeta: {
                     requestedModel: generationOptions.model,
-                    message: generationOptions.model === AUTO_MODEL ? "Using: Auto (local fallback enabled)" : `Using: ${generationOptions.model}`,
+                    provider: generationOptions.provider,
+                    message: generationOptions.provider === 'auto' ? "Auto fallback enabled" : `Using: ${generationOptions.provider}`,
                 },
                 generatedScript: undefined,
                 scriptFileName: undefined,
@@ -311,7 +449,8 @@ export function useTCGenWorkspace() {
                         aiOptions: generationOptions,
                         aiMeta: {
                             requestedModel: generationOptions.model,
-                            message: generationOptions.model === AUTO_MODEL ? "Using: Auto (local fallback enabled)" : `Using: ${generationOptions.model}`,
+                            provider: generationOptions.provider,
+                            message: generationOptions.provider === 'auto' ? "Auto fallback enabled" : `Using: ${generationOptions.provider}`,
                         },
                         updatedAt: now
                     }
@@ -321,18 +460,38 @@ export function useTCGenWorkspace() {
 
         try {
             const data = await generateTestCases(
-                currentPrompt,
+                buildPromptWithAttachments(currentPrompt),
                 generationOptions.model,
                 "functional",
                 generationOptions.platformType,
                 generationOptions.customPrompt,
                 generationOptions.acceptanceCriteria,
-                provider,
-                generationOptions.jiraStoryId
+                generationOptions.provider,
+                generationOptions.jiraStoryId,
+                providerSettings
             ) as GenerateApiResponse;
 
             if (data.meta?.message) {
                 setGenerationModelStatus(data.meta.message);
+                setProviderStatusInfo(prev => ({
+                    ...prev,
+                    status: data.meta?.fallbackUsed ? 'fallback' : 'connected',
+                    connected: true,
+                    message: data.meta?.message || prev.message,
+                    providerUsed: data.meta?.providerUsed,
+                    model: data.meta?.activeModel || data.meta?.model,
+                }));
+            }
+
+            if (data.error && data.meta?.message === 'All Providers Failed') {
+                setProviderStatus('error');
+                setProviderStatusInfo({
+                    connected: false,
+                    status: 'error',
+                    message: 'All Providers Failed',
+                    providerUsed: data.meta.providerUsed,
+                    model: data.meta.activeModel || data.meta.model,
+                });
             }
 
             const parsedResult = data && !data.error && isParsedTestCaseResult(data.result)
@@ -361,7 +520,19 @@ export function useTCGenWorkspace() {
                     : s
             ));
         } catch (error) {
-            const msg = "Network Error: " + (error as Error).message;
+            const generationError = error as GenerationError;
+            const payload = generationError.payload;
+            const msg = String(payload?.error || payload?.message || payload?.result || generationError.message || 'Generation failed');
+            setGenerationFailed(true);
+            setGenerationModelStatus(msg);
+            setProviderStatusInfo(prev => ({
+                ...prev,
+                status: payload?.meta?.fallbackUsed ? 'fallback' : 'error',
+                connected: false,
+                message: msg,
+                providerUsed: payload?.meta?.providerUsed,
+                model: payload?.meta?.activeModel || payload?.meta?.model,
+            }));
             setSessions(prev => prev.map(s =>
                 s.id === targetId
                     ? {
@@ -369,7 +540,7 @@ export function useTCGenWorkspace() {
                         result: null,
                         error: msg,
                         aiOptions: generationOptions,
-                        aiMeta: { requestedModel: generationOptions.model, message: "Generation failed. Retry generation to continue." },
+                        aiMeta: payload?.meta || { requestedModel: generationOptions.model, provider: generationOptions.provider, message: msg },
                         updatedAt: new Date().toISOString()
                     }
                     : s
@@ -402,6 +573,7 @@ export function useTCGenWorkspace() {
         setActiveId(id);
         setActivePanel('testcases');
         setValue("");
+        setAttachedDocuments([]);
         if (window.innerWidth < 768) setIsSidebarOpen(false);
     };
 
@@ -449,6 +621,9 @@ export function useTCGenWorkspace() {
                     testCases,
                     platform: currentThread?.platform || null,
                     jiraStoryId: storyId,
+                    provider: currentThread?.aiOptions?.provider || provider,
+                    providerSettings,
+                    model: currentThread?.aiOptions?.model || selectedModel,
                 }),
             });
             const payload = await response.json();
@@ -460,7 +635,6 @@ export function useTCGenWorkspace() {
             }
             setScriptCode(generatedCode);
             setScriptFileName(generatedFileName);
-            setResultTab('scripts');
             setSessions(prev => prev.map(s =>
                 s.id === activeId
                     ? { ...s, generatedScript: generatedCode, scriptFileName: generatedFileName, updatedAt: new Date().toISOString() }
@@ -682,8 +856,10 @@ export function useTCGenWorkspace() {
         activePanel, setActivePanel,
         generatingPrompt, setGeneratingPrompt,
         generationModelStatus, setGenerationModelStatus,
-        resultTab, setResultTab,
-        activityIndex, progressLabel: GENERATION_STEPS[activityIndex],
+        activityIndex,
+        generationFailed,
+        progressLabel: activeGenerationSteps[Math.min(activityIndex, activeGenerationSteps.length - 1)]?.label || 'Generating test cases...',
+        generationProgress: activeGenerationSteps[Math.min(activityIndex, activeGenerationSteps.length - 1)]?.percent || 0,
         models, setModels,
         selectedModel, setSelectedModel,
         provider, setProvider,
@@ -721,6 +897,13 @@ export function useTCGenWorkspace() {
         handleCopyScript,
         handleDownloadScript,
         saveProvider,
-        saveModel
+        saveModel,
+        providerSettings,
+        setProviderSettings,
+        refreshProviderSettings,
+        providerStatusInfo,
+        attachedDocuments,
+        handleAttachDocuments,
+        handleRemoveAttachment
     };
 }

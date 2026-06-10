@@ -6,10 +6,10 @@ type OllamaTagsResponse = {
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
-    const provider = searchParams.get('provider') || 'local';
+    const provider = searchParams.get('provider') || 'auto';
 
     try {
-        if (provider === 'auto' || provider === 'local') {
+        if (provider === 'ollama') {
             const res = await fetch('http://127.0.0.1:11434/api/tags', {
                 signal: AbortSignal.timeout(5000),
             });
@@ -17,19 +17,17 @@ export async function GET(req: Request) {
             return NextResponse.json({ models: data.models?.map((m) => m.name) || [] });
         }
 
-        // Cloud models: OpenRouter primary, Groq fallback configured server-side.
         return NextResponse.json({ 
             models: [
-                'openrouter/auto',
-                'anthropic/claude-3.5-sonnet',
-                'google/gemini-2.0-flash-001',
+                'auto',
+                process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct',
+                process.env.OPENROUTER_MODEL || 'openrouter/auto',
                 'openai/gpt-4o-mini',
-                'gryphe/mythomax-l2-13b',
-                'mistralai/mistral-7b-instruct',
-                'meta-llama/llama-3.1-8b-instruct',
                 process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+                process.env.OPENCODE_MODEL || 'opencode/default',
+                process.env.OLLAMA_MODEL || 'mistral:7b',
             ],
-            status: 'CLOUD: OpenRouter; CLOUD FALLBACK: Groq',
+            status: 'AUTO: NVIDIA, OpenRouter, Groq, OpenCode, Ollama Local',
         });
     } catch (error) {
         return NextResponse.json({ models: [], error: String(error) }, { status: 503 });

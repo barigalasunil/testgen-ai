@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, BarChart3, History as HistoryIcon, ChevronLeft } from "lucide-react";
+import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HistoryItem, SuiteKey, SuiteExecution } from "../types";
 
 interface SidebarProps {
     history: HistoryItem[];
     activeId: string | null;
-    activePanel: 'testcases' | 'automation' | 'jira';
+    activePanel: 'testcases' | 'api-testing' | 'automation' | 'jira';
     onSelect: (id: string) => void;
-    onChangePanel: (panel: 'testcases' | 'automation' | 'jira') => void;
+    onChangePanel: (panel: 'testcases' | 'api-testing' | 'automation' | 'jira') => void;
     onNewChat: () => void;
     isOpen: boolean;
     toggleSidebar: () => void;
@@ -63,12 +63,10 @@ export function Sidebar({
     };
 
     const navItems = [
-        { id: 'testcases', label: 'Test Case Gen', icon: Bot },
+        { id: 'api-testing', label: 'API Testing', icon: Server },
         { id: 'automation', label: 'Automation Workspace', icon: Zap },
-        { id: 'jira', label: 'Jira Settings', icon: Settings },
-        { id: 'reports', label: 'Reports', icon: BarChart3 },
-        { id: 'history', label: 'Execution History', icon: HistoryIcon },
-    ];
+        { id: 'jira', label: 'Settings', icon: Settings },
+    ] as const;
 
     return (
         <div className={cn(
