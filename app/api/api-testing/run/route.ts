@@ -31,9 +31,10 @@ function runCommand(command: string, args: string[], cwd: string, timeoutMs: num
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json() as { code?: string; testType?: string };
+        const body = await request.json() as { code?: string; testType?: string; expectedCount?: number };
         const code = body.code || '';
         const testType = body.testType || 'playwright';
+        const expectedCount = body.expectedCount || 0;
 
         if (!code.trim()) {
             return NextResponse.json({ success: false, error: 'No API automation code provided' }, { status: 400 });
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
                 passed: 0,
                 failed: 0,
                 total: 0,
-                error: 'Rest Assured execution requires a Maven/TestNG project and Java runtime. Generate the framework files, add them to a Maven project, then run: mvn test',
+                error: 'Rest Assured execution requires a Maven/TestNG project. Use: mvn test',
                 output: 'Rest Assured command: mvn test',
             }, { status: 501 });
         }
@@ -60,21 +61,26 @@ export async function POST(request: Request) {
             writeFileSync(filePath, code, 'utf-8');
             const result = await runCommand('npx', ['newman', 'run', filePath], rootDir, 180000);
             try { unlinkSync(filePath); } catch {}
-            const notInstalled = /could not determine executable|not recognized|newman/i.test(result.stderr) && result.exitCode !== 0;
+            
+            // Basic Newman parsing
+            const assertionsMatch = result.stdout.match(/assertions\s+│\s+(\d+)\s+│\s+(\d+)/);
+            const total = assertionsMatch ? parseInt(assertionsMatch[1]) : (result.exitCode === 0 ? 1 : 1);
+            const failed = assertionsMatch ? parseInt(assertionsMatch[2]) : (result.exitCode === 0 ? 0 : 1);
+            const passed = total - failed;
+
             return NextResponse.json({
                 success: result.exitCode === 0,
-                passed: result.exitCode === 0 ? 1 : 0,
-                failed: result.exitCode === 0 ? 0 : 1,
-                total: 1,
+                passed,
+                failed,
+                total,
                 durationMs: result.durationMs,
-                error: notInstalled ? 'Newman not installed. Install with: npm install -D newman' : undefined,
                 output: result.stdout.slice(0, 5000),
                 stderr: result.stderr.slice(0, 5000),
-            }, { status: result.exitCode === 0 ? 200 : notInstalled ? 501 : 500 });
+            });
         }
 
         if (testType !== 'playwright') {
-            return NextResponse.json({ success: false, error: `Unsupported API execution framework: ${testType}` }, { status: 400 });
+            return NextResponse.json({ success: false, error: `Unsupported framework: ${testType}` }, { status: 400 });
         }
 
         const fileName = `api-test-${Date.now()}.spec.ts`;
@@ -82,41 +88,35 @@ export async function POST(request: Request) {
         const relativeSpecPath = `tests/generated/${fileName}`;
         writeFileSync(filePath, code, 'utf-8');
         const configPath = join(rootDir, 'automation', 'playwright.config.ts');
-        const reportName = `run-${Date.now()}`;
-        const reportDir = join(rootDir, 'public', 'automation-reports', 'api-tests', reportName);
-        if (!existsSync(reportDir)) mkdirSync(reportDir, { recursive: true });
+        
         const result = await runCommand(
             'npx',
-            ['playwright', 'test', relativeSpecPath, '--config', configPath, '--reporter=json,html'],
+            ['playwright', 'test', relativeSpecPath, '--config', configPath, '--reporter=json'],
             join(rootDir, 'automation'),
-            300000,
-            { PW_REPORT_DIR: reportDir, PLAYWRIGHT_HTML_REPORT: reportDir }
+            300000
         );
         try { unlinkSync(filePath); } catch {}
 
         let passed = 0;
-        let failed = result.exitCode === 0 ? 0 : 1;
-        let total = result.exitCode === 0 ? 1 : 1;
-        const collectSpecs = (suite: { specs?: unknown[]; suites?: unknown[] }): unknown[] => [
-            ...(Array.isArray(suite.specs) ? suite.specs : []),
-            ...(Array.isArray(suite.suites) ? suite.suites.flatMap(child => collectSpecs(child as { specs?: unknown[]; suites?: unknown[] })) : []),
-        ];
+        let failed = 0;
+        let total = 0;
+
         try {
-            const match = result.stdout.match(/\{[\s\S]*"suites"[\s\S]*\}/);
-            if (match) {
-                const report = JSON.parse(match[0]);
-                const specs = Array.isArray(report.suites)
-                    ? report.suites.flatMap((suite: { specs?: unknown[]; suites?: unknown[] }) => collectSpecs(suite))
-                    : [];
-                total = specs.length || total;
-                passed = specs.filter((spec: { tests?: { results?: { status?: string }[] }[] }) => spec.tests?.[0]?.results?.[0]?.status === 'passed').length;
-                failed = Math.max(total - passed, 0);
+            const report = JSON.parse(result.stdout);
+            const stats = report.stats || {};
+            total = stats.expected || 0;
+            passed = stats.unexpected === 0 ? total : (stats.expected - stats.unexpected);
+            failed = stats.unexpected || 0;
+
+            // Strict Validation
+            if (expectedCount > 0 && total !== expectedCount) {
+                console.warn(`[Execution] Count mismatch: Expected ${expectedCount}, ran ${total}`);
             }
-        } catch {}
-        const reportIndex = join(reportDir, 'index.html');
-        const reportUrl = existsSync(reportIndex)
-            ? `/automation-reports/api-tests/${reportName}/index.html`
-            : undefined;
+        } catch {
+            total = result.exitCode === 0 ? 1 : 1;
+            passed = result.exitCode === 0 ? 1 : 0;
+            failed = total - passed;
+        }
 
         return NextResponse.json({
             success: result.exitCode === 0,
@@ -126,8 +126,7 @@ export async function POST(request: Request) {
             durationMs: result.durationMs,
             output: result.stdout.slice(0, 5000),
             stderr: result.stderr.slice(0, 5000),
-            reportUrl,
-        }, { status: result.exitCode === 0 ? 200 : 500 });
+        });
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return NextResponse.json({ success: false, error: message }, { status: 500 });

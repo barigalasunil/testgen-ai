@@ -11,6 +11,7 @@ import {
     RuntimeProviderId,
 } from './providers/types';
 import { getErrorMessage, normalizeUnknownError } from './providers/shared';
+import { filterChatModels, filterEmbeddingModels, splitModelsByType } from './providers/ollama-utils';
 
 export type ProviderOrchestratorResult = {
     content: string;
@@ -37,6 +38,8 @@ export type ProviderStatusResult = {
     status: 'connected' | 'offline' | 'fallback' | 'inactive';
     message: string;
     checkedAt?: number;
+    chatModels?: string[];
+    embeddingModels?: string[];
 };
 
 const FALLBACK_CHAIN: RuntimeProviderId[] = ['nvidia', 'openrouter', 'groq', 'opencode', 'ollama'];
@@ -71,12 +74,22 @@ function hasConfig(provider: RuntimeProviderId, settings?: ProviderSettings): bo
     return Boolean(settings?.ollamaBaseUrl || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434');
 }
 
+function getOllamaTimeout(): number {
+    const env = process.env.OLLAMA_TIMEOUT_MS;
+    if (env) {
+        const parsed = parseInt(env, 10);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return 60000;
+}
+
 function fallbackEligible(error: AiProviderError): boolean {
     return [
         'RATE_LIMIT',
         'TOKEN_LIMIT',
         'QUOTA_EXCEEDED',
         'TIMEOUT',
+        'MODEL_TIMEOUT',
         'NETWORK_ERROR',
         'INVALID_RESPONSE',
         'PROVIDER_ERROR',
@@ -86,20 +99,20 @@ function fallbackEligible(error: AiProviderError): boolean {
     ].includes(error.code);
 }
 
-async function getOllamaModels(settings?: ProviderSettings): Promise<string[]> {
+async function getOllamaModels(settings?: ProviderSettings): Promise<{ chatModels: string[]; embeddingModels: string[] }> {
     const baseUrl = settings?.ollamaBaseUrl || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
     try {
         const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/tags`, {
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(3000),
         });
         if (!response.ok) {
-            throw new AiProviderError('ollama', 'OLLAMA_OFFLINE', `Ollama tags failed with HTTP ${response.status}`, response.status);
+            return { chatModels: [], embeddingModels: [] };
         }
         const data = await response.json() as { models?: { name: string }[] };
-        return data.models?.map(model => model.name) || [];
-    } catch (error) {
-        if (error instanceof AiProviderError) throw error;
-        throw new AiProviderError('ollama', 'OLLAMA_OFFLINE', 'Ollama is offline or unreachable');
+        const allModels = data.models?.map(model => model.name) || [];
+        return splitModelsByType(allModels);
+    } catch {
+        return { chatModels: [], embeddingModels: [] };
     }
 }
 
@@ -114,14 +127,14 @@ async function preflightProvider(provider: RuntimeProviderId, request: ProviderG
         return model;
     }
 
-    const models = await getOllamaModels(request.settings);
-    if (models.length === 0) {
-        throw new AiProviderError(provider, 'MISSING_MODEL', 'Ollama has no models installed');
+    const { chatModels } = await getOllamaModels(request.settings);
+    if (chatModels.length === 0) {
+        throw new AiProviderError(provider, 'MISSING_MODEL', 'Ollama has no chat models installed');
     }
     const requested = model || request.settings?.ollamaModel || process.env.OLLAMA_MODEL;
-    if (!requested || requested === 'auto') return models[0];
-    if (models.includes(requested)) return requested;
-    const prefixMatch = models.find(name => name.startsWith(requested.split(':')[0]));
+    if (!requested || requested === 'auto') return chatModels[0];
+    if (chatModels.includes(requested)) return requested;
+    const prefixMatch = chatModels.find(name => name.startsWith(requested.split(':')[0]));
     if (prefixMatch) return prefixMatch;
     throw new AiProviderError(provider, 'MISSING_MODEL', `Ollama model "${requested}" is not installed`);
 }
@@ -145,10 +158,11 @@ export class AiProviderOrchestrator {
     }
 
     async generate(provider: AiProviderId, request: ProviderGenerateRequest): Promise<ProviderOrchestratorResult & { attempts: ProviderAttempt[] }> {
+        // Global safety timeout of 120 seconds
         return await Promise.race([
             this.generateInternal(provider, request),
             new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new AiProviderError('ollama', 'TIMEOUT', 'AI request timed out after 90 seconds')), 90000);
+                setTimeout(() => reject(new AiProviderError('ollama', 'TIMEOUT', 'Global AI request timed out after 120 seconds')), 120000);
             }),
         ]);
     }
@@ -156,52 +170,186 @@ export class AiProviderOrchestrator {
     private async generateInternal(provider: AiProviderId, request: ProviderGenerateRequest): Promise<ProviderOrchestratorResult & { attempts: ProviderAttempt[] }> {
         const attempts: ProviderAttempt[] = [];
         const chain = provider === 'auto' ? FALLBACK_CHAIN : [provider as RuntimeProviderId];
+        
+        // Define fallback models for cloud providers for model-level resilience
+        const modelChain: Record<string, string[]> = {
+            nvidia: ['meta/llama-3.1-405b-instruct', 'meta/llama-3.1-70b-instruct', 'meta/llama-3.1-8b-instruct'],
+            openrouter: ['meta-llama/llama-3.1-405b-instruct', 'google/gemini-pro-1.5', 'openai/gpt-4o-mini'],
+            groq: ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant'],
+            opencode: ['meta-llama/llama-3.1-405b-instruct', 'meta-llama/llama-3.1-70b-instruct'],
+        };
 
-        console.log(`[AI] Selected provider: ${PROVIDER_LABELS[provider]}`);
+        // Build Ollama model chain from only installed chat models — never hardcoded, never embedding
+        function buildOllamaModelChain(primaryModel: string | undefined, chatModels: string[]): string[] {
+            if (chatModels.length === 0) return [];
+            if (!primaryModel || primaryModel === 'auto') return [...chatModels];
+            // Exact match goes first
+            if (chatModels.includes(primaryModel)) {
+                return [primaryModel, ...chatModels.filter(m => m !== primaryModel)];
+            }
+            // Prefix match
+            const prefix = primaryModel.split(':')[0];
+            const prefixMatch = chatModels.find(m => m.startsWith(prefix));
+            if (prefixMatch) {
+                return [prefixMatch, ...chatModels.filter(m => m !== prefixMatch)];
+            }
+            // Primary not installed — use all installed chat models in API order
+            return [...chatModels];
+        }
+
+        console.log(`[AI] Dispatching request with ${PROVIDER_LABELS[provider]} strategy`);
 
         for (const candidate of chain) {
-            const requestedModel = modelFor(
+            // For Ollama, dynamically build model chain from installed chat models only
+            if (candidate === 'ollama') {
+                const { chatModels, embeddingModels } = await getOllamaModels(request.settings);
+                if (chatModels.length === 0) {
+                    attempts.push({
+                        provider: candidate,
+                        model: request.model || 'unknown',
+                        status: 'skipped',
+                        code: 'OLLAMA_OFFLINE',
+                        reason: embeddingModels.length > 0
+                            ? 'Ollama has no chat models installed (only embedding models)'
+                            : 'Ollama is offline or has no models installed',
+                    });
+                    if (provider !== 'auto') break;
+                    continue;
+                }
+
+                const primaryModel = modelFor(
+                    candidate,
+                    request.settings,
+                    provider === 'auto' ? 'auto' : request.model
+                );
+
+                const modelsToTry = buildOllamaModelChain(primaryModel, chatModels);
+                const ollamaTimeout = getOllamaTimeout();
+                const attemptedModels = new Set<string>();
+
+                for (const currentModel of modelsToTry) {
+                    if (attemptedModels.has(currentModel)) continue;
+                    attemptedModels.add(currentModel);
+
+                    try {
+                        const resolvedModel = await preflightProvider(candidate, request, currentModel);
+                        console.log(`[AI] Attempting ${PROVIDER_LABELS[candidate]} (Model: ${resolvedModel})`);
+
+                        const result = await Promise.race([
+                            executeProvider(candidate, request, resolvedModel),
+                            new Promise<never>((_, reject) => {
+                                setTimeout(() => reject(new AiProviderError(candidate, 'MODEL_TIMEOUT', `${PROVIDER_LABELS[candidate]} (${resolvedModel}) timed out after ${ollamaTimeout/1000}s`)), ollamaTimeout);
+                            }),
+                        ]);
+
+                        attempts.push({ provider: candidate, model: result.modelUsed, status: 'success' });
+                        return {
+                            content: result.content,
+                            providerUsed: result.providerUsed,
+                            modelUsed: result.modelUsed,
+                            fallbackUsed: attempts.length > 1,
+                            fallbackChain: attempts.map((attempt) => attempt.provider),
+                            attempts,
+                        };
+                    } catch (error) {
+                        const normalized = normalizeUnknownError(candidate, error);
+                        // Use MODEL_TIMEOUT for generation timeouts, never OLLAMA_OFFLINE
+                        const errorCode = normalized.code === 'TIMEOUT' || normalized.code === 'OLLAMA_OFFLINE'
+                            ? 'MODEL_TIMEOUT'
+                            : normalized.code;
+
+                        const status = errorCode === 'MISSING_API_KEY' || errorCode === 'MISSING_MODEL' ? 'skipped' : 'failed';
+                        attempts.push({
+                            provider: candidate,
+                            model: currentModel,
+                            status,
+                            code: errorCode,
+                            reason: normalized.message,
+                        });
+
+                        if (errorCode === 'MODEL_TIMEOUT') {
+                            console.warn(`[AI] ${PROVIDER_LABELS[candidate]} (${currentModel}) timed out, trying next model`);
+                        } else {
+                            console.warn(`[AI] ${PROVIDER_LABELS[candidate]} (${currentModel}) ${status}: ${errorCode}`);
+                        }
+                    }
+                }
+
+                if (provider !== 'auto') break;
+                continue;
+            }
+
+            // For cloud providers, use the existing model chain
+            const primaryModel = modelFor(
                 candidate,
                 request.settings,
-                provider === 'auto' ? undefined : request.model
+                provider === 'auto' ? 'auto' : request.model
             );
+            
+            const modelsToTry = (primaryModel === 'auto' || !primaryModel)
+                ? (modelChain[candidate] || ['auto'])
+                : [primaryModel, ...(modelChain[candidate] || []).filter(m => m !== primaryModel)];
 
-            try {
-                const resolvedModel = await preflightProvider(candidate, request, requestedModel);
-                console.log(`[AI] Trying provider: ${PROVIDER_LABELS[candidate]}`);
-                const result = await executeProvider(candidate, request, resolvedModel);
-                attempts.push({ provider: candidate, model: result.modelUsed, status: 'success' });
-                console.log(`[AI] ${PROVIDER_LABELS[candidate]} success`);
-                return {
-                    content: result.content,
-                    providerUsed: result.providerUsed,
-                    modelUsed: result.modelUsed,
-                    fallbackUsed: provider === 'auto' && candidate !== FALLBACK_CHAIN[0],
-                    fallbackChain: provider === 'auto' ? attempts.map((attempt) => attempt.provider) : undefined,
-                    attempts,
-                };
-            } catch (error) {
-                const normalized = normalizeUnknownError(candidate, error);
-                const status = normalized.code === 'MISSING_API_KEY' || normalized.code === 'MISSING_MODEL'
-                    ? 'skipped'
-                    : 'failed';
-                attempts.push({
-                    provider: candidate,
-                    model: requestedModel || 'auto',
-                    status,
-                    code: normalized.code,
-                    reason: normalized.message,
-                });
-                console.warn(`[AI] ${PROVIDER_LABELS[candidate]} ${status}: ${normalized.code}`);
+            for (const currentModel of modelsToTry) {
+                try {
+                    const resolvedModel = await preflightProvider(candidate, request, currentModel);
+                    console.log(`[AI] Attempting ${PROVIDER_LABELS[candidate]} (Model: ${resolvedModel})`);
 
-                if (provider !== 'auto' || !fallbackEligible(normalized)) {
-                    throw Object.assign(normalized, { attempts });
+                    const timeout = 90000;
+
+                    const result = await Promise.race([
+                        executeProvider(candidate, request, resolvedModel),
+                        new Promise<never>((_, reject) => {
+                            setTimeout(() => reject(new AiProviderError(candidate, 'TIMEOUT', `${PROVIDER_LABELS[candidate]} request timed out after ${timeout/1000}s`)), timeout);
+                        }),
+                    ]);
+
+                    attempts.push({ provider: candidate, model: result.modelUsed, status: 'success' });
+                    return {
+                        content: result.content,
+                        providerUsed: result.providerUsed,
+                        modelUsed: result.modelUsed,
+                        fallbackUsed: attempts.length > 1,
+                        fallbackChain: attempts.map((attempt) => attempt.provider),
+                        attempts,
+                    };
+                } catch (error) {
+                    const normalized = normalizeUnknownError(candidate, error);
+                    const status = normalized.code === 'MISSING_API_KEY' || normalized.code === 'MISSING_MODEL' ? 'skipped' : 'failed';
+                    attempts.push({
+                        provider: candidate,
+                        model: currentModel,
+                        status,
+                        code: normalized.code,
+                        reason: normalized.message,
+                    });
+                    console.warn(`[AI] ${PROVIDER_LABELS[candidate]} (${currentModel}) ${status}: ${normalized.code}`);
+                    break;
                 }
+            }
+
+            // Special case: If Ollama failed and it was the primary, and OpenRouter is in the chain, it's already handled by the outer loop
+            if (provider !== 'auto') {
+                // If we are NOT in auto mode, we only tried one provider. If it failed all its models, we throw.
+                break; 
             }
         }
 
-        const summary = attempts.map((attempt) => `${PROVIDER_LABELS[attempt.provider]}: ${attempt.reason || attempt.status}`).join('; ');
-        const error = new AiProviderError('ollama', 'PROVIDER_ERROR', `All AI providers failed. ${summary}`);
+        const ollamaAttempts = attempts.filter(a => a.provider === 'ollama' && a.status === 'failed');
+        const ollamaSkipped = attempts.filter(a => a.provider === 'ollama' && a.status === 'skipped');
+        if (ollamaAttempts.length > 0) {
+            const chatFailures = ollamaAttempts.map(a => `- ${a.model} ${a.reason?.toLowerCase().includes('timeout') ? 'timed out' : 'failed'}`).join('\n');
+            const skippedEmbeddings = ollamaSkipped.filter(a => a.code === 'MISSING_MODEL').map(a => `- ${a.model}`).join('\n');
+            let msg = `Ollama generation failed for chat models:\n${chatFailures}`;
+            if (skippedEmbeddings) {
+                msg += `\n\nSkipped embedding models:\n${skippedEmbeddings}`;
+            }
+            const error = new AiProviderError('auto', 'PROVIDER_ERROR', msg);
+            throw Object.assign(error, { attempts });
+        }
+
+        const summary = attempts.map((attempt) => `${PROVIDER_LABELS[attempt.provider]} (${attempt.model}): ${attempt.reason || attempt.status}`).join(' | ');
+        const error = new AiProviderError('auto', 'PROVIDER_ERROR', `AI generation failed across all attempts. Details: ${summary}`);
         throw Object.assign(error, { attempts });
     }
 
@@ -251,14 +399,37 @@ export class AiProviderOrchestrator {
 
             const baseUrl = settings?.ollamaBaseUrl || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
             const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/tags`, { signal: AbortSignal.timeout(3000) });
+            if (response.ok) {
+                const data = await response.json() as { models?: { name: string }[] };
+                const allModels = data.models?.map(m => m.name) || [];
+                const { chatModels, embeddingModels } = splitModelsByType(allModels);
+                const resolvedModel = model && chatModels.includes(model) ? model : (chatModels[0] || '');
+                return {
+                    connected: true,
+                    provider,
+                    providerUsed: runtimeProvider,
+                    model: resolvedModel,
+                    status: 'connected',
+                    message: chatModels.length > 0
+                        ? `Ollama Local Connected (${chatModels.length} chat model${chatModels.length !== 1 ? 's' : ''})`
+                        : embeddingModels.length > 0
+                            ? 'Ollama Local (only embedding models)'
+                            : 'Ollama Local Connected',
+                    checkedAt,
+                    chatModels,
+                    embeddingModels,
+                };
+            }
             return {
-                connected: response.ok,
+                connected: false,
                 provider,
                 providerUsed: runtimeProvider,
-                model: model || 'mistral:7b',
-                status: response.ok ? 'connected' : 'offline',
-                message: response.ok ? 'Ollama Local Connected' : 'Ollama Local Offline',
+                model: model || '',
+                status: 'offline',
+                message: 'Ollama Local Offline',
                 checkedAt,
+                chatModels: [],
+                embeddingModels: [],
             };
         } catch (error) {
             return {
@@ -269,6 +440,8 @@ export class AiProviderOrchestrator {
                 status: 'offline',
                 message: getErrorMessage(error),
                 checkedAt,
+                chatModels: [],
+                embeddingModels: [],
             };
         }
     }

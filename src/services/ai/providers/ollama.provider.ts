@@ -5,7 +5,11 @@ const PROVIDER = 'ollama' as const;
 
 export async function generateWithOllama(request: ProviderGenerateRequest): Promise<ProviderGenerateResult> {
     const baseUrl = request.settings?.ollamaBaseUrl || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
-    const model = request.model || request.settings?.ollamaModel || process.env.OLLAMA_MODEL || 'mistral:7b';
+    const model = request.model || request.settings?.ollamaModel || process.env.OLLAMA_MODEL || '';
+
+    if (!model) {
+        throw new AiProviderError(PROVIDER, 'MISSING_MODEL', 'No Ollama model specified');
+    }
 
     try {
         const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/generate`, {
@@ -21,12 +25,13 @@ export async function generateWithOllama(request: ProviderGenerateRequest): Prom
                     temperature: request.temperature ?? 0.2,
                 },
             }),
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(120000),
         });
 
         if (!response.ok) {
             const text = await response.text();
-            throw new AiProviderError(PROVIDER, response.status === 404 ? 'MISSING_MODEL' : 'OLLAMA_OFFLINE', `Ollama API error ${response.status}: ${text.slice(0, 500)}`, response.status);
+            const code = response.status === 404 ? 'MISSING_MODEL' : response.status === 408 ? 'MODEL_TIMEOUT' : 'PROVIDER_ERROR';
+            throw new AiProviderError(PROVIDER, code, `Ollama API error ${response.status}: ${text.slice(0, 500)}`, response.status);
         }
 
         const data = await response.json() as { response?: string; output?: string };

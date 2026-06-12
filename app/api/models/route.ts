@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { splitModelsByType } from "@/src/services/ai/providers/ollama-utils";
 
 type OllamaTagsResponse = {
     models?: { name: string }[];
@@ -7,29 +8,51 @@ type OllamaTagsResponse = {
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const provider = searchParams.get('provider') || 'auto';
+    const ollamaBaseUrl = searchParams.get('ollamaBaseUrl') || 'http://127.0.0.1:11434';
 
-    try {
-        if (provider === 'ollama') {
-            const res = await fetch('http://127.0.0.1:11434/api/tags', {
-                signal: AbortSignal.timeout(5000),
+    if (provider === 'ollama') {
+        try {
+            const res = await fetch(`${ollamaBaseUrl.replace(/\/$/, '')}/api/tags`, {
+                signal: AbortSignal.timeout(3000),
             });
+            if (!res.ok) {
+                return NextResponse.json({
+                    success: false,
+                    provider: 'ollama',
+                    online: false,
+                    models: [],
+                    chatModels: [],
+                    embeddingModels: [],
+                    error: 'Ollama Local Offline',
+                });
+            }
             const data = await res.json() as OllamaTagsResponse;
-            return NextResponse.json({ models: data.models?.map((m) => m.name) || [] });
+            const allModels = data.models?.map((m: any) => m.name) || [];
+            const { chatModels, embeddingModels } = splitModelsByType(allModels);
+            return NextResponse.json({
+                success: true,
+                provider: 'ollama',
+                online: true,
+                models: allModels,
+                chatModels,
+                embeddingModels,
+            });
+        } catch {
+            return NextResponse.json({
+                success: false,
+                provider: 'ollama',
+                online: false,
+                models: [],
+                chatModels: [],
+                embeddingModels: [],
+                error: 'Ollama Local Offline',
+            });
         }
-
-        return NextResponse.json({ 
-            models: [
-                'auto',
-                process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct',
-                process.env.OPENROUTER_MODEL || 'openrouter/auto',
-                'openai/gpt-4o-mini',
-                process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
-                process.env.OPENCODE_MODEL || 'opencode/default',
-                process.env.OLLAMA_MODEL || 'mistral:7b',
-            ],
-            status: 'AUTO: NVIDIA, OpenRouter, Groq, OpenCode, Ollama Local',
-        });
-    } catch (error) {
-        return NextResponse.json({ models: [], error: String(error) }, { status: 503 });
     }
+
+    // For Cloud Providers and Auto mode
+    return NextResponse.json({
+        models: ['auto'],
+        status: 'Cloud providers managed via configuration',
+    });
 }

@@ -7,6 +7,15 @@ import { getSavedModel, getSavedProvider, loadProviderSettings } from "@/src/ser
 import { loadJiraCredentials } from "@/src/services/jira/jira.service";
 import { exportApiCsv, exportApiExcel, exportApiJson } from "./api-testing-export.service";
 import { ApiExecutionResult, ApiFramework, ApiInputMode, ApiTestCase } from "./types";
+import { AiProviderId } from "@/src/services/ai/provider-orchestrator";
+import { useGlobalProgress } from "@/src/components/shared/ProgressProvider";
+
+export interface ApiTestingWorkspaceProps {
+    globalProvider: AiProviderId;
+    globalModel: string;
+    onProviderChange: (p: AiProviderId) => void;
+    onModelChange: (m: string) => void;
+}
 
 const inputModes: { key: ApiInputMode; label: string }[] = [
     { key: "swagger-url", label: "Swagger URL" },
@@ -56,7 +65,8 @@ function apiTableDescription(testCases: ApiTestCase[]): string {
     ].join("\n");
 }
 
-export function ApiTestingWorkspace() {
+export function ApiTestingWorkspace({ globalProvider, globalModel }: ApiTestingWorkspaceProps) {
+    const { startProgress, updateProgress, stopProgress } = useGlobalProgress();
     const [inputMode, setInputMode] = useState<ApiInputMode>("swagger-url");
     const [framework, setFramework] = useState<ApiFramework>("playwright");
     const [swaggerUrl, setSwaggerUrl] = useState("/saucedemo-api-spec.json");
@@ -107,57 +117,67 @@ export function ApiTestingWorkspace() {
         jiraStoryId: inputMode === "jira" ? jiraStoryId : null,
         framework,
         testType: framework,
-        provider: getSavedProvider(),
+        provider: globalProvider,
         providerSettings: loadProviderSettings(),
-        model: getSavedModel(),
+        model: globalModel,
         testCases,
     });
 
     const handleGenerateCases = async () => {
         if (!hasInput) return;
         setIsGeneratingCases(true);
+        startProgress("Analyzing API Source...");
         setError("");
         setNotice("");
         setTestCases([]);
         try {
+            updateProgress(30, "Generating Test Cases...");
             const response = await fetch("/api/api-testing/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload("testcases")),
             });
+            updateProgress(80, "Parsing Results...");
             const data = await response.json();
             if (!response.ok || !data.success) throw new Error(data.error || "API test case generation failed");
             setTestCases(data.testCases || []);
             setSource(data.source || null);
             setNotice(`Generated ${(data.testCases || []).length} API test cases`);
+            updateProgress(100, "Done");
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
         } finally {
             setIsGeneratingCases(false);
+            setTimeout(stopProgress, 500);
         }
     };
 
     const handleGenerateAutomation = async () => {
         if (!hasInput) return;
         setIsGeneratingAutomation(true);
+        startProgress(`Generating ${framework} code...`);
         setError("");
         setNotice("");
         setAutomationCode("");
         try {
+            updateProgress(40, "Orchestrating AI...");
             const response = await fetch("/api/api-testing/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload("automation")),
             });
+            updateProgress(85, "Finalizing Code...");
             const data = await response.json();
             if (!response.ok || !data.success) throw new Error(data.error || "API automation generation failed");
             setAutomationCode(data.code || "");
             setSource(prev => prev || data.source || null);
             setNotice(`${frameworks.find(item => item.key === framework)?.label} automation generated`);
+            updateProgress(100, "Ready to Execute");
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
         } finally {
             setIsGeneratingAutomation(false);
+            setTimeout(stopProgress, 500);
         }
     };
 
@@ -249,28 +269,43 @@ export function ApiTestingWorkspace() {
 
     const automationPanel = (
         <section className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800 flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">API Automation</h3>
+                <div className="flex gap-2">
+                    <select value={framework} onChange={e => setFramework(e.target.value as ApiFramework)} className="h-8 rounded border border-gray-200 bg-gray-50 px-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800">
+                        {frameworks.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                    </select>
+                    <button onClick={handleGenerateAutomation} disabled={!hasInput || isGeneratingAutomation} className="inline-flex h-8 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700">
+                        {isGeneratingAutomation ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                        Generate
+                    </button>
+                    <button onClick={handleExecute} disabled={!automationCode || execution.status === "running"} className="inline-flex h-8 items-center gap-1.5 rounded border border-gray-200 px-3 text-xs font-bold hover:bg-gray-50 dark:border-gray-700">
+                        <Play className="h-3 w-3" /> Execute
+                    </button>
+                </div>
             </div>
-            <pre className="max-h-72 overflow-auto bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">{automationCode || "Generated Rest Assured, Playwright API, or Newman artifacts will appear here."}</pre>
-        </section>
-    );
-
-    const executionPanel = (
-        <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Execution</h3>
-                <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", execution.status === "completed" ? "bg-emerald-50 text-emerald-700" : execution.status === "failed" ? "bg-red-50 text-red-700" : execution.status === "running" ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-500")}>{execution.status.toUpperCase()}</span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold">
-                <span className="text-emerald-600">{execution.passed} passed</span>
-                <span className="text-red-600">{execution.failed} failed</span>
-                <span className="text-gray-500">{execution.total} total</span>
-                {execution.reportUrl && <a href={execution.reportUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">Report</a>}
-            </div>
-            {execution.message && <p className="mt-2 text-sm text-red-600">{execution.message}</p>}
-            <div className="mt-3 max-h-44 overflow-auto rounded-lg bg-slate-950 p-3 font-mono text-[11px] text-slate-200">
-                {execution.logs.length ? execution.logs.map((line, index) => <div key={`${index}-${line.slice(0, 8)}`}>{line}</div>) : "Execution logs will appear here."}
+            <pre className="max-h-72 overflow-auto bg-slate-950 p-4 text-[10px] leading-relaxed text-slate-100 font-mono">{automationCode || "Automation code will appear here."}</pre>
+            <div className="border-t border-gray-200 p-4 dark:border-gray-800">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <span className={cn("rounded-full px-2.5 py-1 text-[10px] font-bold uppercase", execution.status === "completed" ? "bg-emerald-50 text-emerald-700" : execution.status === "failed" ? "bg-red-50 text-red-700" : execution.status === "running" ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-500")}>{execution.status}</span>
+                        {execution.status !== 'idle' && (
+                            <div className="flex gap-3 text-[10px] font-bold uppercase">
+                                <span className="text-emerald-600">{execution.passed} Passed</span>
+                                <span className="text-red-600">{execution.failed} Failed</span>
+                                <span className="text-gray-500">{execution.total} Total</span>
+                            </div>
+                        )}
+                    </div>
+                    {execution.reportUrl && (
+                        <a href={execution.reportUrl} target="_blank" rel="noreferrer" className="text-[10px] font-bold uppercase text-blue-600 hover:underline">View Report</a>
+                    )}
+                </div>
+                {execution.logs.length > 0 && (
+                    <div className="mt-3 max-h-32 overflow-auto rounded bg-slate-900 p-2 font-mono text-[9px] text-slate-300">
+                        {execution.logs.map((log, i) => <div key={i}>{log}</div>)}
+                    </div>
+                )}
             </div>
         </section>
     );
@@ -296,19 +331,23 @@ export function ApiTestingWorkspace() {
             )}
 
             <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
-                <div className="space-y-4">
-                    <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">API Input</h3>
-                        <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="space-y-5">
+                    {/* SECTION 1: SOURCE */}
+                    <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                        <div className="flex items-center gap-2 mb-4">
+                            <div className="h-6 w-1 bg-emerald-500 rounded-full" />
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white">1. Source</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
                             {inputModes.map(mode => (
                                 <button
                                     key={mode.key}
                                     onClick={() => setInputMode(mode.key)}
                                     className={cn(
-                                        "rounded-lg border px-3 py-2 text-left text-xs font-semibold transition",
+                                        "rounded-lg border px-3 py-2 text-left text-[11px] font-bold transition uppercase",
                                         inputMode === mode.key
-                                            ? "border-[#10A37F] bg-[#10A37F]/10 text-[#08785f]"
-                                            : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                            ? "border-[#10A37F] bg-[#10A37F]/5 text-[#10A37F]"
+                                            : "border-gray-100 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800"
                                     )}
                                 >
                                     {mode.label}
@@ -316,82 +355,88 @@ export function ApiTestingWorkspace() {
                             ))}
                         </div>
 
-                        <div className="mt-4 space-y-3">
+                        <div className="mt-4">
                             {inputMode === "swagger-url" && (
-                                <input value={swaggerUrl} onChange={event => setSwaggerUrl(event.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" placeholder="https://example.com/openapi.json" />
+                                <input value={swaggerUrl} onChange={event => setSwaggerUrl(event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950" placeholder="Swagger URL" />
                             )}
                             {inputMode === "swagger-upload" && (
-                                <>
-                                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 p-4 text-sm font-semibold text-gray-600 hover:border-[#10A37F] dark:border-gray-700 dark:text-gray-300">
-                                        <Upload className="h-4 w-4" />
-                                        Upload OpenAPI JSON/YAML
-                                        <input type="file" accept=".json,.yaml,.yml" className="hidden" onChange={event => handleFile(event.target.files?.[0], "swagger")} />
-                                    </label>
-                                    <textarea value={swaggerJson} onChange={event => setSwaggerJson(event.target.value)} className="h-36 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" placeholder="OpenAPI content" />
-                                </>
+                                <textarea value={swaggerJson} onChange={event => setSwaggerJson(event.target.value)} className="h-32 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950" placeholder="JSON/YAML Spec Content" />
                             )}
                             {inputMode === "curl" && (
-                                <textarea value={curlCommand} onChange={event => setCurlCommand(event.target.value)} className="h-32 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" placeholder={'curl -X POST https://api.example.com/users -H "Authorization: Bearer ..." -d "{...}"'} />
+                                <textarea value={curlCommand} onChange={event => setCurlCommand(event.target.value)} className="h-32 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950" placeholder="Paste cURL command here" />
+                            )}
+                            {inputMode === "jira" && (
+                                <input value={jiraStoryId} onChange={event => setJiraStoryId(event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950" placeholder="Story ID (e.g. TCGB-101)" />
                             )}
                             {inputMode === "raw" && (
                                 <div className="space-y-2">
                                     <div className="flex gap-2">
-                                        <select value={rawMethod} onChange={event => setRawMethod(event.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100">
-                                            {methods.map(method => <option key={method}>{method}</option>)}
+                                        <select value={rawMethod} onChange={e => setRawMethod(e.target.value)} className="rounded-lg border bg-gray-50 px-2 py-1 text-xs font-bold">
+                                            {methods.map(m => <option key={m} value={m}>{m}</option>)}
                                         </select>
-                                        <input value={rawEndpoint} onChange={event => setRawEndpoint(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" placeholder="https://api.example.com/resource" />
+                                        <input value={rawEndpoint} onChange={e => setRawEndpoint(e.target.value)} className="flex-1 rounded-lg border bg-gray-50 px-3 py-2 text-sm" placeholder="Endpoint URL" />
                                     </div>
-                                    <textarea value={rawHeaders} onChange={event => setRawHeaders(event.target.value)} className="h-20 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" placeholder="Headers" />
-                                    <textarea value={rawPayload} onChange={event => setRawPayload(event.target.value)} className="h-24 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" placeholder="Request body" />
+                                    <textarea value={rawPayload} onChange={e => setRawPayload(e.target.value)} className="h-24 w-full rounded-lg border bg-gray-50 px-3 py-2 font-mono text-xs" placeholder="Payload (Optional)" />
                                 </div>
                             )}
-                            {inputMode === "postman" && (
-                                <>
-                                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 p-4 text-sm font-semibold text-gray-600 hover:border-[#10A37F] dark:border-gray-700 dark:text-gray-300">
-                                        <Upload className="h-4 w-4" />
-                                        Upload Postman Collection
-                                        <input type="file" accept=".json" className="hidden" onChange={event => handleFile(event.target.files?.[0], "postman")} />
-                                    </label>
-                                    <textarea value={postmanJson} onChange={event => setPostmanJson(event.target.value)} className="h-36 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" placeholder="Postman collection JSON" />
-                                </>
-                            )}
-                            {inputMode === "jira" && (
-                                <input value={jiraStoryId} onChange={event => setJiraStoryId(event.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" placeholder="TCGB-123 or Jira URL" />
-                            )}
                         </div>
                     </section>
 
-                    <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Framework</h3>
-                        <div className="mt-3 grid gap-2">
-                            {frameworks.map(item => (
-                                <button key={item.key} onClick={() => setFramework(item.key)} className={cn("rounded-lg border px-3 py-2 text-left text-xs font-semibold", framework === item.key ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300" : "border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300")}>
-                                    {item.label}
-                                </button>
-                            ))}
+                    {/* SECTION 2: DISCOVERY */}
+                    <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <div className="h-6 w-1 bg-blue-500 rounded-full" />
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white">2. Discovery</h3>
+                            </div>
+                            {source && <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">{source.endpointCount} Found</span>}
                         </div>
+                        {source ? (
+                            <div className="space-y-3">
+                                <div className="text-[11px] text-gray-600 dark:text-gray-400 font-medium">Detected endpoints from {source.title}:</div>
+                                <div className="max-h-40 overflow-auto border rounded divide-y dark:border-gray-800 dark:divide-gray-800">
+                                    {source.endpoints?.slice(0, 10).map((e, i) => (
+                                        <div key={i} className="p-2 flex gap-2 text-[10px] font-mono">
+                                            <span className="text-blue-600 font-bold w-12">{e.method}</span>
+                                            <span className="text-gray-600 dark:text-gray-400 truncate">{e.endpoint}</span>
+                                        </div>
+                                    ))}
+                                    {(source.endpoints?.length || 0) > 10 && <div className="p-2 text-center text-[9px] text-gray-400 uppercase font-bold">... and {(source.endpoints?.length || 0) - 10} more</div>}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="py-8 text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest border border-dashed rounded-lg">No Discovery Data</div>
+                        )}
                     </section>
 
-                    <section className="grid gap-2 rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <button onClick={handleGenerateCases} disabled={!hasInput || isGeneratingCases} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#10A37F] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0d8b6d] disabled:opacity-50">
+                    {/* SECTION 3: TEST DESIGN */}
+                    <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <div className="h-6 w-1 bg-purple-500 rounded-full" />
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white">3. Test Design</h3>
+                            </div>
+                            {testCases.length > 0 && <span className="bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">{testCases.length} Cases</span>}
+                        </div>
+                        <button 
+                            onClick={handleGenerateCases} 
+                            disabled={!hasInput || isGeneratingCases} 
+                            className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#10A37F] px-4 py-3 text-[11px] font-bold uppercase text-white shadow-sm hover:shadow-md transition-all hover:translate-y-[-1px] disabled:opacity-50"
+                        >
                             {isGeneratingCases ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                            Generate API Test Cases
-                        </button>
-                        <button onClick={handleGenerateAutomation} disabled={!hasInput || isGeneratingAutomation} className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-                            {isGeneratingAutomation ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                            Generate Automation
-                        </button>
-                        <button onClick={handleExecute} disabled={!automationCode || execution.status === "running"} className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
-                            <Play className="h-4 w-4" />
-                            Execute API Tests
+                            Generate API Cases
                         </button>
                     </section>
 
+                    {/* SECTION 4: AUTOMATION */}
+                    <div className="flex items-center gap-2 mb-2 px-2">
+                        <div className="h-4 w-1 bg-orange-500 rounded-full" />
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-900 dark:text-white">4. Automation Suite</h3>
+                    </div>
                     {automationPanel}
-                    {executionPanel}
                 </div>
 
-                <div className="space-y-4">
+                <div className="flex flex-col gap-5">
                     {source && (
                         <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                             <div className="flex flex-wrap items-center justify-between gap-3">

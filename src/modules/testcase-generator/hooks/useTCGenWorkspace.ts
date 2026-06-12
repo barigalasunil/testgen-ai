@@ -182,10 +182,11 @@ export function useTCGenWorkspace() {
 
         fetchModels()
             .then(data => {
-                if (data.models && data.models.length > 0) {
-                    setModels(data.models);
+                const chatModels = data.chatModels || data.models || [];
+                if (chatModels.length > 0) {
+                    setModels(chatModels);
                     setSelectedModel(current =>
-                        data.models.includes(current) ? current : data.models[0]
+                        chatModels.includes(current) ? current : chatModels[0]
                     );
                 }
             })
@@ -200,18 +201,27 @@ export function useTCGenWorkspace() {
     useEffect(() => {
         const loadInitial = async () => {
             const activeProvider = getSavedProvider();
+            const activeSettings = loadProviderSettings();
             setProvider(activeProvider);
-            setProviderSettings(loadProviderSettings());
+            setProviderSettings(activeSettings);
 
             try {
-                const data = await fetchModels(activeProvider);
-                if (data.models && data.models.length > 0) {
-                    setModels(data.models);
+                const data = await fetchModels(activeProvider, activeSettings.ollamaBaseUrl);
+                const installedModels = data.chatModels || data.models || [];
+                setModels(installedModels);
+
+                if (activeProvider === 'ollama' && installedModels.length > 0) {
                     const savedFromConfig = getSavedModel();
-                    const resolved = savedFromConfig !== AUTO_MODEL && data.models.includes(savedFromConfig)
-                        ? savedFromConfig
-                        : AUTO_MODEL;
-                    setSelectedModel(resolved);
+                    const modelValid = savedFromConfig !== AUTO_MODEL && installedModels.includes(savedFromConfig);
+                    if (modelValid) {
+                        setSelectedModel(savedFromConfig);
+                    } else {
+                        const fallback = installedModels[0];
+                        setSelectedModel(fallback);
+                        saveModel(fallback);
+                    }
+                } else if (activeProvider !== 'ollama') {
+                    setSelectedModel(AUTO_MODEL);
                 }
             } catch (err) {
                 console.error("Failed to fetch models", err);
@@ -227,15 +237,34 @@ export function useTCGenWorkspace() {
     }, []);
 
     useEffect(() => {
-        fetchModels(provider)
+        if (provider !== 'ollama') {
+            setModels([]);
+            setSelectedModel(AUTO_MODEL);
+            return;
+        }
+        const baseUrl = providerSettings.ollamaBaseUrl || 'http://127.0.0.1:11434';
+        fetchModels(provider, baseUrl)
             .then(data => {
-                setModels(data.models || []);
-                if (selectedModel !== AUTO_MODEL && data.models && !data.models.includes(selectedModel)) {
-                    setSelectedModel(AUTO_MODEL);
+                const installedModels = data.chatModels || data.models || [];
+                setModels(installedModels);
+                if (installedModels.length > 0) {
+                    const savedModel = getSavedModel();
+                    const modelValid = savedModel !== 'auto' && installedModels.includes(savedModel);
+                    if (modelValid) {
+                        setSelectedModel(savedModel);
+                    } else {
+                        // Saved model no longer installed — clean up & auto-select first available
+                        const fallback = installedModels[0];
+                        setSelectedModel(fallback);
+                        saveModel(fallback);
+                        if (savedModel && savedModel !== 'auto' && !installedModels.includes(savedModel)) {
+                            console.warn(`[Ollama] Previous model "${savedModel}" not installed. Switched to "${fallback}".`);
+                        }
+                    }
                 }
             })
             .catch(err => console.error("Failed to update models for provider", err));
-    }, [provider, selectedModel]);
+    }, [provider, providerSettings.ollamaBaseUrl]);
 
     useEffect(() => {
         localStorage.setItem("testgen-sessions", JSON.stringify(sessions));
@@ -316,7 +345,7 @@ export function useTCGenWorkspace() {
                 setProviderStatusInfo({
                     connected,
                     status,
-                    message: payload.message || (connected ? 'Provider connected' : 'Provider offline'),
+                    message: payload.message || (connected ? 'Online' : 'Offline'),
                     providerUsed: payload.providerUsed,
                     model: payload.model,
                 });

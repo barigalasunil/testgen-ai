@@ -40,7 +40,7 @@ export async function generateTestCases(
     return payload;
 }
 
-export async function fetchModels(provider: AiProviderId = 'auto') {
-    const res = await fetch(`/api/models?provider=${provider}`);
+export async function fetchModels(provider: AiProviderId = 'auto', ollamaBaseUrl: string = 'http://127.0.0.1:11434') {
+    const res = await fetch(`/api/models?provider=${provider}&ollamaBaseUrl=${encodeURIComponent(ollamaBaseUrl)}`);
     return await res.json();
 }

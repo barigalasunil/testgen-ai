@@ -20,10 +20,13 @@ export function normalizeUnknownError(provider: RuntimeProviderId, error: unknow
     const lower = message.toLowerCase();
 
     if (lower.includes('abort') || lower.includes('timeout')) {
-        return new AiProviderError(provider, 'TIMEOUT', `${provider} request timed out`);
+        return new AiProviderError(provider, 'MODEL_TIMEOUT', `${provider} (${message})`);
     }
-    if (provider === 'ollama' && (lower.includes('offline') || lower.includes('unreachable') || lower.includes('fetch failed'))) {
+    if (provider === 'ollama' && (lower.includes('offline') || lower.includes('ecunnrefused') || lower.includes('unreachable'))) {
         return new AiProviderError(provider, 'OLLAMA_OFFLINE', 'Ollama is offline or unreachable');
+    }
+    if (lower.includes('fetch failed')) {
+        return new AiProviderError(provider, provider === 'ollama' ? 'OLLAMA_OFFLINE' : 'NETWORK_ERROR', `${provider} network error`);
     }
     if (lower.includes('model') && lower.includes('missing')) {
         return new AiProviderError(provider, 'MISSING_MODEL', message);

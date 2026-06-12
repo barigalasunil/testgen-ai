@@ -88,20 +88,16 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
     ] as const;
     const platformOptions = ['web', 'api', 'mobile'] as const;
 
-    const statusClasses = providerStatusInfo.status === 'fallback'
-        ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-900/30'
-        : providerStatus === 'connected'
-            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900/30'
-            : providerStatus === 'connecting'
-                ? 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/30';
-    const statusDotClass = providerStatusInfo.status === 'fallback'
-        ? 'bg-yellow-500'
-        : providerStatus === 'connected'
-            ? 'bg-green-500'
-            : providerStatus === 'connecting'
-                ? 'bg-slate-400'
-                : 'bg-red-500';
+    const statusClasses = providerStatusInfo.connected
+        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900/30'
+        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/30';
+    const statusDotClass = providerStatusInfo.connected
+        ? 'bg-green-500'
+        : 'bg-red-500';
+    
+    // Status text formatting
+    const providerLabel = providerOptions.find(o => o.value === provider)?.label || 'AI Provider';
+    const statusText = `${providerLabel} ${providerStatusInfo.connected ? 'Online' : 'Offline'}`;
 
     return (
         <div className="flex h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-200">
@@ -156,12 +152,50 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                         </h1>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={provider}
+                                onChange={(e) => {
+                                    const nextProvider = e.target.value as typeof provider;
+                                    setProvider(nextProvider);
+                                    saveProvider(nextProvider);
+                                }}
+                                className="h-9 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F]"
+                            >
+                                {providerOptions.map(option => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                            <select
+                                value={selectedModel}
+                                onChange={(e) => { setSelectedModel(e.target.value); saveModel(e.target.value); }}
+                                disabled={provider !== 'ollama' || !providerStatusInfo.connected || (providerStatusInfo.connected && models.length === 0)}
+                                className="h-9 min-w-[170px] rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F] disabled:opacity-60 hidden sm:block"
+                            >
+                                {provider === 'auto' ? (
+                                    <option value="auto">[ Auto Provider Selection ]</option>
+                                ) : provider === 'ollama' ? (
+                                    providerStatusInfo.connected ? (
+                                        models.length > 0 ? (
+                                            models.map(m => <option key={m} value={m}>{m}</option>)
+                                        ) : (
+                                            <option value="disabled">No Ollama chat models installed</option>
+                                        )
+                                    ) : (
+                                        <option value="disabled">[ Ollama Offline ]</option>
+                                    )
+                                ) : (
+                                    <option value="auto">[ Managed by Provider ]</option>
+                                )}
+                            </select>
+                        </div>
+
                         <div className={cn("flex max-w-[300px] items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold", statusClasses)}>
                             <span className={cn("h-2 w-2 rounded-full", statusDotClass)} />
                             <span className="truncate">
-                                {providerStatusInfo.message}
-                                {providerStatusInfo.model ? ` - ${providerStatusInfo.model}` : ''}
+                                {statusText}
+                                {provider === 'auto' && providerStatusInfo.providerUsed ? ` (${providerStatusInfo.providerUsed.toUpperCase()})` : ''}
                             </span>
                         </div>
                     </div>
@@ -226,7 +260,12 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                             )}
 
                             {activePanel === 'api-testing' && (
-                                <ApiTestingWorkspace />
+                                <ApiTestingWorkspace 
+                                    globalProvider={provider}
+                                    globalModel={selectedModel}
+                                    onProviderChange={(p) => { setProvider(p); saveProvider(p); }}
+                                    onModelChange={(m) => { setSelectedModel(m); saveModel(m); }}
+                                />
                             )}
 
                             {activePanel === 'jira' && (
@@ -425,19 +464,6 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                             </label>
                                             <div className="flex items-center gap-2">
                                                 <select
-                                                    value={provider}
-                                                    onChange={(e) => {
-                                                        const nextProvider = e.target.value as typeof provider;
-                                                        setProvider(nextProvider);
-                                                        saveProvider(nextProvider);
-                                                    }}
-                                                    className="h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F]"
-                                                >
-                                                    {providerOptions.map(option => (
-                                                        <option key={option.value} value={option.value}>{option.label}</option>
-                                                    ))}
-                                                </select>
-                                                <select
                                                     value={platformType}
                                                     onChange={(e) => setPlatformType(e.target.value as typeof platformType)}
                                                     className="h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F]"
@@ -446,17 +472,9 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                                         <option key={option} value={option}>{option.toUpperCase()}</option>
                                                     ))}
                                                 </select>
-                                                <select
-                                                    value={selectedModel}
-                                                    onChange={(e) => { setSelectedModel(e.target.value); saveModel(e.target.value); }}
-                                                    className="hidden h-9 max-w-[170px] rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F] sm:block"
-                                                >
-                                                    <option value="auto">Auto Model</option>
-                                                    {models.map(m => <option key={m} value={m}>{m}</option>)}
-                                                </select>
                                                 <button
                                                     onClick={() => handleSend()}
-                                                    disabled={loading || !value.trim()}
+                                                    disabled={loading || !value.trim() || (provider === 'ollama' && models.length === 0)}
                                                     className="flex h-9 w-9 items-center justify-center rounded-full bg-[#10A37F] text-white shadow-md transition-all hover:bg-[#10A37F]/90 disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-gray-800 active:scale-95"
                                                     title="Send"
                                                 >

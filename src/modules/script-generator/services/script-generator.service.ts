@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { aiProviderOrchestrator, AiProviderId, ProviderSettings } from '@/src/services/ai/provider-orchestrator';
+import { filterChatModels } from '@/src/services/ai/providers/ollama-utils';
 import { scriptPromptBuilder } from './prompt-builder';
 import { parseGeneratedScript } from '../utils/response-parser';
 import { ScriptGenerationResult, ScriptPlatform } from '../types';
@@ -48,29 +49,18 @@ function validateGeneratedCode(code: string): { valid: boolean; error?: string }
   return { valid: true };
 }
 
-const MODEL_PREFERENCE = [
-  'qwen3:1.7b',
-  'granite3.3:2b',
-  'phi3:mini',
-  'mistral:7b',
-];
-
 async function resolveAvailableModel(): Promise<string> {
   try {
     const res = await fetch('http://127.0.0.1:11434/api/tags', {
       signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) return 'phi3:mini';
+    if (!res.ok) return '';
     const data = await res.json() as { models: { name: string }[] };
-    const available = data.models.map(m => m.name);
-    if (available.length === 0) return 'phi3:mini';
-    for (const pref of MODEL_PREFERENCE) {
-      const found = available.find(m => m === pref || m.startsWith(pref.split(':')[0]));
-      if (found) return found;
-    }
-    return available[0];
+    const allModels = data.models.map(m => m.name);
+    const chatModels = filterChatModels(allModels);
+    return chatModels[0] || '';
   } catch {
-    return 'phi3:mini';
+    return '';
   }
 }
 
@@ -126,7 +116,7 @@ export class ScriptGeneratorService {
     const targetModel = model && model !== 'auto'
       ? model
       : provider === 'ollama'
-        ? await resolveAvailableModel()
+        ? await resolveAvailableModel() || undefined
         : undefined;
 
     const fileName = resolveFileName(jiraStoryId);

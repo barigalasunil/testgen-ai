@@ -9,6 +9,7 @@ export type ProviderErrorCode =
     | 'TOKEN_LIMIT'
     | 'QUOTA_EXCEEDED'
     | 'TIMEOUT'
+    | 'MODEL_TIMEOUT'
     | 'INVALID_RESPONSE'
     | 'NETWORK_ERROR'
     | 'PROVIDER_ERROR'
@@ -44,10 +45,10 @@ export type ProviderGenerateResult = {
 
 export class AiProviderError extends Error {
     code: ProviderErrorCode;
-    provider: RuntimeProviderId;
+    provider: AiProviderId;
     status?: number;
 
-    constructor(provider: RuntimeProviderId, code: ProviderErrorCode, message: string, status?: number) {
+    constructor(provider: AiProviderId, code: ProviderErrorCode, message: string, status?: number) {
         super(message);
         this.name = 'AiProviderError';
         this.provider = provider;

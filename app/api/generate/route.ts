@@ -14,7 +14,7 @@ function generationStatusFor(error: unknown): number {
     const status = (error as { status?: number }).status;
 
     if (status === 401 || status === 403 || code === 'MISSING_API_KEY') return 401;
-    if (code === 'TIMEOUT') return 408;
+    if (code === 'TIMEOUT' || code === 'MODEL_TIMEOUT') return 408;
     if (code === 'RATE_LIMIT' || code === 'QUOTA_EXCEEDED' || code === 'TOKEN_LIMIT') return 429;
     if (code === 'OLLAMA_OFFLINE' || code === 'NETWORK_ERROR' || code === 'PROVIDER_ERROR') return 503;
     if (code === 'MISSING_MODEL') return 400;
@@ -42,56 +42,6 @@ function normalizePriority(value: unknown): TestCase['priority'] {
     return allowed.includes(value as TestCase['priority']) ? value as TestCase['priority'] : 'P2';
 }
 
-async function resolveModel(requested: string): Promise<string> {
-    const preferenceOrder = [
-        'qwen3:1.7b',
-        'qwen3:1.7b-q4_K_M',
-        'granite3.3:2b',
-        'phi3:mini',
-        'mistral:7b',
-        'gemma4:e4b',
-        'stablelm2',
-        'gemma3:12b',
-    ];
-
-    try {
-        const res = await fetch('http://127.0.0.1:11434/api/tags', {
-            signal: AbortSignal.timeout(3000),
-        });
-        if (!res.ok) return requested;
-
-        const data = await res.json() as { models: { name: string }[] };
-        const available = data.models.map(m => m.name);
-
-        console.log('[GENERATE] Available models:', available);
-
-        if (available.length === 0) return requested;
-
-        // Exact match
-        if (available.includes(requested)) return requested;
-
-        // Prefix match
-        const prefix = requested.split(':')[0];
-        const prefixMatch = available.find(m => m.startsWith(prefix));
-        if (prefixMatch) return prefixMatch;
-
-        // Auto-fallback — smallest preferred model
-        for (const pref of preferenceOrder) {
-            const found = available.find(m =>
-                m === pref || m.startsWith(pref.split(':')[0])
-            );
-            if (found) {
-                console.warn(`[GENERATE] ${requested} not found, using ${found}`);
-                return found;
-            }
-        }
-
-        return available[0];
-    } catch {
-        return requested;
-    }
-}
-
 export async function POST(req: Request) {
     try {
         const {
@@ -117,9 +67,6 @@ export async function POST(req: Request) {
         const resolvedJiraStoryId = requestJiraStoryId || resolvedPrompt.jiraStoryId || null;
 
         let selectedModel = model || "auto";
-        if (provider === 'ollama' && selectedModel !== 'auto') {
-            selectedModel = await resolveModel(selectedModel);
-        }
 
         console.log(`[GENERATE] Provider: ${provider}, Jira: ${resolvedJiraStoryId || 'none'}`);
 

@@ -48,7 +48,7 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'
 function statusForError(error: unknown): number {
     const code = (error as { code?: string }).code;
     if (code === 'MISSING_API_KEY') return 401;
-    if (code === 'TIMEOUT') return 408;
+    if (code === 'TIMEOUT' || code === 'MODEL_TIMEOUT') return 408;
     if (code === 'RATE_LIMIT' || code === 'QUOTA_EXCEEDED' || code === 'TOKEN_LIMIT') return 429;
     if (code === 'OLLAMA_OFFLINE' || code === 'NETWORK_ERROR' || code === 'PROVIDER_ERROR') return 503;
     const message = error instanceof Error ? error.message : String(error);
@@ -246,9 +246,7 @@ function parseJiraApiDetails(storyId: string, storyText: string): ApiSource {
         requestData: '',
         authRequired: /auth|token|bearer|api key/i.test(storyText),
     }));
-    if (endpoints.length === 0) {
-        throw new Error('Insufficient API information');
-    }
+    
     return {
         title: `Jira ${storyId}`,
         description: storyText.slice(0, 1000),
@@ -258,19 +256,93 @@ function parseJiraApiDetails(storyId: string, storyText: string): ApiSource {
     };
 }
 
+async function discoverApiFromText(storyId: string, text: string, provider: AiProviderId, model?: string, settings?: ProviderSettings): Promise<ApiSource> {
+    const prompt = `You are a Lead API Engineer and Architect.
+Extract all API endpoints and technical structures from the following JIRA story or documentation.
+Look for:
+1. Endpoints (paths) and HTTP Methods (GET, POST, etc.)
+2. Request headers and body structures
+3. Response codes and body structures
+4. Authentication requirements (OAuth, API Key, etc.)
+
+DOCUMENTATION:
+${text.slice(0, 8000)}
+
+Return ONLY a JSON object in this format:
+{
+  "title": "Short title",
+  "description": "Short description",
+  "endpoints": [
+    {
+      "method": "GET",
+      "endpoint": "/v1/users",
+      "summary": "Retrieve all users",
+      "requestData": "{...}",
+      "responses": ["200", "401"],
+      "authRequired": true
+    }
+  ]
+}
+If no API information is found, return an empty endpoints array.`;
+
+    try {
+        const result = await aiProviderOrchestrator.generate(provider, {
+            prompt,
+            model,
+            settings,
+            responseFormat: 'json',
+            maxTokens: 3000,
+            temperature: 0.1,
+        });
+
+        // Clean potentially markdown-wrapped JSON
+        const cleanContent = result.content.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+        const discovered = JSON.parse(cleanContent);
+        
+        return {
+            title: discovered.title || `Discoveries for ${storyId}`,
+            description: discovered.description || `Extracted from Jira story ${storyId}`,
+            jiraStoryId: storyId,
+            raw: text,
+            endpoints: (discovered.endpoints || []).map((e: any) => ({
+                ...e,
+                method: String(e.method || 'GET').toUpperCase()
+            }))
+        };
+    } catch (err) {
+        console.error('[Discovery] AI extraction failed, falling back to regex:', err);
+        // Fallback to basic regex if AI fails
+        return parseJiraApiDetails(storyId, text);
+    }
+}
+
 async function resolveApiSource(body: GenerateRequest): Promise<ApiSource> {
     const mode = body.inputMode === 'url' ? 'swagger-url' : body.inputMode === 'paste' ? 'swagger-upload' : body.inputMode;
+    
     if (mode === 'swagger-url' || mode === 'swagger-upload') return parseSwagger(await readSpec(body.swaggerUrl, body.swaggerJson));
     if (mode === 'curl') return parseCurl(body.curlCommand || '');
     if (mode === 'raw') return parseRaw(body);
     if (mode === 'postman') return parsePostman(body.postmanJson || '');
+    
     if (mode === 'jira') {
         const storyId = body.jiraStoryId || extractJiraId(body.jiraUrl);
         if (!storyId) throw new Error('Missing Jira story ID');
+        
         const result = await fetchJiraStoryDirect(storyId);
         if (!result.success) throw new Error(result.error || 'Jira fetch failed');
-        return parseJiraApiDetails(storyId, [result.summary, result.description, result.acceptanceCriteria].filter(Boolean).join('\n\n'));
+        
+        const combinedText = [result.summary, result.description, result.acceptanceCriteria].filter(Boolean).join('\n\n');
+        
+        // Use the new AI Discovery Engine
+        return await discoverApiFromText(
+            storyId, 
+            combinedText, 
+            body.provider || 'auto', 
+            body.model, 
+            body.providerSettings
+        );
     }
+    
     throw new Error('Unsupported API input type');
 }
 

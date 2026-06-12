@@ -1,3 +1,4 @@
+import { ProgressProvider } from "@/src/components/shared/ProgressProvider";
 import "./globals.css";
 
 export const metadata = {
@@ -19,7 +20,9 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-background text-foreground">
-        {children}
+        <ProgressProvider>
+          {children}
+        </ProgressProvider>
       </body>
     </html>
   );
