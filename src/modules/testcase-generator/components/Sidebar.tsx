@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, Server, Bug } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { HistoryItem, SuiteKey, SuiteExecution, WorkspacePanel } from "../types";
+import { AutomationExecutionSummary, HistoryItem, SuiteKey, SuiteExecution, WorkspacePanel } from "../types";
 
 interface SidebarProps {
     history: HistoryItem[];
@@ -25,7 +25,7 @@ interface SidebarProps {
     isGeneratingScript?: boolean;
     isRunningAutomation?: boolean;
     executionLogs?: string[];
-    executionSummary?: { total: number; passed: number; failed: number; durationMs: number; reportUrl?: string } | null;
+    executionSummary?: AutomationExecutionSummary | null;
     passedTests?: string[];
     failedTests?: string[];
     headed?: boolean;
@@ -63,8 +63,9 @@ export function Sidebar({
     };
 
     const navItems = [
-        { id: 'api-testing', label: 'API Testing', icon: Server },
-        { id: 'automation', label: 'Automation Workspace', icon: Zap },
+        { id: 'testcases', label: 'QA Workspace', icon: Bot },
+        { id: 'api-testing', label: 'API Lab', icon: Server },
+        { id: 'automation', label: 'Automation Hub', icon: Zap },
         { id: 'defect-studio', label: 'Defect Studio', icon: Bug },
         { id: 'jira', label: 'Settings', icon: Settings },
     ] as const;

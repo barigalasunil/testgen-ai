@@ -55,6 +55,9 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         headed, setHeaded,
         reportUrl,
         automationError,
+        automationToast, setAutomationToast,
+        automationTarget,
+        automationRuns,
         jiraModalOpen, setJiraModalOpen,
         jiraTargetCase,
         textareaRef,
@@ -70,6 +73,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         handleGenerateScript,
         handleRunGeneratedScript,
         handleExecuteSuite,
+        handleSaveAutomationTarget,
         copyTableData,
         handleCopyScript,
         handleDownloadScript,
@@ -256,6 +260,11 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                         headed={headed}
                                         onHeadedChange={setHeaded}
                                         reportUrl={reportUrl}
+                                        automationTarget={automationTarget}
+                                        automationRuns={automationRuns}
+                                        automationToast={automationToast}
+                                        onCloseToast={() => setAutomationToast(null)}
+                                        onSaveAutomationTarget={handleSaveAutomationTarget}
                                         platformType={platformType}
                                     />
                                     {automationError && (

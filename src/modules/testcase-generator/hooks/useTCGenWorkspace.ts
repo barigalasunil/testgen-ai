@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { HistoryItem, SuiteExecution, SuiteKey, TestCase, AiGenerationOptions, AiGenerationMeta, WorkspacePanel, WorkspaceSectionHeader } from "../types";
+import { AutomationExecutionSummary, AutomationRunRecord, AutomationTarget, HistoryItem, SuiteExecution, SuiteKey, TestCase, AiGenerationOptions, AiGenerationMeta, WorkspacePanel, WorkspaceSectionHeader } from "../types";
 import { generateTestCases, fetchModels } from "../services";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import { getSavedModel, saveModel, getSavedProvider, saveProvider, loadProviderSettings } from "@/src/services/ai/ai-config.service";
@@ -28,7 +28,7 @@ const SECTION_HEADERS: Record<WorkspacePanel, WorkspaceSectionHeader> = {
         subtitle: "Generate, automate, and execute API test scenarios.",
     },
     automation: {
-        title: "Automation Workspace",
+        title: "Automation Hub",
         subtitle: "Manage and execute automation suites.",
     },
     "defect-studio": {
@@ -64,16 +64,38 @@ function generateWorkspaceName(prompt: string): string {
 }
 
 type AutomationRunResponse = {
+    success?: boolean;
     error: boolean;
     suite: SuiteKey;
-    status: 'completed' | 'failed';
+    status: 'passed' | 'failed' | 'partial_success' | 'error' | 'completed';
     startedAt: string;
     finishedAt: string;
     durationMs: number;
-    reportUrl: string;
+    targetUrl?: string;
+    browser?: string;
+    mode?: 'Headed' | 'Headless';
+    logs?: string[];
+    reportUrl?: string | null;
+    playwrightReportUrl?: string | null;
+    allureReportUrl?: string | null;
+    healingReportUrl?: string | null;
+    runId?: string;
+    total?: number;
+    passed?: number;
+    failed?: number;
+    failedTests?: string[];
+    errors?: AutomationRunRecord['errors'];
     output?: string;
     stderr?: string;
     message?: string;
+};
+
+type AutomationToast = {
+    id: string;
+    type: 'success' | 'failed' | 'error' | 'warning' | 'partial_success';
+    message: string;
+    reportUrl?: string | null;
+    persistent: boolean;
 };
 
 type GenerateApiResponse = {
@@ -129,6 +151,39 @@ function hasRawResponse(value: unknown): value is { raw: string } {
     );
 }
 
+function extractTargetUrl(text: string): string | undefined {
+    const match = text.match(/https?:\/\/[^\s"'<>),]+/i);
+    return match?.[0]?.replace(/[.,;:]+$/, '');
+}
+
+function buildAutomationTarget(session: {
+    id: string;
+    title?: string;
+    prompt: string;
+    aiOptions?: AiGenerationOptions;
+    result?: { testCases: TestCase[] } | null;
+    scriptFileName?: string;
+    automationTarget?: AutomationTarget;
+}): AutomationTarget {
+    const existingUrl = session.automationTarget?.targetUrl;
+    const promptUrl = extractTargetUrl(session.prompt);
+    const targetUrl = existingUrl || promptUrl;
+    return {
+        sessionId: session.id,
+        jiraStoryId: session.aiOptions?.jiraStoryId,
+        sessionTitle: session.title,
+        targetUrl,
+        targetUrlSource: existingUrl
+            ? session.automationTarget?.targetUrlSource || 'manual_session'
+            : promptUrl
+                ? 'jira_story'
+                : undefined,
+        generatedTestCaseIds: session.result?.testCases?.map(testCase => testCase.testCaseId) || [],
+        generatedScriptPath: session.scriptFileName,
+        latestRunId: session.automationTarget?.latestRunId,
+    };
+}
+
 export function useTCGenWorkspace() {
     const [value, setValue] = useState("");
     const [loading, setLoading] = useState(false);
@@ -163,13 +218,14 @@ export function useTCGenWorkspace() {
     const [isGeneratingScript, setIsGeneratingScript] = useState(false);
     const [isRunningAutomation, setIsRunningAutomation] = useState(false);
     const [executionLogs, setExecutionLogs] = useState<string[]>([]);
-    const [executionSummary, setExecutionSummary] = useState<{ total: number; passed: number; failed: number; durationMs: number; reportUrl?: string } | null>(null);
+    const [executionSummary, setExecutionSummary] = useState<AutomationExecutionSummary | null>(null);
     const [passedTests, setPassedTests] = useState<string[]>([]);
     const [failedTests, setFailedTests] = useState<string[]>([]);
     const [headed, setHeaded] = useState(false);
     const [reportUrl, setReportUrl] = useState<string | null>(null);
     const [automationError, setAutomationError] = useState<string | null>(null);
     const [dashboardAutomation, setDashboardAutomation] = useState<Record<SuiteKey, SuiteExecution>>(initialAutomationState);
+    const [automationToast, setAutomationToast] = useState<AutomationToast | null>(null);
 
     // Jira modal states
     const [jiraModalOpen, setJiraModalOpen] = useState(false);
@@ -179,6 +235,23 @@ export function useTCGenWorkspace() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const restoredSessionIdRef = useRef<string | null>(null);
     const providerFailureCountRef = useRef(0);
+
+    const focusAutomationLogs = () => {
+        setActivePanel('automation');
+        setTimeout(() => {
+            document.getElementById('automation-execution-logs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+    };
+
+    const showAutomationToast = (toast: Omit<AutomationToast, 'id'>) => {
+        const nextToast = { ...toast, id: Date.now().toString() };
+        setAutomationToast(nextToast);
+        if (!nextToast.persistent) {
+            setTimeout(() => {
+                setAutomationToast(current => current?.id === nextToast.id ? null : current);
+            }, 4500);
+        }
+    };
 
     useEffect(() => {
         const loadSessions = () => {
@@ -480,6 +553,7 @@ export function useTCGenWorkspace() {
         const targetId = activeId ?? Date.now().toString();
         const now = new Date().toISOString();
         const smartName = generateWorkspaceName(currentPrompt);
+        const initialTargetUrl = extractTargetUrl(currentPrompt);
 
         if (!activeId) {
             setActiveId(targetId);
@@ -498,6 +572,14 @@ export function useTCGenWorkspace() {
                 },
                 generatedScript: undefined,
                 scriptFileName: undefined,
+                automationTarget: {
+                    sessionId: targetId,
+                    jiraStoryId: generationOptions.jiraStoryId,
+                    sessionTitle: smartName,
+                    targetUrl: initialTargetUrl,
+                    targetUrlSource: initialTargetUrl ? 'jira_story' : undefined,
+                    generatedTestCaseIds: [],
+                },
                 automation: {
                     smoke: { status: 'idle' },
                     sanity: { status: 'idle' },
@@ -518,6 +600,16 @@ export function useTCGenWorkspace() {
                         error: null,
                         generatedScript: undefined,
                         scriptFileName: undefined,
+                        automationTarget: {
+                            ...(s.automationTarget || { sessionId: targetId }),
+                            sessionId: targetId,
+                            jiraStoryId: generationOptions.jiraStoryId,
+                            sessionTitle: s.title,
+                            targetUrl: initialTargetUrl || s.automationTarget?.targetUrl,
+                            targetUrlSource: initialTargetUrl ? 'jira_story' : s.automationTarget?.targetUrlSource,
+                            generatedTestCaseIds: [],
+                            generatedScriptPath: undefined,
+                        },
                         aiOptions: generationOptions,
                         aiMeta: {
                             requestedModel: generationOptions.model,
@@ -587,6 +679,12 @@ export function useTCGenWorkspace() {
                         error: parsedError,
                         aiOptions: generationOptions,
                         aiMeta: data.meta,
+                        automationTarget: buildAutomationTarget({
+                            ...s,
+                            prompt: currentPrompt,
+                            aiOptions: generationOptions,
+                            result: parsedResult,
+                        }),
                         updatedAt: new Date().toISOString()
                     }
                     : s
@@ -633,6 +731,11 @@ export function useTCGenWorkspace() {
             error: null,
             generatedScript: undefined,
             scriptFileName: undefined,
+            automationTarget: {
+                sessionId: id,
+                sessionTitle: 'New Workspace',
+                generatedTestCaseIds: [],
+            },
             automation: {
                 smoke: { status: 'idle' },
                 sanity: { status: 'idle' },
@@ -709,7 +812,16 @@ export function useTCGenWorkspace() {
             setScriptFileName(generatedFileName);
             setSessions(prev => prev.map(s =>
                 s.id === activeId
-                    ? { ...s, generatedScript: generatedCode, scriptFileName: generatedFileName, updatedAt: new Date().toISOString() }
+                    ? {
+                        ...s,
+                        generatedScript: generatedCode,
+                        scriptFileName: generatedFileName,
+                        automationTarget: {
+                            ...buildAutomationTarget({ ...s, scriptFileName: generatedFileName }),
+                            targetUrlSource: s.automationTarget?.targetUrlSource || (s.automationTarget?.targetUrl ? 'generated_script' : undefined),
+                        },
+                        updatedAt: new Date().toISOString()
+                    }
                     : s
             ));
         } catch (error) {
@@ -727,7 +839,9 @@ export function useTCGenWorkspace() {
             setAutomationError('Generate a Playwright script before running automation.');
             return;
         }
+        focusAutomationLogs();
         const storyId = currentThread?.aiOptions?.jiraStoryId || '';
+        const targetUrl = currentThread?.automationTarget?.targetUrl;
         setIsRunningAutomation(true);
         setAutomationError(null);
         setExecutionLogs([]);
@@ -752,6 +866,7 @@ export function useTCGenWorkspace() {
                     scriptFile: scriptFileName,
                     scriptCode,
                     jiraStoryId: storyId,
+                    targetUrl,
                     headed,
                 }),
             });
@@ -779,7 +894,17 @@ export function useTCGenWorkspace() {
                                 const data = JSON.parse(line.slice('__RESULT__:'.length));
                                 if (data.type === 'summary') {
                                     setExecutionSummary(data);
-                                    if (data.reportUrl) setReportUrl(data.reportUrl);
+                                    if (data.playwrightReportUrl || data.reportUrl) setReportUrl(data.playwrightReportUrl || data.reportUrl);
+                                    showAutomationToast({
+                                        type: data.status === 'partial_success' ? 'partial_success' : data.failed > 0 ? 'failed' : 'success',
+                                        message: data.failed > 0
+                                            ? `Generated script failed. ${data.passed} passed, ${data.failed} failed.`
+                                            : data.status === 'partial_success'
+                                                ? `Generated script completed with report warnings. ${data.passed} passed, ${data.failed} failed.`
+                                                : `Generated script completed. ${data.passed} passed, ${data.failed} failed.`,
+                                        reportUrl: data.playwrightReportUrl || data.reportUrl,
+                                        persistent: data.failed > 0 || data.status === 'partial_success' || Boolean(data.playwrightReportUrl || data.reportUrl),
+                                    });
                                     if (data.failed > 0) {
                                         addLog(`✕ ${data.failed} failed, ${data.passed} passed — ${data.total} total`);
                                     } else {
@@ -801,6 +926,7 @@ export function useTCGenWorkspace() {
             const message = error instanceof Error ? error.message : String(error);
             setAutomationError(`Execution failed: ${message}`);
             addLog(`Execution error: ${message}`);
+            showAutomationToast({ type: 'error', message: `Generated script error: ${message}`, persistent: true });
         } finally {
             setIsRunningAutomation(false);
         }
@@ -808,6 +934,16 @@ export function useTCGenWorkspace() {
 
     const handleExecuteSuite = async (suite: SuiteKey, headed: boolean = false) => {
         const targetId = activeId;
+        const currentThread = sessions.find(s => s.id === targetId);
+        const targetUrl = currentThread?.automationTarget?.targetUrl;
+        focusAutomationLogs();
+        if (!targetUrl) {
+            const message = 'No automation target URL found. Generate from Jira/story with URL or use Custom URL Run.';
+            setAutomationError(message);
+            setExecutionLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+            showAutomationToast({ type: 'warning', message, persistent: true });
+            return;
+        }
         const startedAt = new Date().toISOString();
         const runningState: SuiteExecution = { status: 'running', lastRunAt: startedAt };
 
@@ -825,19 +961,51 @@ export function useTCGenWorkspace() {
             const response = await fetch('/api/automation/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ suite, headed }),
+                body: JSON.stringify({ suite, headed, targetUrl }),
             });
             const payload = (await response.json()) as AutomationRunResponse;
             const finishedAt = payload.finishedAt || new Date().toISOString();
             const suiteState: SuiteExecution = {
-                status: response.ok && !payload.error ? payload.status : 'failed',
+                status: response.ok && !payload.error && payload.status !== 'failed' && payload.status !== 'error' ? 'completed' : 'failed',
                 lastRunAt: finishedAt,
-                reportUrl: payload.reportUrl,
+                reportUrl: payload.reportUrl || undefined,
+                playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl || undefined,
+                allureReportUrl: payload.allureReportUrl || undefined,
+                healingReportUrl: payload.healingReportUrl || undefined,
+                runId: payload.runId,
                 message: payload.message,
                 durationMs: payload.durationMs,
                 output: payload.output,
                 stderr: payload.stderr,
+                failedTests: payload.failedTests,
+                targetUrl: payload.targetUrl || targetUrl,
+                browser: payload.browser,
             };
+            setExecutionSummary({
+                total: payload.total ?? 0,
+                passed: payload.passed ?? 0,
+                failed: payload.failed ?? (suiteState.status === 'failed' ? 1 : 0),
+                durationMs: payload.durationMs,
+                reportUrl: payload.reportUrl || undefined,
+                playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl || undefined,
+                allureReportUrl: payload.allureReportUrl || undefined,
+                healingReportUrl: payload.healingReportUrl || undefined,
+                runId: payload.runId || undefined,
+            });
+            setReportUrl(payload.playwrightReportUrl || payload.reportUrl || null);
+            setPassedTests([]);
+            setFailedTests(payload.failedTests || []);
+            setExecutionLogs(payload.logs?.map(line => `[${new Date().toLocaleTimeString()}] ${line}`) || []);
+            showAutomationToast({
+                type: payload.status === 'partial_success' ? 'partial_success' : suiteState.status === 'failed' ? 'failed' : 'success',
+                message: suiteState.status === 'failed'
+                    ? `${suite} suite failed. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`
+                    : payload.status === 'partial_success'
+                        ? `${suite} suite completed with report warnings. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`
+                        : `${suite} suite completed. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`,
+                reportUrl: payload.playwrightReportUrl || payload.reportUrl,
+                persistent: suiteState.status === 'failed' || payload.status === 'partial_success' || Boolean(payload.playwrightReportUrl || payload.reportUrl),
+            });
 
             if (targetId) {
                 setSessions(prev => prev.map(s =>
@@ -851,6 +1019,30 @@ export function useTCGenWorkspace() {
                             reports: payload.reportUrl
                                 ? Array.from(new Set([...(s.reports || []), payload.reportUrl]))
                                 : s.reports,
+                            automationRuns: payload.runId
+                                ? [
+                                    {
+                                        runId: payload.runId,
+                                        suite,
+                                        targetUrl: payload.targetUrl || targetUrl,
+                                        browser: payload.browser,
+                                        mode: payload.mode,
+                                        status: payload.status === 'completed' ? 'passed' : payload.status,
+                                        startedAt: payload.startedAt,
+                                        finishedAt: payload.finishedAt,
+                                        durationMs: payload.durationMs,
+                                        passed: payload.passed,
+                                        failed: payload.failed,
+                                        logs: payload.logs,
+                                        playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl || null,
+                                        allureReportUrl: payload.allureReportUrl || null,
+                                        healingReportUrl: payload.healingReportUrl || null,
+                                        errors: payload.errors,
+                                    },
+                                    ...(s.automationRuns || []),
+                                ].slice(0, 20)
+                                : s.automationRuns,
+                            automationTarget: s.automationTarget ? { ...s.automationTarget, latestRunId: payload.runId } : s.automationTarget,
                             updatedAt: finishedAt,
                         }
                         : s
@@ -865,6 +1057,7 @@ export function useTCGenWorkspace() {
                 lastRunAt: finishedAt,
                 message: error instanceof Error ? error.message : String(error),
             };
+            showAutomationToast({ type: 'error', message: `${suite} suite error: ${failedState.message}`, persistent: true });
 
             if (targetId) {
                 setSessions(prev => prev.map(s =>
@@ -886,6 +1079,25 @@ export function useTCGenWorkspace() {
                 setDashboardAutomation(prev => ({ ...prev, [suite]: { ...prev[suite], ...failedState } }));
             }
         }
+    };
+
+    const handleSaveAutomationTarget = (targetUrl: string, source: 'manual_session' | 'custom_run' = 'manual_session') => {
+        const trimmedUrl = targetUrl.trim();
+        if (!activeId || !trimmedUrl) return;
+        setSessions(prev => prev.map(s =>
+            s.id === activeId
+                ? {
+                    ...s,
+                    automationTarget: {
+                        ...buildAutomationTarget(s),
+                        targetUrl: trimmedUrl,
+                        targetUrlSource: source,
+                    },
+                    updatedAt: new Date().toISOString(),
+                }
+                : s
+        ));
+        showAutomationToast({ type: 'success', message: `Automation target saved: ${trimmedUrl}`, persistent: false });
     };
 
     const copyTableData = () => {
@@ -949,6 +1161,7 @@ export function useTCGenWorkspace() {
         headed, setHeaded,
         reportUrl, setReportUrl,
         automationError, setAutomationError,
+        automationToast, setAutomationToast,
         dashboardAutomation, setDashboardAutomation,
         jiraModalOpen, setJiraModalOpen,
         jiraTargetCase, setJiraTargetCase,
@@ -957,6 +1170,8 @@ export function useTCGenWorkspace() {
         activeSession,
         currentThread: sessions.find(s => s.id === activeId),
         automationState: (sessions.find(s => s.id === activeId))?.automation ?? dashboardAutomation,
+        automationTarget: sessions.find(s => s.id === activeId)?.automationTarget,
+        automationRuns: sessions.find(s => s.id === activeId)?.automationRuns || [],
         handleSend,
         handleNewChat,
         handleSelectChat,
@@ -966,6 +1181,7 @@ export function useTCGenWorkspace() {
         handleGenerateScript,
         handleRunGeneratedScript,
         handleExecuteSuite,
+        handleSaveAutomationTarget,
         copyTableData,
         handleCopyScript,
         handleDownloadScript,

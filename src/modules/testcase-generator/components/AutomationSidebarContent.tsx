@@ -1,8 +1,27 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Clock3, Copy, Download, FileText, Play, ShieldCheck, TerminalSquare } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import {
+    AlertCircle,
+    BarChart3,
+    CheckCircle2,
+    Clock3,
+    Copy,
+    Download,
+    ExternalLink,
+    FileText,
+    Globe2,
+    Play,
+    ShieldCheck,
+    TerminalSquare,
+    Wrench,
+    Workflow,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SuiteExecution, SuiteKey } from '../types';
+import { AutomationExecutionSummary, AutomationRunRecord, AutomationTarget, SuiteExecution, SuiteKey } from '../types';
+
+type BrowserName = 'chromium' | 'firefox' | 'webkit' | 'all';
+type CustomSuite = SuiteKey;
 
 interface AutomationSidebarContentProps {
     automation: Record<SuiteKey, SuiteExecution>;
@@ -14,12 +33,22 @@ interface AutomationSidebarContentProps {
     isGeneratingScript: boolean;
     isRunningAutomation: boolean;
     executionLogs: string[];
-    executionSummary: { total: number; passed: number; failed: number; durationMs: number; reportUrl?: string } | null;
+    executionSummary: AutomationExecutionSummary | null;
     passedTests: string[];
     failedTests: string[];
     headed: boolean;
     onHeadedChange: (val: boolean) => void;
     reportUrl: string | null;
+    automationTarget?: AutomationTarget;
+    automationRuns?: AutomationRunRecord[];
+    automationToast?: {
+        type: 'success' | 'failed' | 'error' | 'warning' | 'partial_success';
+        message: string;
+        reportUrl?: string | null;
+        persistent: boolean;
+    } | null;
+    onCloseToast?: () => void;
+    onSaveAutomationTarget?: (targetUrl: string, source?: 'manual_session' | 'custom_run') => void;
     onCopyScript?: () => void;
     onDownloadScript?: () => void;
     platformType?: string;
@@ -29,27 +58,6 @@ function formatDuration(ms?: number) {
     if (!ms) return 'Not run';
     return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
-
-const suites: { key: SuiteKey; name: string; description: string; cta: string }[] = [
-    {
-        key: 'smoke',
-        name: 'Smoke Suite',
-        description: 'Run critical high-priority validation tests.',
-        cta: 'Run Smoke',
-    },
-    {
-        key: 'sanity',
-        name: 'Sanity Suite',
-        description: 'Run key functional validation tests.',
-        cta: 'Run Sanity',
-    },
-    {
-        key: 'regression',
-        name: 'Regression Suite',
-        description: 'Run full regression validation suite.',
-        cta: 'Run Regression',
-    },
-];
 
 function formatTimestamp(timestamp?: string) {
     if (!timestamp) return 'Never run';
@@ -80,7 +88,7 @@ function Card({
     children: React.ReactNode;
 }) {
     return (
-        <section className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
             <div className="mb-4 min-h-[68px]">
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
                 <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>
@@ -90,6 +98,51 @@ function Card({
         </section>
     );
 }
+
+function ReportButtons({
+    playwrightUrl,
+    allureUrl,
+    healingUrl,
+    compact = false,
+}: {
+    playwrightUrl?: string | null;
+    allureUrl?: string | null;
+    healingUrl?: string | null;
+    compact?: boolean;
+}) {
+    const buttonClass = compact
+        ? 'inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+        : 'inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700';
+
+    return (
+        <div className={cn('grid gap-2', compact ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1')}>
+            {playwrightUrl && (
+                <a href={playwrightUrl} target="_blank" rel="noreferrer" className={buttonClass}>
+                    <FileText className="h-4 w-4" />
+                    Playwright
+                </a>
+            )}
+            {allureUrl && (
+                <a href={allureUrl} target="_blank" rel="noreferrer" className={buttonClass}>
+                    <BarChart3 className="h-4 w-4" />
+                    Allure
+                </a>
+            )}
+            {healingUrl && (
+                <a href={healingUrl} target="_blank" rel="noreferrer" className={buttonClass}>
+                    <Wrench className="h-4 w-4" />
+                    Healing
+                </a>
+            )}
+        </div>
+    );
+}
+
+const suites: { key: SuiteKey; name: string; description: string; cta: string }[] = [
+    { key: 'smoke', name: 'Smoke Suite', description: 'Run critical high-priority validation tests.', cta: 'Run Smoke' },
+    { key: 'sanity', name: 'Sanity Suite', description: 'Run key functional validation tests.', cta: 'Run Sanity' },
+    { key: 'regression', name: 'Regression Suite', description: 'Run full regression validation suite.', cta: 'Run Regression' },
+];
 
 export function AutomationSidebarContent({
     automation,
@@ -107,33 +160,240 @@ export function AutomationSidebarContent({
     headed,
     onHeadedChange,
     reportUrl,
+    automationTarget,
+    automationRuns = [],
+    automationToast,
+    onCloseToast,
+    onSaveAutomationTarget,
     onCopyScript,
     onDownloadScript,
 }: AutomationSidebarContentProps) {
     const hasScript = Boolean(scriptCode);
-    const resolvedReportUrl = reportUrl || executionSummary?.reportUrl || null;
+    const [customUrl, setCustomUrl] = useState('');
+    const [customBrowser, setCustomBrowser] = useState<BrowserName>('chromium');
+    const [customSuite, setCustomSuite] = useState<CustomSuite>('smoke');
+    const [customHeaded, setCustomHeaded] = useState(false);
+    const [customIncognito, setCustomIncognito] = useState(true);
+    const [customRun, setCustomRun] = useState<SuiteExecution>({ status: 'idle' });
+    const [customLogs, setCustomLogs] = useState<string[]>([]);
+    const [showReportsPanel, setShowReportsPanel] = useState(false);
+    const logsRef = useRef<HTMLDivElement>(null);
+
+    const latestPlaywrightUrl = executionSummary?.playwrightReportUrl || executionSummary?.reportUrl || reportUrl || null;
+    const latestAllureUrl = executionSummary?.allureReportUrl || null;
+    const latestHealingUrl = executionSummary?.healingReportUrl || null;
+    const resolvedReportUrl = latestPlaywrightUrl;
     const hasResults = Boolean(executionSummary);
+    const displayLogs = customLogs.length ? customLogs : executionLogs;
+    const savedTargetUrl = automationTarget?.targetUrl;
+    const targetSourceLabel = automationTarget?.targetUrlSource
+        ? automationTarget.targetUrlSource.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+        : 'Not Provided';
+    const reportRuns = [
+        ...automationRuns,
+        ...(customRun.runId ? [{
+            runId: customRun.runId,
+            suite: customSuite,
+            targetUrl: customUrl,
+            browser: customBrowser,
+            mode: customHeaded ? 'Headed' as const : 'Headless' as const,
+            status: customRun.status === 'completed' ? 'passed' as const : 'failed' as const,
+            durationMs: customRun.durationMs,
+            playwrightReportUrl: customRun.playwrightReportUrl || null,
+            allureReportUrl: customRun.allureReportUrl || null,
+            healingReportUrl: customRun.healingReportUrl || null,
+            errors: customRun.message ? { execution: customRun.message } : undefined,
+        }] : []),
+    ];
+
+    useEffect(() => {
+        logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight, behavior: 'smooth' });
+    }, [displayLogs]);
+
+    const runCustomUrlSuite = async () => {
+        const trimmedUrl = customUrl.trim();
+        if (!trimmedUrl) {
+            setCustomRun({ status: 'failed', lastRunAt: new Date().toISOString(), message: 'Enter an application URL.' });
+            return;
+        }
+
+        const startedAt = new Date().toISOString();
+        const logs: string[] = [`[${new Date().toLocaleTimeString()}] Running ${customSuite} suite against ${trimmedUrl}`];
+        setCustomLogs(logs);
+        setCustomRun({ status: 'running', lastRunAt: startedAt });
+        setTimeout(() => document.getElementById('automation-execution-logs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+
+        try {
+            const response = await fetch('/api/automation/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    suite: customSuite,
+                    browser: customBrowser,
+                    customUrl: trimmedUrl,
+                    headed: customHeaded,
+                    incognito: customIncognito,
+                }),
+            });
+            const payload = await response.json();
+            const nextState: SuiteExecution = {
+                status: response.ok && !payload.error && payload.status !== 'failed' && payload.status !== 'error' ? 'completed' : 'failed',
+                lastRunAt: payload.finishedAt || new Date().toISOString(),
+                reportUrl: payload.reportUrl,
+                playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl,
+                allureReportUrl: payload.allureReportUrl,
+                healingReportUrl: payload.healingReportUrl,
+                runId: payload.runId,
+                message: payload.message,
+                durationMs: payload.durationMs,
+                output: payload.output,
+                stderr: payload.stderr,
+                failedTests: payload.failedTests,
+            };
+            setCustomRun(nextState);
+            setCustomLogs([
+                ...logs,
+                `[${new Date().toLocaleTimeString()}] Status: ${nextState.status}`,
+                `[${new Date().toLocaleTimeString()}] Run ID: ${payload.runId}`,
+                `[${new Date().toLocaleTimeString()}] Playwright report: ${nextState.playwrightReportUrl || 'Report not generated'}`,
+                `[${new Date().toLocaleTimeString()}] Allure report: ${nextState.allureReportUrl || 'Report not generated'}`,
+                `[${new Date().toLocaleTimeString()}] Healing report: ${nextState.healingReportUrl || 'Healing report not generated for this run.'}`,
+            ]);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            setCustomRun({ status: 'failed', lastRunAt: new Date().toISOString(), message });
+            setCustomLogs([...logs, `[${new Date().toLocaleTimeString()}] Execution error: ${message}`]);
+        }
+    };
 
     return (
         <div className="space-y-4">
-            <div>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400 font-semibold">Automation</p>
-                <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">Automation Dashboard</h1>
-            </div>
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Automation</p>
+                        <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">Automation Dashboard</h1>
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-400">
+                            Run generated or existing Playwright automation suites, validate custom URLs, view execution reports, and heal failing tests automatically.
+                        </p>
+                    </div>
+                    <div className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+                        <Workflow className="h-4 w-4 text-[#10A37F]" />
+                        Test Cases {'->'} Script {'->'} Execution {'->'} Reports {'->'} Healing {'->'} Defects
+                    </div>
+                </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Automation Target</h2>
+                        <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-400">
+                            <div>Story: {automationTarget?.jiraStoryId || 'Not Provided'}</div>
+                            <div>URL: {savedTargetUrl || 'Not Provided'}</div>
+                            <div>Source: {targetSourceLabel}</div>
+                        </div>
+                    </div>
+                    {!savedTargetUrl && (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
+                            No automation target URL found. Generate from Jira/story with URL or use Custom URL Run.
+                        </div>
+                    )}
+                </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Custom URL Test Run</h2>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Run a selected suite against a URL without saving configuration.</p>
+                    </div>
+                    <span className={cn('w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold', suiteStatusClass(customRun.status))}>
+                        {formatSuiteStatus(customRun.status)}
+                    </span>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_140px_150px_150px]">
+                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        Application URL
+                        <input
+                            value={customUrl}
+                            onChange={(event) => setCustomUrl(event.target.value)}
+                            placeholder="https://your-app.example.com"
+                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] focus:ring-2 focus:ring-[#10A37F]/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        />
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        Run Mode
+                        <select value={customHeaded ? 'headed' : 'headless'} onChange={(event) => setCustomHeaded(event.target.value === 'headed')} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                            <option value="headless">Headless</option>
+                            <option value="headed">Headed</option>
+                        </select>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        Browser
+                        <select value={customBrowser} onChange={(event) => setCustomBrowser(event.target.value as BrowserName)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                            <option value="chromium">Chromium</option>
+                            <option value="firefox">Firefox</option>
+                            <option value="webkit">WebKit</option>
+                            <option value="all">All</option>
+                        </select>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        Suite
+                        <select value={customSuite} onChange={(event) => setCustomSuite(event.target.value as CustomSuite)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                            <option value="smoke">Smoke</option>
+                            <option value="sanity">Sanity</option>
+                            <option value="regression">Regression</option>
+                        </select>
+                    </label>
+                </div>
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
+                        <input type="checkbox" checked={customIncognito} onChange={(event) => setCustomIncognito(event.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 dark:bg-slate-800" />
+                        Incognito run
+                    </label>
+                    <button
+                        type="button"
+                        onClick={runCustomUrlSuite}
+                        disabled={customRun.status === 'running'}
+                        className={cn(
+                            'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
+                            customRun.status === 'running'
+                                ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
+                                : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-[#10A37F] dark:hover:bg-[#10A37F]/90'
+                        )}
+                    >
+                        {customRun.status === 'running' ? <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <Globe2 className="h-4 w-4" />}
+                        {customRun.status === 'running' ? 'Running...' : 'Run Suite Against URL'}
+                    </button>
+                </div>
+                {customUrl.trim() && onSaveAutomationTarget && (
+                    <button
+                        type="button"
+                        onClick={() => onSaveAutomationTarget(customUrl.trim(), 'custom_run')}
+                        className="mt-3 inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                        Save as Session Target
+                    </button>
+                )}
+                {(customRun.playwrightReportUrl || customRun.allureReportUrl || customRun.healingReportUrl) && (
+                    <div className="mt-4">
+                        <ReportButtons playwrightUrl={customRun.playwrightReportUrl} allureUrl={customRun.allureReportUrl} healingUrl={customRun.healingReportUrl} compact />
+                    </div>
+                )}
+                {customRun.message && customRun.status === 'failed' && (
+                    <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400">{customRun.message}</div>
+                )}
+            </section>
 
             <section className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Automation Suites</h2>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Run smoke, sanity, and regression suites directly.</p>
+                        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Suite Execution Grid</h2>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Run suites and open their Playwright, Allure, or healing reports.</p>
                     </div>
                     <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
-                        <input
-                            type="checkbox"
-                            checked={headed}
-                            onChange={(event) => onHeadedChange(event.target.checked)}
-                            className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 dark:bg-slate-800"
-                        />
+                        <input type="checkbox" checked={headed} onChange={(event) => onHeadedChange(event.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 dark:bg-slate-800" />
                         Headed run
                     </label>
                 </div>
@@ -142,64 +402,47 @@ export function AutomationSidebarContent({
                     {suites.map((suite) => {
                         const state = automation[suite.key];
                         const isRunning = state.status === 'running';
+                        const suiteDisabled = isRunning || !savedTargetUrl;
 
                         return (
-                            <article key={suite.key} className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <article key={suite.key} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-slate-800 dark:bg-slate-900/50">
                                 <div className="flex min-h-[92px] flex-col justify-between gap-3">
                                     <div>
                                         <div className="flex items-start justify-between gap-3">
                                             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{suite.name}</h3>
-                                            <span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-semibold', suiteStatusClass(state.status))}>
-                                                {formatSuiteStatus(state.status)}
-                                            </span>
+                                            <span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-semibold', suiteStatusClass(state.status))}>{formatSuiteStatus(state.status)}</span>
                                         </div>
                                         <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{suite.description}</p>
                                     </div>
                                 </div>
-
                                 <div className="mt-4 space-y-2 text-xs text-slate-500 dark:text-slate-500">
                                     <div className="flex items-center gap-2">
                                         <Clock3 className="h-3.5 w-3.5" />
                                         <span>Last run: {formatTimestamp(state.lastRunAt)}</span>
                                     </div>
-                                    {state.durationMs !== undefined && (
-                                        <div>Duration: {formatDuration(state.durationMs)}</div>
-                                    )}
+                                    {state.durationMs !== undefined && <div>Duration: {formatDuration(state.durationMs)}</div>}
+                                    {state.runId && <div className="truncate">Run ID: {state.runId}</div>}
                                     {state.status === 'failed' && state.message && (
-                                        <div className="rounded-md border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 px-2 py-1 text-red-700 dark:text-red-400">{state.message}</div>
+                                        <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400">{state.message}</div>
                                     )}
                                 </div>
-
-                                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <div className="mt-4 space-y-2">
                                     <button
                                         type="button"
                                         onClick={() => onExecuteSuite(suite.key, headed)}
-                                        disabled={isRunning}
+                                        disabled={suiteDisabled}
                                         className={cn(
-                                            'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
-                                            isRunning
-                                                ? 'cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
-                                                : 'bg-slate-900 dark:bg-[#10A37F] text-white hover:bg-slate-800 dark:hover:bg-[#10A37F]/90'
+                                            'inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
+                                            suiteDisabled
+                                                ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
+                                                : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-[#10A37F] dark:hover:bg-[#10A37F]/90'
                                         )}
+                                        title={!savedTargetUrl ? 'No automation target URL found. Generate from Jira/story with URL or use Custom URL Run.' : undefined}
                                     >
-                                        {isRunning ? (
-                                            <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                                        ) : (
-                                            <Play className="h-4 w-4" />
-                                        )}
+                                        {isRunning ? <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <Play className="h-4 w-4" />}
                                         {isRunning ? 'Running...' : suite.cta}
                                     </button>
-                                    {state.reportUrl && (
-                                        <a
-                                            href={state.reportUrl}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:bg-slate-50 dark:hover:bg-slate-700"
-                                        >
-                                            <FileText className="h-4 w-4" />
-                                            Report
-                                        </a>
-                                    )}
+                                    <ReportButtons playwrightUrl={state.playwrightReportUrl || state.reportUrl} allureUrl={state.allureReportUrl} healingUrl={state.healingReportUrl} compact />
                                 </div>
                             </article>
                         );
@@ -208,36 +451,7 @@ export function AutomationSidebarContent({
             </section>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <Card
-                    title="Generate Script"
-                    description={hasTestCases ? 'Create a Playwright script from the active test case table.' : 'Generate test cases first, then create a script.'}
-                    status={hasScript ? 'Script ready' : 'No script generated yet'}
-                >
-                    <button
-                        type="button"
-                        onClick={onGenerateScript}
-                        disabled={!hasTestCases || isGeneratingScript}
-                        className={cn(
-                            'inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
-                            hasTestCases && !isGeneratingScript
-                                ? 'bg-violet-600 dark:bg-violet-700 text-white hover:bg-violet-700 dark:hover:bg-violet-600'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
-                        )}
-                    >
-                        {isGeneratingScript ? (
-                            <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                        ) : (
-                            <ShieldCheck className="h-4 w-4" />
-                        )}
-                        {isGeneratingScript ? 'Generating...' : 'Generate Script'}
-                    </button>
-                </Card>
-
-                <Card
-                    title="Run Automation"
-                    description={hasScript ? 'Execute the generated Playwright script.' : 'Generate script before running automation.'}
-                    status={isRunningAutomation ? 'Running' : hasScript ? 'Ready to run' : 'Disabled'}
-                >
+                <Card title="Generated Script Run" description={hasScript ? 'Execute the generated Playwright script.' : 'Generate script before running automation.'} status={isRunningAutomation ? 'Running' : hasScript ? 'Ready to run' : 'Disabled'}>
                     <button
                         type="button"
                         onClick={onRunAutomation}
@@ -245,69 +459,75 @@ export function AutomationSidebarContent({
                         className={cn(
                             'inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
                             hasScript && !isRunningAutomation
-                                ? 'bg-amber-500 dark:bg-amber-600 text-white hover:bg-amber-600 dark:hover:bg-amber-500'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
+                                ? 'bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500'
+                                : 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
                         )}
                     >
-                        {isRunningAutomation ? (
-                            <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                        ) : (
-                            <Play className="h-4 w-4" />
-                        )}
-                        {isRunningAutomation ? 'Running...' : 'Run Automation'}
+                        {isRunningAutomation ? <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <Play className="h-4 w-4" />}
+                        {isRunningAutomation ? 'Running...' : 'Run Generated Script'}
                     </button>
                 </Card>
 
-                <Card
-                    title="Execution Logs"
-                    description={executionLogs.length ? 'Latest automation run logs.' : 'No execution logs yet.'}
-                    status={`${executionLogs.length} log line${executionLogs.length === 1 ? '' : 's'}`}
-                >
-                    <div className="h-36 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-800 bg-slate-950 dark:bg-black p-3 font-mono text-[11px] leading-5 text-emerald-200 dark:text-emerald-400">
-                        {executionLogs.length ? (
-                            executionLogs.map((log, index) => <div key={`${index}-${log.slice(0, 12)}`}>{log}</div>)
-                        ) : (
-                            <div className="flex h-full items-center text-slate-500 dark:text-slate-700">No execution logs yet</div>
-                        )}
-                    </div>
-                </Card>
-
-                <Card
-                    title="Reports"
-                    description={resolvedReportUrl ? 'Open the latest Playwright HTML report.' : 'No execution report available yet.'}
-                    status={resolvedReportUrl ? 'Report available' : 'No report'}
-                >
-                    <a
-                        href={resolvedReportUrl || undefined}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-disabled={!resolvedReportUrl}
+                <Card title="Generate Script" description={hasTestCases ? 'Create a Playwright script from the active test case table.' : 'Generate test cases first, then create a script.'} status={hasScript ? 'Script ready' : 'No script generated yet'}>
+                    <button
+                        type="button"
+                        onClick={onGenerateScript}
+                        disabled={!hasTestCases || isGeneratingScript}
                         className={cn(
                             'inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
-                            resolvedReportUrl
-                                ? 'bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600'
-                                : 'pointer-events-none bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
+                            hasTestCases && !isGeneratingScript
+                                ? 'bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-700 dark:hover:bg-violet-600'
+                                : 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
                         )}
                     >
-                        <FileText className="h-4 w-4" />
-                        Open Report
-                    </a>
+                        {isGeneratingScript ? <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                        {isGeneratingScript ? 'Generating...' : 'Generate Script'}
+                    </button>
                 </Card>
 
-                <Card
-                    title="Download Script"
-                    description={hasScript ? 'Download or copy the generated Playwright script.' : 'No script generated yet.'}
-                    status={hasScript ? 'Download enabled' : 'Download disabled'}
-                >
+                <Card title="Reports" description={resolvedReportUrl || latestAllureUrl ? 'Open the latest execution reports.' : 'No execution report available yet.'} status={resolvedReportUrl || latestAllureUrl ? 'Report available' : 'No report'}>
+                    <button
+                        type="button"
+                        onClick={() => setShowReportsPanel(current => !current)}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600"
+                    >
+                        <FileText className="h-4 w-4" />
+                        {showReportsPanel ? 'Hide Reports' : 'Open Reports Panel'}
+                    </button>
+                </Card>
+
+                <Card title="Healing Center" description={latestHealingUrl ? 'Open the latest self-healing evidence report.' : 'Healing report appears after a run.'} status={latestHealingUrl ? 'Healing report available' : 'No healing report'}>
+                    {latestHealingUrl ? (
+                        <a href={latestHealingUrl} target="_blank" rel="noreferrer" className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600">
+                            <Wrench className="h-4 w-4" />
+                            Open Healing Report
+                        </a>
+                    ) : (
+                        <button type="button" disabled className="inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-400 dark:bg-slate-800 dark:text-slate-600">
+                            <Wrench className="h-4 w-4" />
+                            Healing Pending
+                        </button>
+                    )}
+                </Card>
+
+                <Card title="Execution Logs" description={displayLogs.length ? 'Jump to the latest automation logs.' : 'Logs appear after a run starts.'} status={`${displayLogs.length} log line${displayLogs.length === 1 ? '' : 's'}`}>
+                    <button
+                        type="button"
+                        onClick={() => document.getElementById('automation-execution-logs')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                        <TerminalSquare className="h-4 w-4" />
+                        View Logs
+                    </button>
+                </Card>
+
+                <Card title="Download Script" description={hasScript ? 'Download or copy the generated Playwright script.' : 'No script generated yet.'} status={hasScript ? 'Download enabled' : 'Download disabled'}>
                     <div className="grid grid-cols-2 gap-2">
                         <button
                             type="button"
                             onClick={onDownloadScript}
                             disabled={!hasScript || !onDownloadScript}
-                            className={cn(
-                                'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
-                                hasScript ? 'bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 dark:hover:bg-slate-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
-                            )}
+                            className={cn('inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition', hasScript ? 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600' : 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600')}
                         >
                             <Download className="h-4 w-4" />
                             Download
@@ -316,10 +536,7 @@ export function AutomationSidebarContent({
                             type="button"
                             onClick={onCopyScript}
                             disabled={!hasScript || !onCopyScript}
-                            className={cn(
-                                'inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-semibold transition',
-                                hasScript ? 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' : 'text-slate-400 dark:text-slate-600 cursor-not-allowed'
-                            )}
+                            className={cn('inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold transition dark:border-slate-700 dark:bg-slate-800', hasScript ? 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700' : 'cursor-not-allowed text-slate-400 dark:text-slate-600')}
                         >
                             <Copy className="h-4 w-4" />
                             Copy
@@ -327,28 +544,24 @@ export function AutomationSidebarContent({
                     </div>
                 </Card>
 
-                <Card
-                    title="View Results"
-                    description={hasResults ? 'Review the latest execution summary.' : 'Run automation to view results.'}
-                    status={hasResults ? `Duration: ${formatDuration(executionSummary?.durationMs)}` : 'No results'}
-                >
+                <Card title="View Results" description={hasResults ? 'Review the latest execution summary.' : 'Run automation to view results.'} status={hasResults ? `Duration: ${formatDuration(executionSummary?.durationMs)}` : 'No results'}>
                     {executionSummary ? (
                         <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                            <div className="rounded-md bg-slate-50 dark:bg-slate-800 p-2">
+                            <div className="rounded-md bg-slate-50 p-2 dark:bg-slate-800">
                                 <div className="font-bold text-slate-900 dark:text-slate-100">{executionSummary.total}</div>
                                 <div className="text-slate-500 dark:text-slate-500">Total</div>
                             </div>
-                            <div className="rounded-md bg-emerald-50 dark:bg-emerald-900/10 p-2">
+                            <div className="rounded-md bg-emerald-50 p-2 dark:bg-emerald-900/10">
                                 <div className="font-bold text-emerald-700 dark:text-emerald-400">{executionSummary.passed}</div>
                                 <div className="text-emerald-700 dark:text-emerald-400">Passed</div>
                             </div>
-                            <div className="rounded-md bg-red-50 dark:bg-red-900/10 p-2">
+                            <div className="rounded-md bg-red-50 p-2 dark:bg-red-900/10">
                                 <div className="font-bold text-red-700 dark:text-red-400">{executionSummary.failed}</div>
                                 <div className="text-red-700 dark:text-red-400">Failed</div>
                             </div>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-500 dark:text-slate-500">
+                        <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-500">
                             <AlertCircle className="h-4 w-4" />
                             No results yet
                         </div>
@@ -361,8 +574,115 @@ export function AutomationSidebarContent({
                             {failedTests.length} failed
                         </div>
                     )}
+                    {executionSummary?.runId && (
+                        <a href={executionSummary.playwrightReportUrl || executionSummary.reportUrl || '#'} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[#10A37F]">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            {executionSummary.runId}
+                        </a>
+                    )}
                 </Card>
             </div>
+
+            {showReportsPanel && (
+                <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Reports Panel</h2>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Latest and previous automation run reports stay inside Automation Hub.</p>
+                        </div>
+                        <button type="button" onClick={() => setShowReportsPanel(false)} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                            Close
+                        </button>
+                    </div>
+                    <div className="space-y-3">
+                        {reportRuns.length ? reportRuns.map((run) => (
+                            <article key={run.runId} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                                <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-400 md:grid-cols-4">
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Run ID:</span> {run.runId}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Suite:</span> {run.suite || 'Generated Script'}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Browser:</span> {run.browser || 'chromium'}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Mode:</span> {run.mode || 'Headless'}</div>
+                                    <div className="md:col-span-2"><span className="font-semibold text-slate-900 dark:text-slate-100">Target URL:</span> {run.targetUrl || 'Not Provided'}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Status:</span> {run.status}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Duration:</span> {formatDuration(run.durationMs)}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Start:</span> {formatTimestamp(run.startedAt)}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">End:</span> {formatTimestamp(run.finishedAt)}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Passed:</span> {run.passed ?? 0}</div>
+                                    <div><span className="font-semibold text-slate-900 dark:text-slate-100">Failed:</span> {run.failed ?? 0}</div>
+                                </div>
+                                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                                    {run.playwrightReportUrl ? (
+                                        <a href={run.playwrightReportUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><FileText className="h-4 w-4" /> Open Playwright HTML Report</a>
+                                    ) : (
+                                        <div className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400 dark:border-slate-800">Report not generated</div>
+                                    )}
+                                    {run.allureReportUrl ? (
+                                        <a href={run.allureReportUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><BarChart3 className="h-4 w-4" /> Open Allure Report</a>
+                                    ) : (
+                                        <div className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400 dark:border-slate-800">Report not generated</div>
+                                    )}
+                                    {run.logs?.length ? (
+                                        <button type="button" onClick={() => navigator.clipboard.writeText(run.logs?.join('\n') || '')} className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><Download className="h-4 w-4" /> Download Logs</button>
+                                    ) : (
+                                        <div className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400 dark:border-slate-800">No logs captured</div>
+                                    )}
+                                </div>
+                            </article>
+                        )) : (
+                            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">No automation reports yet.</div>
+                        )}
+                    </div>
+                </section>
+            )}
+
+            <section id="automation-execution-logs" className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Execution Logs</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Live automation output, report generation status, and healing analysis.</p>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-500">{displayLogs.length} line{displayLogs.length === 1 ? '' : 's'}</span>
+                </div>
+                <div ref={logsRef} className="h-[420px] overflow-y-auto rounded-md border border-slate-800 bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-200 shadow-inner">
+                    {displayLogs.length ? displayLogs.map((log, index) => {
+                        const lower = log.toLowerCase();
+                        const color = lower.includes('error') || lower.includes('failed')
+                            ? 'text-red-300'
+                            : lower.includes('warning') || lower.includes('partial')
+                                ? 'text-amber-300'
+                                : lower.includes('passed') || lower.includes('success')
+                                    ? 'text-emerald-300'
+                                    : 'text-slate-200';
+                        return <div className={color} key={`${index}-${log.slice(0, 16)}`}>{log}</div>;
+                    }) : (
+                        <div className="flex h-full items-center text-slate-500">No execution logs yet</div>
+                    )}
+                </div>
+            </section>
+
+            {automationToast && (
+                <div className={cn(
+                    'fixed bottom-5 right-5 z-50 max-w-md rounded-lg border px-4 py-3 shadow-xl',
+                    automationToast.type === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900 dark:text-emerald-100',
+                    automationToast.type === 'partial_success' && 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900 dark:text-amber-100',
+                    (automationToast.type === 'failed' || automationToast.type === 'error') && 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/40 dark:bg-red-900 dark:text-red-100',
+                    automationToast.type === 'warning' && 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900 dark:text-amber-100'
+                )}>
+                    <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1 text-sm font-semibold">
+                            {automationToast.message}
+                            {automationToast.reportUrl && (
+                                <a href={automationToast.reportUrl} target="_blank" rel="noreferrer" className="ml-2 underline">
+                                    Open report
+                                </a>
+                            )}
+                        </div>
+                        <button type="button" onClick={onCloseToast} className="rounded-md px-2 py-1 text-xs font-bold hover:bg-black/10">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

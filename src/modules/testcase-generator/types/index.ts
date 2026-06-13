@@ -19,14 +19,72 @@ export type TestCase = {
 
 export type SuiteKey = 'smoke' | 'sanity' | 'regression';
 
+export type AutomationTargetSource = 'jira_story' | 'generated_script' | 'manual_session' | 'custom_run';
+
+export type AutomationTarget = {
+    sessionId: string;
+    jiraStoryId?: string;
+    sessionTitle?: string;
+    targetUrl?: string;
+    targetUrlSource?: AutomationTargetSource;
+    generatedTestCaseIds?: string[];
+    generatedScriptPath?: string;
+    latestRunId?: string;
+};
+
+export type AutomationRunStatus = 'passed' | 'failed' | 'partial_success' | 'error';
+
+export type AutomationRunRecord = {
+    runId: string;
+    suite?: string;
+    targetUrl?: string;
+    browser?: string;
+    mode?: 'Headed' | 'Headless';
+    status: AutomationRunStatus;
+    startedAt?: string;
+    finishedAt?: string;
+    durationMs?: number;
+    passed?: number;
+    failed?: number;
+    logs?: string[];
+    playwrightReportUrl?: string | null;
+    allureReportUrl?: string | null;
+    healingReportUrl?: string | null;
+    errors?: {
+        execution?: string;
+        playwrightReport?: string;
+        allureReport?: string;
+        healingReport?: string;
+    };
+};
+
 export type SuiteExecution = {
     status: 'idle' | 'running' | 'completed' | 'failed';
     lastRunAt?: string;
     reportUrl?: string;
+    playwrightReportUrl?: string;
+    allureReportUrl?: string;
+    healingReportUrl?: string;
+    runId?: string;
     message?: string;
     durationMs?: number;
     output?: string;
     stderr?: string;
+    failedTests?: string[];
+    targetUrl?: string;
+    browser?: string;
+};
+
+export type AutomationExecutionSummary = {
+    total: number;
+    passed: number;
+    failed: number;
+    durationMs: number;
+    reportUrl?: string;
+    playwrightReportUrl?: string;
+    allureReportUrl?: string;
+    healingReportUrl?: string;
+    runId?: string;
 };
 
 export type AiGenerationMeta = {
@@ -74,7 +132,9 @@ export type ConversationSession = {
     aiOptions?: AiGenerationOptions;
     generatedScript?: string;
     scriptFileName?: string;
+    automationTarget?: AutomationTarget;
     automation: Record<SuiteKey, SuiteExecution>;
+    automationRuns?: AutomationRunRecord[];
     reports?: string[];
     createdAt: string;
     updatedAt: string;
