@@ -47,6 +47,12 @@ export type AiGenerationMeta = {
 };
 
 export type PlatformType = 'web' | 'mobile' | 'api' | 'automation';
+export type WorkspacePanel = 'testcases' | 'api-testing' | 'automation' | 'defect-studio' | 'jira';
+
+export type WorkspaceSectionHeader = {
+    title: string;
+    subtitle: string;
+};
 
 export type AiGenerationOptions = {
     model: string;

@@ -8,6 +8,7 @@ import JiraModal from "../JiraModal";
 import { useTCGenWorkspace } from "../../hooks/useTCGenWorkspace";
 import { AutomationSidebarContent } from "../AutomationSidebarContent";
 import { ApiTestingWorkspace } from "@/src/modules/api-testing/ApiTestingWorkspace";
+import { DefectStudio } from "@/src/modules/defect-studio/DefectStudio";
 import { 
   X, 
   ChevronLeft, 
@@ -31,6 +32,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         activeId,
         isSidebarOpen, setIsSidebarOpen,
         activePanel, setActivePanel,
+        currentSectionHeader,
         generatingPrompt,
         generationModelStatus,
         progressLabel,
@@ -75,7 +77,8 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         handleAttachDocuments,
         handleRemoveAttachment,
         saveProvider,
-        saveModel
+        saveModel,
+        providerSettings
     } = workspace;
 
     const providerOptions = [
@@ -139,20 +142,25 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                 !isSidebarOpen && "md:ml-0"
             )}>
                 {/* Fixed Header */}
-                <header className="h-14 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-between px-4 sticky top-0 z-30 shadow-sm">
-                    <div className="flex items-center gap-3">
+                <header className="min-h-16 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-between gap-4 px-4 py-2 sticky top-0 z-30 shadow-sm">
+                    <div className="flex min-w-0 items-center gap-3">
                         <button
                             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                             className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500"
                         >
                             {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                         </button>
-                        <h1 className="text-sm font-bold text-gray-800 dark:text-gray-100 uppercase tracking-wider truncate max-w-[200px] md:max-w-md">
-                            {currentThread?.title || 'TCGen Buddy'}
-                        </h1>
+                        <div className="min-w-0">
+                            <h1 className="truncate text-sm font-bold text-gray-900 dark:text-gray-100 md:text-base">
+                                {currentSectionHeader.title}
+                            </h1>
+                            <p className="mt-0.5 hidden max-w-[260px] truncate text-xs font-medium text-gray-500 dark:text-gray-400 sm:block md:max-w-[420px]">
+                                {currentSectionHeader.subtitle}
+                            </p>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex shrink-0 items-center gap-4">
                         <div className="flex items-center gap-2">
                             <select
                                 value={provider}
@@ -265,6 +273,14 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                     globalModel={selectedModel}
                                     onProviderChange={(p) => { setProvider(p); saveProvider(p); }}
                                     onModelChange={(m) => { setSelectedModel(m); saveModel(m); }}
+                                />
+                            )}
+
+                            {activePanel === 'defect-studio' && (
+                                <DefectStudio
+                                    provider={provider}
+                                    model={selectedModel}
+                                    providerSettings={providerSettings}
                                 />
                             )}
 

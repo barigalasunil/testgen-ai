@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { HistoryItem, SuiteExecution, SuiteKey, TestCase, AiGenerationOptions, AiGenerationMeta } from "../types";
+import { HistoryItem, SuiteExecution, SuiteKey, TestCase, AiGenerationOptions, AiGenerationMeta, WorkspacePanel, WorkspaceSectionHeader } from "../types";
 import { generateTestCases, fetchModels } from "../services";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import { getSavedModel, saveModel, getSavedProvider, saveProvider, loadProviderSettings } from "@/src/services/ai/ai-config.service";
@@ -11,11 +11,35 @@ const AUTO_MODEL = "auto";
 const GENERATION_STEPS = [
     { label: 'Fetching Jira story...', percent: 10, jiraOnly: true },
     { label: 'Analyzing requirement...', percent: 25 },
-    { label: 'Chunking requirement...', percent: 40 },
-    { label: 'Planning coverage...', percent: 60 },
-    { label: 'Generating test cases...', percent: 80 },
+    { label: 'Chunking requirement...', percent: 38 },
+    { label: 'Generating chunk-wise test cases...', percent: 58 },
+    { label: 'Merging test cases...', percent: 76 },
+    { label: 'Removing duplicates...', percent: 90 },
     { label: 'Formatting results...', percent: 100 },
 ];
+
+const SECTION_HEADERS: Record<WorkspacePanel, WorkspaceSectionHeader> = {
+    testcases: {
+        title: "Test Case Generation",
+        subtitle: "Generate test cases from requirements.",
+    },
+    "api-testing": {
+        title: "API Testing",
+        subtitle: "Generate, automate, and execute API test scenarios.",
+    },
+    automation: {
+        title: "Automation Workspace",
+        subtitle: "Manage and execute automation suites.",
+    },
+    "defect-studio": {
+        title: "Defect Studio",
+        subtitle: "Create, review, and publish defects to Jira.",
+    },
+    jira: {
+        title: "Settings",
+        subtitle: "Manage AI providers and Jira configuration.",
+    },
+};
 
 const initialAutomationState: Record<SuiteKey, SuiteExecution> = {
     smoke: { status: 'idle' },
@@ -111,7 +135,8 @@ export function useTCGenWorkspace() {
     const [sessions, setSessions] = useState<HistoryItem[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [activePanel, setActivePanel] = useState<'testcases' | 'api-testing' | 'automation' | 'jira'>('testcases');
+    const [activePanel, setActivePanel] = useState<WorkspacePanel>('testcases');
+    const [currentSectionHeader, setCurrentSectionHeader] = useState<WorkspaceSectionHeader>(SECTION_HEADERS.testcases);
     const [generatingPrompt, setGeneratingPrompt] = useState("");
     const [generationModelStatus, setGenerationModelStatus] = useState("Using: Auto");
     const [activityIndex, setActivityIndex] = useState(0);
@@ -284,6 +309,24 @@ export function useTCGenWorkspace() {
 
     const activeSession = sessions.find((s) => s.id === activeId) || null;
     const activeSessionId = activeSession?.id;
+
+    useEffect(() => {
+        const baseHeader = SECTION_HEADERS[activePanel];
+        if (activePanel !== "testcases") {
+            setCurrentSectionHeader(baseHeader);
+            return;
+        }
+
+        const storyId = activeSession?.aiOptions?.jiraStoryId || activeSession?.result?.testCases?.[0]?.linkedRequirementId || "";
+        setCurrentSectionHeader({
+            title: baseHeader.title,
+            subtitle: storyId
+                ? `Current Story: ${storyId}`
+                : activeSession?.title
+                    ? `Current Session: ${activeSession.title}`
+                    : baseHeader.subtitle,
+        });
+    }, [activePanel, activeSession?.aiOptions?.jiraStoryId, activeSession?.result?.testCases, activeSession?.title]);
 
     useEffect(() => {
         if (!activeSessionId || restoredSessionIdRef.current === activeSessionId) return;
@@ -883,6 +926,7 @@ export function useTCGenWorkspace() {
         activeId, setActiveId,
         isSidebarOpen, setIsSidebarOpen,
         activePanel, setActivePanel,
+        currentSectionHeader,
         generatingPrompt, setGeneratingPrompt,
         generationModelStatus, setGenerationModelStatus,
         activityIndex,

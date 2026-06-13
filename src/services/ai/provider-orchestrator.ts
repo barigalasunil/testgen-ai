@@ -75,12 +75,12 @@ function hasConfig(provider: RuntimeProviderId, settings?: ProviderSettings): bo
 }
 
 function getOllamaTimeout(): number {
-    const env = process.env.OLLAMA_TIMEOUT_MS;
+    const env = process.env.OLLAMA_CHUNK_TIMEOUT_MS || process.env.OLLAMA_TIMEOUT_MS;
     if (env) {
         const parsed = parseInt(env, 10);
         if (Number.isFinite(parsed) && parsed > 0) return parsed;
     }
-    return 60000;
+    return 45000;
 }
 
 function fallbackEligible(error: AiProviderError): boolean {
@@ -324,6 +324,9 @@ export class AiProviderOrchestrator {
                         reason: normalized.message,
                     });
                     console.warn(`[AI] ${PROVIDER_LABELS[candidate]} (${currentModel}) ${status}: ${normalized.code}`);
+                    if (fallbackEligible(normalized)) {
+                        continue;
+                    }
                     break;
                 }
             }

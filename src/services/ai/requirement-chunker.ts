@@ -13,6 +13,32 @@ export type ChunkedRequirement = {
 
 const DEFAULT_MAX_CHARS = 3500;
 
+function splitLongText(input: string, maxChars: number): string[] {
+    const sentences = input.match(/[^.!?\n]+[.!?]*/g) || [input];
+    const chunks: string[] = [];
+    let current = "";
+
+    for (const sentence of sentences) {
+        const next = current ? `${current} ${sentence.trim()}` : sentence.trim();
+        if (next.length > maxChars && current.trim()) {
+            chunks.push(current.trim());
+            current = sentence.trim();
+        } else {
+            current = next;
+        }
+    }
+
+    if (current.trim()) chunks.push(current.trim());
+    return chunks.flatMap(chunk => {
+        if (chunk.length <= maxChars) return [chunk];
+        const parts: string[] = [];
+        for (let start = 0; start < chunk.length; start += maxChars) {
+            parts.push(chunk.slice(start, start + maxChars).trim());
+        }
+        return parts;
+    });
+}
+
 function splitByParagraphs(input: string, maxChars: number): string[] {
     const paragraphs = input
         .split(/\n\s*\n/)
@@ -30,9 +56,7 @@ function splitByParagraphs(input: string, maxChars: number): string[] {
                 chunks.push(current.trim());
                 current = '';
             }
-            for (let start = 0; start < paragraph.length; start += maxChars) {
-                chunks.push(paragraph.slice(start, start + maxChars).trim());
-            }
+            chunks.push(...splitLongText(paragraph, maxChars));
             continue;
         }
 

@@ -28,12 +28,15 @@ export function clearJiraCredentials(): void {
 }
 
 export async function testConnection(creds: JiraCredentials) {
-    const params = new URLSearchParams({
-        baseUrl: creds.baseUrl,
-        email: creds.email,
-        apiToken: creds.apiToken,
+    const res = await fetch('/api/jira/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            baseUrl: creds.baseUrl,
+            email: creds.email,
+            apiToken: creds.apiToken,
+        }),
     });
-    const res = await fetch(`/api/jira/test-connection?${params.toString()}`);
     return res.json();
 }
 
@@ -72,6 +75,41 @@ export async function generateDefect(payload: {
             provider: getSavedProvider(),
             providerSettings: loadProviderSettings(),
         }),
+    });
+    return res.json();
+}
+
+export type DefectPayload = {
+    summary: string;
+    description: string;
+    actualResult?: string;
+    expectedResult?: string;
+    issueType?: 'Bug' | 'Defect';
+    priority?: string;
+    severity?: string;
+    storyId?: string;
+};
+
+export async function createDefect(payload: DefectPayload) {
+    const credentials = loadJiraCredentials();
+    const res = await fetch('/api/jira/defect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, credentials }),
+    });
+    return res.json();
+}
+
+export async function reviewDefectWithAi(payload: DefectPayload & {
+    quickDescription?: string;
+    model?: string;
+    provider?: string;
+    providerSettings?: unknown;
+}) {
+    const res = await fetch('/api/jira/review-defect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
     });
     return res.json();
 }

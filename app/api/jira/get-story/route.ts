@@ -24,9 +24,9 @@ function extractAdfText(node: unknown): string {
 }
 
 export async function fetchJiraStoryDirect(storyId: string, credentials: JiraStoryCredentials = {}) {
-    const baseUrl = credentials.baseUrl || process.env.JIRA_BASE_URL;
-    const email = credentials.email || process.env.JIRA_EMAIL;
-    const apiToken = credentials.apiToken || process.env.JIRA_API_TOKEN;
+    const baseUrl = process.env.JIRA_BASE_URL || credentials.baseUrl;
+    const email = process.env.JIRA_EMAIL || credentials.email;
+    const apiToken = process.env.JIRA_API_TOKEN || credentials.apiToken;
 
     if (!storyId) {
         return { success: false, error: 'Story ID is required' };

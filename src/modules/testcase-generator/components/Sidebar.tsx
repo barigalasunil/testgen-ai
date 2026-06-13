@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, Server } from "lucide-react";
+import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, Server, Bug } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { HistoryItem, SuiteKey, SuiteExecution } from "../types";
+import { HistoryItem, SuiteKey, SuiteExecution, WorkspacePanel } from "../types";
 
 interface SidebarProps {
     history: HistoryItem[];
     activeId: string | null;
-    activePanel: 'testcases' | 'api-testing' | 'automation' | 'jira';
+    activePanel: WorkspacePanel;
     onSelect: (id: string) => void;
-    onChangePanel: (panel: 'testcases' | 'api-testing' | 'automation' | 'jira') => void;
+    onChangePanel: (panel: WorkspacePanel) => void;
     onNewChat: () => void;
     isOpen: boolean;
     toggleSidebar: () => void;
@@ -65,6 +65,7 @@ export function Sidebar({
     const navItems = [
         { id: 'api-testing', label: 'API Testing', icon: Server },
         { id: 'automation', label: 'Automation Workspace', icon: Zap },
+        { id: 'defect-studio', label: 'Defect Studio', icon: Bug },
         { id: 'jira', label: 'Settings', icon: Settings },
     ] as const;
 

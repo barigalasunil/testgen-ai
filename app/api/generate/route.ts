@@ -6,6 +6,7 @@ import { TestCase } from "@/src/modules/testcase-generator/types";
 import { aiProviderOrchestrator, AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
 import { AiProviderError } from "@/src/services/ai/providers/types";
 import { chunkRequirement } from "@/src/services/ai/requirement-chunker";
+import { getTokenBudget, safeCharsForProvider } from "@/src/services/ai/token-budget";
 
 type ParsedModelTestCase = Partial<Record<keyof TestCase, unknown>>;
 
@@ -42,6 +43,64 @@ function normalizePriority(value: unknown): TestCase['priority'] {
     return allowed.includes(value as TestCase['priority']) ? value as TestCase['priority'] : 'P2';
 }
 
+function sanitizeTestCases(rawCases: ParsedModelTestCase[], jiraId: string | null, projectKey: string): TestCase[] {
+    return rawCases
+        .map((tc: ParsedModelTestCase, index: number) => {
+            const num = String(index + 1).padStart(3, "0");
+            return {
+                testCaseId: String(tc.testCaseId || `${jiraId || 'TC'}-${num}`),
+                scenarioTitle: String(tc.scenarioTitle || ""),
+                testType: normalizeTestType(tc.testType),
+                priority: normalizePriority(tc.priority),
+                preconditions: String(tc.preconditions || "None"),
+                testData: String(tc.testData || ""),
+                testSteps: String(tc.testSteps || ""),
+                expectedResult: String(tc.expectedResult || ""),
+                linkedRequirementId: jiraId || undefined,
+                projectKey,
+                executionStatus: 'Untested' as const,
+            };
+        })
+        .filter((tc: TestCase) =>
+            tc.scenarioTitle.trim().length > 0 &&
+            tc.testSteps.trim().length > 0 &&
+            tc.expectedResult.trim().length > 0
+        );
+}
+
+function dedupeAndRenumber(testCases: TestCase[], jiraId: string | null): TestCase[] {
+    const seen = new Set<string>();
+    const deduped: TestCase[] = [];
+
+    for (const testCase of testCases) {
+        const key = [
+            testCase.scenarioTitle.trim().toLowerCase(),
+            testCase.testSteps.trim().toLowerCase(),
+            testCase.expectedResult.trim().toLowerCase(),
+        ].join("|");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(testCase);
+    }
+
+    return deduped.map((testCase, index) => ({
+        ...testCase,
+        testCaseId: `${jiraId || 'TC'}-${String(index + 1).padStart(3, "0")}`,
+    }));
+}
+
+function buildChunkPrompt(basePrompt: string, chunkText: string, chunkIndex: number, totalChunks: number) {
+    if (totalChunks <= 1) return basePrompt;
+    return [
+        basePrompt,
+        "",
+        "CHUNK-WISE GENERATION MODE:",
+        `Generate test cases only for chunk ${chunkIndex} of ${totalChunks}.`,
+        "Do not cover behavior that is not present in this chunk.",
+        "Return valid JSON with a testCases array only.",
+    ].join("\n");
+}
+
 export async function POST(req: Request) {
     try {
         const {
@@ -72,15 +131,18 @@ export async function POST(req: Request) {
 
         const isAutomationMode = platformType === 'automation';
 
-        const chunkedRequirement = chunkRequirement(resolvedPrompt.prompt);
+        const activeProvider = provider as AiProviderId;
+        const budget = getTokenBudget(activeProvider);
+        const maxChunkChars = safeCharsForProvider(activeProvider);
+        const chunkedRequirement = chunkRequirement(resolvedPrompt.prompt, maxChunkChars);
         if (chunkedRequirement.chunkingApplied) {
-            console.log(`[GENERATE] Requirement chunked into ${chunkedRequirement.chunks.length} chunks`);
+            console.log(`[GENERATE] Requirement chunked into ${chunkedRequirement.chunks.length} chunks (safe input ${budget.safeInputTokens} tokens)`);
         }
 
-        const fullPrompt = isAutomationMode
-            ? promptBuilder.buildAutomationPrompt(chunkedRequirement.prompt, customPrompt, acceptanceCriteria)
+        const basePrompt = isAutomationMode
+            ? promptBuilder.buildAutomationPrompt("{{CHUNK_REQUIREMENT}}", customPrompt, acceptanceCriteria)
             : promptBuilder.buildPrompt(
-                chunkedRequirement.prompt,
+                "{{CHUNK_REQUIREMENT}}",
                 type as TestType,
                 platformType as PlatformType,
                 customPrompt,
@@ -91,123 +153,105 @@ export async function POST(req: Request) {
             console.log('[GENERATE] Using Automation Workflow Mode with workflow-master.md orchestration');
         }
 
-        let rawResponse: string;
         let providerMessage = '';
         let fallbackUsed = false;
         let providerUsed = '';
-        let attempts: {
+        const attempts: {
             provider?: string;
             model: string;
             status: 'success' | 'failed' | 'skipped';
             code?: string;
             reason?: string;
-        }[] | undefined;
-
-        try {
-            const aiResult = await aiProviderOrchestrator.generate(provider as AiProviderId, {
-                prompt: fullPrompt,
-                model: selectedModel,
-                settings: providerSettings as ProviderSettings | undefined,
-                responseFormat: 'json',
-                maxTokens: 4096,
-                temperature: 0.2,
-            });
-            rawResponse = aiResult.content;
-            fallbackUsed = aiResult.fallbackUsed;
-            selectedModel = aiResult.modelUsed;
-            providerUsed = aiResult.providerUsed;
-            providerMessage = provider === 'auto'
-                ? fallbackUsed
-                    ? `AUTO -> ${providerUsed} Fallback (${selectedModel})`
-                    : `AUTO -> ${providerUsed} Connected (${selectedModel})`
-                : `${providerUsed} Connected (${selectedModel})`;
-            attempts = aiResult.attempts.map((attempt) => ({
-                provider: attempt.provider,
-                model: `${attempt.provider}: ${attempt.model}`,
-                status: attempt.status,
-                code: attempt.code,
-                reason: attempt.reason,
-            }));
-        } catch (error) {
-            const msg = providerErrorMessage(String(provider), error);
-            const attemptedProviders = (error as { attempts?: typeof attempts }).attempts || [];
-            const code = error instanceof AiProviderError ? error.code : (error as { code?: string }).code || 'PROVIDER_ERROR';
-            const status = generationStatusFor(error);
-            console.error("[GENERATE] Provider error:", msg);
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: msg,
-                    code,
-                    provider,
-                    attemptedProviders,
-                    result: msg,
-                    message: msg,
-                    meta: {
-                        provider,
-                        providerUsed: null,
-                        fallbackUsed: false,
-                        attempts: attemptedProviders,
-                        message: provider === 'auto' ? 'All AI providers failed' : msg,
-                    },
-                },
-                { status }
-            );
-        }
-
-        let parsedData;
-        try {
-            parsedData = responseParser.parse(rawResponse);
-        } catch (parseError) {
-            console.error("[GENERATE] Parse error:", parseError);
-            return NextResponse.json(
-                { success: false, error: 'Could not parse model response. Try again or switch models.', code: 'INVALID_RESPONSE', result: 'Could not parse model response. Try again or switch models.' },
-                { status: 500 }
-            );
-        }
-
+        }[] = [];
         const jiraId = resolvedJiraStoryId;
         const projectKey = jiraId ? jiraId.split('-')[0] : resolvedPrompt.projectKey || 'TCGB';
+        const generatedCases: TestCase[] = [];
+        const failedChunks: { chunk: number; error: string; code?: string }[] = [];
+
+        for (const chunk of chunkedRequirement.chunks) {
+            console.log(`[GENERATE] Generating chunk ${chunk.index}/${chunk.total}`);
+            const chunkPromptBody = buildChunkPrompt(
+                basePrompt.replace("{{CHUNK_REQUIREMENT}}", chunk.text),
+                chunk.text,
+                chunk.index,
+                chunk.total
+            );
+
+            try {
+                const aiResult = await aiProviderOrchestrator.generate(activeProvider, {
+                    prompt: chunkPromptBody,
+                    model: selectedModel,
+                    settings: providerSettings as ProviderSettings | undefined,
+                    responseFormat: 'json',
+                    maxTokens: budget.maxOutputTokens,
+                    temperature: 0.2,
+                });
+
+                fallbackUsed = fallbackUsed || aiResult.fallbackUsed;
+                selectedModel = aiResult.modelUsed;
+                providerUsed = aiResult.providerUsed;
+                providerMessage = activeProvider === 'auto'
+                    ? aiResult.fallbackUsed
+                        ? `Generating chunk ${chunk.index} of ${chunk.total} via ${providerUsed} fallback (${selectedModel})`
+                        : `Generating chunk ${chunk.index} of ${chunk.total} via ${providerUsed} (${selectedModel})`
+                    : `Generating chunk ${chunk.index} of ${chunk.total} via ${providerUsed} (${selectedModel})`;
+                attempts.push(...aiResult.attempts.map((attempt) => ({
+                    provider: attempt.provider,
+                    model: `${attempt.provider}: ${attempt.model}`,
+                    status: attempt.status,
+                    code: attempt.code,
+                    reason: `Chunk ${chunk.index}: ${attempt.reason || attempt.status}`,
+                })));
+
+                const parsedData = responseParser.parse(aiResult.content);
+                generatedCases.push(...sanitizeTestCases(parsedData.testCases || [], jiraId, projectKey));
+            } catch (error) {
+                const msg = providerErrorMessage(String(provider), error);
+                const code = error instanceof AiProviderError ? error.code : (error as { code?: string }).code || 'PROVIDER_ERROR';
+                const attemptedProviders = (error as { attempts?: typeof attempts }).attempts || [];
+                attempts.push(...attemptedProviders.map((attempt) => ({
+                    ...attempt,
+                    reason: `Chunk ${chunk.index}: ${attempt.reason || attempt.status}`,
+                })));
+                failedChunks.push({ chunk: chunk.index, error: msg, code });
+                console.error(`[GENERATE] Chunk ${chunk.index}/${chunk.total} failed:`, msg);
+            }
+        }
 
         const sanitized = {
-            testCases: (parsedData.testCases || [])
-                .map((tc: ParsedModelTestCase, index: number) => {
-                    const num = String(index + 1).padStart(3, "0");
-                    return {
-                        testCaseId: String(tc.testCaseId || `${jiraId || 'TC'}-${num}`),
-                        scenarioTitle: String(tc.scenarioTitle || ""),
-                        testType: normalizeTestType(tc.testType),
-                        priority: normalizePriority(tc.priority),
-                        preconditions: String(tc.preconditions || "None"),
-                        testData: String(tc.testData || ""),
-                        testSteps: String(tc.testSteps || ""),
-                        expectedResult: String(tc.expectedResult || ""),
-                        
-                        // Traceability link
-                        linkedRequirementId: jiraId,
-                        projectKey: projectKey,
-                        executionStatus: 'Untested' as const,
-                    };
-                })
-                .filter((tc: TestCase) =>
-                    tc.scenarioTitle.trim().length > 0 &&
-                    tc.testSteps.trim().length > 0 &&
-                    tc.expectedResult.trim().length > 0
-                ),
+            testCases: dedupeAndRenumber(generatedCases, jiraId),
         };
 
         if (sanitized.testCases.length === 0) {
+            const firstFailure = failedChunks[0];
             return NextResponse.json(
-                { success: false, error: "Model returned 0 valid test cases. Try a more specific prompt.", code: 'INVALID_RESPONSE', result: "Model returned 0 valid test cases. Try a more specific prompt." },
-                { status: 500 }
+                {
+                    success: false,
+                    error: "Generation failed across all providers/models.",
+                    code: firstFailure?.code || 'PROVIDER_ERROR',
+                    result: "Generation failed across all providers/models.",
+                    meta: {
+                        provider,
+                        providerUsed: null,
+                        fallbackUsed,
+                        attempts,
+                        failedChunks,
+                        message: "Generation failed across all providers/models.",
+                    },
+                },
+                { status: firstFailure ? generationStatusFor(firstFailure) : 500 }
             );
         }
 
         console.log(`[GENERATE] Success: ${sanitized.testCases.length} test cases via ${selectedModel}`);
+        const partialWarning = failedChunks.length > 0
+            ? `${failedChunks.length} chunk${failedChunks.length === 1 ? '' : 's'} failed. Showing partial results.`
+            : "";
 
         return NextResponse.json({
             success: true,
             error: false,
+            warning: partialWarning || undefined,
             testCases: sanitized.testCases,
             providerUsed,
             modelUsed: selectedModel,
@@ -223,11 +267,13 @@ export async function POST(req: Request) {
                 jiraStoryId: jiraId,
                 fallbackUsed,
                 attempts,
+                failedChunks,
+                partial: failedChunks.length > 0,
                 chunkingApplied: chunkedRequirement.chunkingApplied,
                 chunkCount: chunkedRequirement.chunks.length,
                 message: isAutomationMode
-                    ? `Automation Workflow: ${sanitized.testCases.length} automation-ready test cases (${providerMessage || providerUsed})`
-                    : providerMessage,
+                    ? `Automation Workflow: ${sanitized.testCases.length} automation-ready test cases (${partialWarning || providerMessage || providerUsed})`
+                    : partialWarning || providerMessage,
             },
         });
 

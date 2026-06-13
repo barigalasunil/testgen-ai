@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { aiProviderOrchestrator, AiProviderId, ProviderSettings } from '@/src/services/ai/provider-orchestrator';
 import { filterChatModels } from '@/src/services/ai/providers/ollama-utils';
+import { estimateTokens, getTokenBudget } from '@/src/services/ai/token-budget';
 import { scriptPromptBuilder } from './prompt-builder';
 import { parseGeneratedScript } from '../utils/response-parser';
 import { ScriptGenerationResult, ScriptPlatform } from '../types';
@@ -103,6 +104,27 @@ function fixBrokenCode(
   });
 }
 
+function batchTestCases(testCases: TestCase[], platform: ScriptPlatform, provider: AiProviderId): TestCase[][] {
+  const budget = getTokenBudget(provider);
+  const maxInputTokens = Math.max(700, budget.safeInputTokens);
+  const batches: TestCase[][] = [];
+  let current: TestCase[] = [];
+
+  for (const testCase of testCases) {
+    const next = [...current, testCase];
+    const promptTokens = estimateTokens(scriptPromptBuilder.buildPrompt(next, platform));
+    if (current.length > 0 && promptTokens > maxInputTokens) {
+      batches.push(current);
+      current = [testCase];
+    } else {
+      current = next;
+    }
+  }
+
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
 export class ScriptGeneratorService {
   async generateScript(
     testCases: TestCase[],
@@ -112,6 +134,7 @@ export class ScriptGeneratorService {
     provider: AiProviderId = 'auto',
     providerSettings?: ProviderSettings
   ): Promise<ScriptGenerationResult> {
+    const batches = batchTestCases(testCases, platform, provider);
     const prompt = scriptPromptBuilder.buildPrompt(testCases, platform);
     const targetModel = model && model !== 'auto'
       ? model
@@ -124,14 +147,22 @@ export class ScriptGeneratorService {
     let code: string;
 
     try {
-      const response = await aiProviderOrchestrator.generate(provider, {
-        model: targetModel,
-        prompt,
-        settings: providerSettings,
-        maxTokens: 8192,
-        temperature: 0.2,
-      });
-      code = await fixBrokenCode(parseGeneratedScript(response.content), prompt, provider, targetModel, providerSettings);
+      const generatedParts: string[] = [];
+      for (let index = 0; index < batches.length; index += 1) {
+        const batchPrompt = batches.length === 1
+          ? prompt
+          : `${scriptPromptBuilder.buildPrompt(batches[index], platform)}\n\nGenerate only automation for batch ${index + 1} of ${batches.length}. Return valid TypeScript only.`;
+        const response = await aiProviderOrchestrator.generate(provider, {
+          model: targetModel,
+          prompt: batchPrompt,
+          settings: providerSettings,
+          maxTokens: getTokenBudget(provider).maxOutputTokens,
+          temperature: 0.2,
+        });
+        generatedParts.push(parseGeneratedScript(response.content));
+      }
+      const mergedCode = generatedParts.join('\n\n');
+      code = await fixBrokenCode(mergedCode, prompt, provider, targetModel, providerSettings);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(`Script generation failed: ${reason}`);

@@ -1,0 +1,11 @@
+KEY,VALUE,DESCRIPTION
+JIRA_BASE_URL,https://your-domain.atlassian.net,Jira base URL
+JIRA_EMAIL,your-email@example.com,Jira login email
+JIRA_API_TOKEN,paste-token-in-env-not-here,Do not commit real token
+JIRA_PROJECT_KEY,TCGB,Jira project key
+OPENROUTER_API_KEY,placeholder,Do not commit real key
+GROQ_API_KEY,placeholder,Do not commit real key
+NVIDIA_API_KEY,placeholder,Do not commit real key
+OPENCODE_API_KEY,placeholder,Do not commit real key
+OLLAMA_BASE_URL,http://localhost:11434,Local Ollama URL
+OLLAMA_CHUNK_TIMEOUT_MS,45000,Per-chunk Ollama generation timeout in milliseconds
