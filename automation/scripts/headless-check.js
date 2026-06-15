@@ -14,7 +14,7 @@ const fs = require('fs');
   });
 
   try {
-    const url = process.env.TARGET_URL || 'http://localhost:3000';
+    const url = 'http://localhost:3000';
     out.push({ type: 'start', url });
     await page.goto(url, { waitUntil: 'networkidle' });
     await page.waitForTimeout(800); // allow client JS to run

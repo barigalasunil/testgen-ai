@@ -1,8 +1,0 @@
-{
-  "name": "TCGen-Buddy Automation Hub",
-  "type": "playwright",
-  "buildName": "regression",
-  "buildUrl": "https://www.saucedemo.com",
-  "reportName": "Generic Website Validation regression",
-  "reportUrl": "/automation-reports/custom-url-20260614-121206/allure-report/index.html"
-}

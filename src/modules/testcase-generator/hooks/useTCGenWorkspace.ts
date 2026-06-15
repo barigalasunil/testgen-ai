@@ -6,6 +6,13 @@ import { generateTestCases, fetchModels } from "../services";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import { getSavedModel, saveModel, getSavedProvider, saveProvider, loadProviderSettings } from "@/src/services/ai/ai-config.service";
 import { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
+import {
+    buildMemoryContextBlock,
+    MemoryVaultRecord,
+    normalizeProjectKey,
+    projectKeyFromText,
+    upsertMemoryVaultRecord,
+} from "@/src/services/memory-vault/memory-vault.service";
 
 const AUTO_MODEL = "auto";
 const GENERATION_STEPS = [
@@ -39,6 +46,10 @@ const SECTION_HEADERS: Record<WorkspacePanel, WorkspaceSectionHeader> = {
         title: "Settings",
         subtitle: "Manage AI providers and Jira configuration.",
     },
+    "memory-vault": {
+        title: "Memory Vault",
+        subtitle: "Store and reuse project knowledge for generation.",
+    },
 };
 
 const initialAutomationState: Record<SuiteKey, SuiteExecution> = {
@@ -67,7 +78,6 @@ type AutomationRunResponse = {
     success?: boolean;
     error: boolean;
     suite: SuiteKey;
-    suiteMode?: string;
     status: 'passed' | 'failed' | 'partial_success' | 'error' | 'completed' | 'blocked';
     startedAt: string;
     finishedAt: string;
@@ -213,6 +223,7 @@ export function useTCGenWorkspace() {
     });
     const [platformType, setPlatformType] = useState<"web" | "mobile" | "api">("web");
     const [attachedDocuments, setAttachedDocuments] = useState<AttachedDocument[]>([]);
+    const [attachedMemoryContext, setAttachedMemoryContext] = useState<MemoryVaultRecord | null>(null);
 
     // Automation states
     const [scriptCode, setScriptCode] = useState<string | null>(null);
@@ -521,6 +532,84 @@ export function useTCGenWorkspace() {
         setAttachedDocuments(prev => prev.filter(doc => doc.name !== name));
     };
 
+    const handleUseMemoryAsContext = (record: MemoryVaultRecord) => {
+        setAttachedMemoryContext(record);
+        setActivePanel('testcases');
+    };
+
+    const handleClearMemoryContext = () => {
+        setAttachedMemoryContext(null);
+    };
+
+    const saveGeneratedTestCasesToMemory = (params: {
+        prompt: string;
+        result: ParsedTestCaseResult;
+        jiraStoryId?: string;
+        sessionTitle?: string;
+    }) => {
+        const projectKey = projectKeyFromText(params.jiraStoryId || params.prompt);
+        upsertMemoryVaultRecord({
+            projectKey,
+            sourceType: "generated_test_cases",
+            title: params.jiraStoryId || params.sessionTitle || generateWorkspaceName(params.prompt),
+            content: JSON.stringify(params.result.testCases, null, 2),
+            metadata: {
+                jiraStoryId: params.jiraStoryId,
+                prompt: params.prompt,
+                count: params.result.testCases.length,
+            },
+        });
+    };
+
+    const saveAttachmentsToMemory = (docs: AttachedDocument[], prompt: string) => {
+        const projectKey = projectKeyFromText(prompt);
+        docs.forEach(doc => {
+            upsertMemoryVaultRecord({
+                projectKey,
+                sourceType: "document_metadata",
+                title: doc.name,
+                content: doc.text || `Document uploaded: ${doc.name}`,
+                metadata: {
+                    documentName: doc.name,
+                    documentType: doc.type,
+                    hasTextContent: Boolean(doc.text),
+                },
+            });
+        });
+    };
+
+    const saveAutomationSummaryToMemory = (summary: AutomationRunResponse | AutomationExecutionSummary & { status?: string; suite?: string }, prompt?: string) => {
+        if (!summary.runId) return;
+        const projectKey = projectKeyFromText(prompt || summary.runId);
+        upsertMemoryVaultRecord({
+            id: `automation-${summary.runId}`,
+            projectKey,
+            sourceType: "automation_summary",
+            title: `${summary.suite || "generated"} - ${summary.runId}`,
+            content: [
+                `Run ID: ${summary.runId}`,
+                `Suite: ${summary.suite || "generated"}`,
+                `Status: ${summary.status || "completed"}`,
+                `Passed: ${summary.passed ?? 0}`,
+                `Failed: ${summary.failed ?? 0}`,
+                `Duration: ${summary.durationMs ?? 0}ms`,
+                summary.playwrightReportUrl ? `Playwright Report: ${summary.playwrightReportUrl}` : "",
+                summary.allureReportUrl ? `Allure Report: ${summary.allureReportUrl}` : "",
+                summary.healingReportUrl ? `Healing Report: ${summary.healingReportUrl}` : "",
+                summary.logUrl ? `Execution Log: ${summary.logUrl}` : "",
+            ].filter(Boolean).join("\n"),
+            metadata: {
+                runId: summary.runId,
+                suite: summary.suite || "generated",
+                status: summary.status,
+                playwrightReportUrl: summary.playwrightReportUrl,
+                allureReportUrl: summary.allureReportUrl,
+                healingReportUrl: summary.healingReportUrl,
+                logUrl: summary.logUrl,
+            },
+        });
+    };
+
     const handleSend = async (overridePrompt?: string, overrideOptions?: Partial<AiGenerationOptions>) => {
         if (loading) return;
         const textToSubmit = typeof overridePrompt === "string" ? overridePrompt : value;
@@ -528,6 +617,10 @@ export function useTCGenWorkspace() {
 
         const currentPrompt = textToSubmit;
         const promptJiraStoryId = extractJiraId(currentPrompt) ?? '';
+        const requestProjectKey = projectKeyFromText(currentPrompt, promptJiraStoryId);
+        const memoryContext = attachedMemoryContext && normalizeProjectKey(attachedMemoryContext.projectKey) === requestProjectKey
+            ? buildMemoryContextBlock(attachedMemoryContext)
+            : undefined;
         setGenerationHasJira(Boolean(promptJiraStoryId || overrideOptions?.jiraStoryId));
         setGenerationFailed(false);
         setActivityIndex(0);
@@ -634,7 +727,8 @@ export function useTCGenWorkspace() {
                 generationOptions.acceptanceCriteria,
                 generationOptions.provider,
                 generationOptions.jiraStoryId,
-                providerSettings
+                providerSettings,
+                memoryContext
             ) as GenerateApiResponse;
 
             if (data.meta?.message) {
@@ -691,6 +785,15 @@ export function useTCGenWorkspace() {
                     }
                     : s
             ));
+            if (parsedResult?.testCases?.length) {
+                saveGeneratedTestCasesToMemory({
+                    prompt: currentPrompt,
+                    result: parsedResult,
+                    jiraStoryId: generationOptions.jiraStoryId,
+                    sessionTitle: smartName,
+                });
+            }
+            if (attachedDocuments.length > 0) saveAttachmentsToMemory(attachedDocuments, currentPrompt);
         } catch (error) {
             const generationError = error as GenerationError;
             const payload = generationError.payload;
@@ -718,6 +821,7 @@ export function useTCGenWorkspace() {
                     : s
             ));
         } finally {
+            if (memoryContext) setAttachedMemoryContext(null);
             setLoading(false);
         }
     };
@@ -896,6 +1000,7 @@ export function useTCGenWorkspace() {
                                 const data = JSON.parse(line.slice('__RESULT__:'.length));
                                 if (data.type === 'summary') {
                                     setExecutionSummary(data);
+                                    saveAutomationSummaryToMemory(data, currentThread?.prompt);
                                     if (data.playwrightReportUrl || data.reportUrl) setReportUrl(data.playwrightReportUrl || data.reportUrl);
                                     showAutomationToast({
                                         type: data.status === 'partial_success' ? 'partial_success' : data.failed > 0 ? 'failed' : 'success',
@@ -937,15 +1042,7 @@ export function useTCGenWorkspace() {
     const handleExecuteSuite = async (suite: SuiteKey, headed: boolean = false) => {
         const targetId = activeId;
         const currentThread = sessions.find(s => s.id === targetId);
-        const targetUrl = currentThread?.automationTarget?.targetUrl;
         focusAutomationLogs();
-        if (!targetUrl) {
-            const message = 'No automation target URL found. Generate from Jira/story with URL or use Custom URL Run.';
-            setAutomationError(message);
-            setExecutionLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-            showAutomationToast({ type: 'warning', message, persistent: true });
-            return;
-        }
         const startedAt = new Date().toISOString();
         const runningState: SuiteExecution = { status: 'running', lastRunAt: startedAt };
 
@@ -963,7 +1060,7 @@ export function useTCGenWorkspace() {
             const response = await fetch('/api/automation/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ suite, headed, targetUrl }),
+                body: JSON.stringify({ suite, headed }),
             });
             const payload = (await response.json()) as AutomationRunResponse;
             const finishedAt = payload.finishedAt || new Date().toISOString();
@@ -981,7 +1078,7 @@ export function useTCGenWorkspace() {
                 output: payload.output,
                 stderr: payload.stderr,
                 failedTests: payload.failedTests,
-                targetUrl: payload.targetUrl || targetUrl,
+                targetUrl: payload.targetUrl,
                 browser: payload.browser,
             };
             setExecutionSummary({
@@ -1010,6 +1107,7 @@ export function useTCGenWorkspace() {
                 reportUrl: payload.playwrightReportUrl || payload.reportUrl,
                 persistent: suiteState.status === 'failed' || payload.status === 'partial_success' || Boolean(payload.playwrightReportUrl || payload.reportUrl),
             });
+            saveAutomationSummaryToMemory({ ...payload, suite }, currentThread?.prompt);
 
             if (targetId) {
                 setSessions(prev => prev.map(s =>
@@ -1028,7 +1126,7 @@ export function useTCGenWorkspace() {
                                     {
                                         runId: payload.runId,
                                         suite,
-                                        targetUrl: payload.targetUrl || targetUrl,
+                                        targetUrl: payload.targetUrl,
                                         browser: payload.browser,
                                         mode: payload.mode,
                                         status: payload.status === 'completed' ? 'passed' : payload.status,
@@ -1084,25 +1182,6 @@ export function useTCGenWorkspace() {
                 setDashboardAutomation(prev => ({ ...prev, [suite]: { ...prev[suite], ...failedState } }));
             }
         }
-    };
-
-    const handleSaveAutomationTarget = (targetUrl: string, source: 'manual_session' | 'custom_run' = 'manual_session') => {
-        const trimmedUrl = targetUrl.trim();
-        if (!activeId || !trimmedUrl) return;
-        setSessions(prev => prev.map(s =>
-            s.id === activeId
-                ? {
-                    ...s,
-                    automationTarget: {
-                        ...buildAutomationTarget(s),
-                        targetUrl: trimmedUrl,
-                        targetUrlSource: source,
-                    },
-                    updatedAt: new Date().toISOString(),
-                }
-                : s
-        ));
-        showAutomationToast({ type: 'success', message: `Automation target saved: ${trimmedUrl}`, persistent: false });
     };
 
     const copyTableData = () => {
@@ -1186,7 +1265,6 @@ export function useTCGenWorkspace() {
         handleGenerateScript,
         handleRunGeneratedScript,
         handleExecuteSuite,
-        handleSaveAutomationTarget,
         copyTableData,
         handleCopyScript,
         handleDownloadScript,
@@ -1198,6 +1276,9 @@ export function useTCGenWorkspace() {
         providerStatusInfo,
         attachedDocuments,
         handleAttachDocuments,
-        handleRemoveAttachment
+        handleRemoveAttachment,
+        attachedMemoryContext,
+        handleUseMemoryAsContext,
+        handleClearMemoryContext
     };
 }

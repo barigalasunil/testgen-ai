@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, Server, Bug } from "lucide-react";
+import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, Server, Bug, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AutomationExecutionSummary, HistoryItem, SuiteKey, SuiteExecution, WorkspacePanel } from "../types";
 
@@ -63,11 +63,11 @@ export function Sidebar({
     };
 
     const navItems = [
-        { id: 'testcases', label: 'QA Workspace', icon: Bot },
         { id: 'api-testing', label: 'API Lab', icon: Server },
         { id: 'automation', label: 'Automation Hub', icon: Zap },
         { id: 'defect-studio', label: 'Defect Studio', icon: Bug },
         { id: 'jira', label: 'Settings', icon: Settings },
+        { id: 'memory-vault', label: 'Memory Vault', icon: Database },
     ] as const;
 
     return (
@@ -95,7 +95,7 @@ export function Sidebar({
                     )}
                 >
                     <Plus className={cn("w-4 h-4", loading ? "text-gray-400" : "text-[#10A37F]")} /> 
-                    New Workspace
+                    New Chat
                 </button>
             </div>
 
@@ -157,9 +157,8 @@ export function Sidebar({
                     ))}
                 </div>
 
-                {/* BOTTOM SECTION: Navigation & Workspaces */}
+                {/* BOTTOM SECTION: Workspaces */}
                 <div className="px-3 pb-4 mt-auto border-t border-gray-100 dark:border-gray-800 pt-4 space-y-1">
-                    <div className="text-[10px] uppercase tracking-widest text-[#10A37F] font-bold mb-3 px-1">Navigation</div>
                     {navItems.map((item) => (
                         <button
                             key={item.id}

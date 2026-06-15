@@ -9,6 +9,7 @@ import { useTCGenWorkspace } from "../../hooks/useTCGenWorkspace";
 import { AutomationSidebarContent } from "../AutomationSidebarContent";
 import { ApiTestingWorkspace } from "@/src/modules/api-testing/ApiTestingWorkspace";
 import { DefectStudio } from "@/src/modules/defect-studio/DefectStudio";
+import { MemoryVaultPanel } from "@/src/modules/memory-vault/MemoryVaultPanel";
 import { 
   X, 
   ChevronLeft, 
@@ -56,7 +57,6 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         reportUrl,
         automationError,
         automationToast, setAutomationToast,
-        automationTarget,
         automationRuns,
         jiraModalOpen, setJiraModalOpen,
         jiraTargetCase,
@@ -73,13 +73,15 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         handleGenerateScript,
         handleRunGeneratedScript,
         handleExecuteSuite,
-        handleSaveAutomationTarget,
         copyTableData,
         handleCopyScript,
         handleDownloadScript,
         attachedDocuments,
         handleAttachDocuments,
         handleRemoveAttachment,
+        attachedMemoryContext,
+        handleUseMemoryAsContext,
+        handleClearMemoryContext,
         saveProvider,
         saveModel,
         providerSettings
@@ -260,11 +262,9 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                         headed={headed}
                                         onHeadedChange={setHeaded}
                                         reportUrl={reportUrl}
-                                        automationTarget={automationTarget}
                                         automationRuns={automationRuns}
                                         automationToast={automationToast}
                                         onCloseToast={() => setAutomationToast(null)}
-                                        onSaveAutomationTarget={handleSaveAutomationTarget}
                                         platformType={platformType}
                                     />
                                     {automationError && (
@@ -305,6 +305,13 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                         <JiraPanel />
                                     </div>
                                 </div>
+                            )}
+
+                            {activePanel === 'memory-vault' && (
+                                <MemoryVaultPanel
+                                    onUseAsContext={handleUseMemoryAsContext}
+                                    attachedContextId={attachedMemoryContext?.id}
+                                />
                             )}
 
                             {activePanel === 'testcases' && (
@@ -446,6 +453,16 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                                     </button>
                                                 </span>
                                             ))}
+                                        </div>
+                                    )}
+                                    {attachedMemoryContext && (
+                                        <div className="mb-2 flex flex-wrap gap-2">
+                                            <span className="inline-flex items-center gap-2 rounded-full border border-[#10A37F]/30 bg-white px-3 py-1 text-xs font-semibold text-[#10A37F] shadow-sm dark:bg-gray-900">
+                                                Context attached: {attachedMemoryContext.title}
+                                                <button onClick={handleClearMemoryContext} className="text-[#10A37F]/70 hover:text-red-500" title="Remove Memory Vault context">
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </span>
                                         </div>
                                     )}
                                     <div className="relative flex w-full flex-col rounded-3xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg focus-within:border-[#10A37F] focus-within:ring-2 focus-within:ring-[#10A37F]/10 transition-all">

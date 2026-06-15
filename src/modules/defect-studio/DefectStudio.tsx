@@ -5,6 +5,7 @@ import { Bug, CheckCircle2, ExternalLink, Loader2, Pencil, Sparkles, XCircle } f
 import { createDefect, DefectPayload, fetchJiraStory, reviewDefectWithAi } from "@/src/services/jira/jira.service";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import type { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
+import { projectKeyFromText, upsertMemoryVaultRecord } from "@/src/services/memory-vault/memory-vault.service";
 
 const priorities = ["", "Lowest", "Low", "Medium", "High", "Highest"];
 const severities = ["", "Low", "Medium", "High", "Critical", "Blocker"];
@@ -194,6 +195,28 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
             const explicitStoryId = await resolveStoryIdForCreate();
             const data = await createDefect({ ...payload, storyId: explicitStoryId || undefined });
             if (!data.success) throw new Error(data.error || "Jira defect creation failed");
+            upsertMemoryVaultRecord({
+                id: data.issueKey ? `defect-${data.issueKey}` : undefined,
+                projectKey: projectKeyFromText(explicitStoryId || data.issueKey),
+                sourceType: "defect",
+                title: data.issueKey || payload.summary,
+                content: [
+                    `Defect: ${data.issueKey || payload.summary}`,
+                    `Summary: ${payload.summary}`,
+                    payload.description ? `Description:\n${payload.description}` : "",
+                    payload.actualResult ? `Actual Result: ${payload.actualResult}` : "",
+                    payload.expectedResult ? `Expected Result: ${payload.expectedResult}` : "",
+                    explicitStoryId ? `Linked Story: ${explicitStoryId}` : "",
+                ].filter(Boolean).join("\n\n"),
+                metadata: {
+                    issueKey: data.issueKey,
+                    issueUrl: data.issueUrl,
+                    issueType: data.issueType || payload.issueType,
+                    priority: payload.priority,
+                    severity: payload.severity,
+                    reviewedMode,
+                },
+            });
             setNotice({
                 type: "success",
                 message: `${data.issueType || payload.issueType || "Bug"} created successfully${data.warning ? `: ${data.warning}` : ""}`,

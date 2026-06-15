@@ -1,0 +1,22 @@
+Run ID: generated-20260615-145622
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: generated
+Suite app: Generated Script
+Mode: Headless
+Status: initialized
+Running generated Playwright script...
+Script: local-locator-probe.spec.ts
+Run ID: generated-20260615-145622
+Launching automation execution...
+Launching chromium...
+[Healing] Failure classified: UNKNOWN (UNKNOWN)
+Healing status: NEEDS_MANUAL_REVIEW
+[Healing] Not healable: Failure did not match a known healing pattern.
+Status: failed
+Playwright report generated
+Generating Allure report...
+Error: No tests found.
+Allure report not generated: Allure results not found
+Make sure that arguments are regular expressions matching test files.
+You may need to escape symbols like "$" or "*" and quote the arguments.

@@ -1,0 +1,85 @@
+Run ID: generated-20260615-153346
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: generated
+Suite app: Generated Script
+Mode: Headless
+Status: initialized
+Run ID: generated-20260615-153346
+Script: local-assertion-probe.spec.ts
+Launching automation execution...
+Running generated Playwright script...
+Launching chromium...
+Status: failed
+[Healing] Failure classified: TEXT_ASSERTION_MISMATCH (HEALABLE)
+[Healing] Assertion healed: toHaveText('swag labs') -> toHaveText(/swag labs/i)
+[Healing] Healing started
+[Healing] Re-running failed test (attempt 1/3)
+[Healing] PASS
+Healing status: AUTO_HEALED
+Generating Allure report...
+Playwright report generated
+Running 1 test using 1 worker
+Allure report generated
+  x  1 [chromium] › tests\_generated_local-assertion-probe.spec.ts:3:5 › healable assertion mismatch local probe (5.5s)
+  x  2 [chromium] › tests\_generated_local-assertion-probe.spec.ts:3:5 › healable assertion mismatch local probe (retry #1) (5.5s)
+  1) [chromium] › tests\_generated_local-assertion-probe.spec.ts:3:5 › healable assertion mismatch local probe 
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoHaveText[2m([22m[32mexpected[39m[2m)[22m failed
+    Locator:  locator('.login_logo')
+    Expected: [32m"[7ms[27mwag [7ml[27mabs"[39m
+    Received: [31m"[7mS[27mwag [7mL[27mabs"[39m
+    Timeout:  5000ms
+    Call log:
+    [2m  - Expect "toHaveText" with timeout 5000ms[22m
+    [2m  - waiting for locator('.login_logo')[22m
+    [2m    14 × locator resolved to <div class="login_logo">Swag Labs</div>[22m
+    [2m       - unexpected value "Swag Labs"[22m
+      3 | test('healable assertion mismatch local probe', async ({ page }) => {
+      4 |   await page.setContent('<main><div class="login_logo">Swag Labs</div></main>');
+    > 5 |   await expect(page.locator('.login_logo')).toHaveText('swag labs');
+        |                                             ^
+      6 | });
+        at D:\TCGen-Buddy\automation\tests\_generated_local-assertion-probe.spec.ts:5:45
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium\error-context.md
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium\trace.zip
+    Usage:
+        npx playwright show-trace reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoHaveText[2m([22m[32mexpected[39m[2m)[22m failed
+    Locator:  locator('.login_logo')
+    Expected: [32m"[7ms[27mwag [7ml[27mabs"[39m
+    Received: [31m"[7mS[27mwag [7mL[27mabs"[39m
+    Timeout:  5000ms
+    Call log:
+    [2m  - Expect "toHaveText" with timeout 5000ms[22m
+    [2m  - waiting for locator('.login_logo')[22m
+    [2m    14 × locator resolved to <div class="login_logo">Swag Labs</div>[22m
+    [2m       - unexpected value "Swag Labs"[22m
+      3 | test('healable assertion mismatch local probe', async ({ page }) => {
+      4 |   await page.setContent('<main><div class="login_logo">Swag Labs</div></main>');
+    > 5 |   await expect(page.locator('.login_logo')).toHaveText('swag labs');
+        |                                             ^
+      6 | });
+        at D:\TCGen-Buddy\automation\tests\_generated_local-assertion-probe.spec.ts:5:45
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium-retry1\error-context.md
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium-retry1\trace.zip
+    Usage:
+        npx playwright show-trace reports\traces\generated-20260615-153346\_generated_local-assertion-50496-ertion-mismatch-local-probe-chromium-retry1\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+  1 failed
+    [chromium] › tests\_generated_local-assertion-probe.spec.ts:3:5 › healable assertion mismatch local probe 

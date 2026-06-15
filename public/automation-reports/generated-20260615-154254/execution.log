@@ -1,0 +1,82 @@
+Run ID: generated-20260615-154254
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: generated
+Suite app: Generated Script
+Mode: Headless
+Status: initialized
+Launching automation execution...
+Script: local-timing-probe.spec.ts
+Launching chromium...
+Running generated Playwright script...
+Run ID: generated-20260615-154254
+[Healing] Wait healed: await page.waitForTimeout(1); -> await page.waitForLoadState('networkidle');
+Status: failed
+[Healing] Healing started
+[Healing] Failure classified: TIMING_ISSUE (HEALABLE)
+[Healing] Re-running failed tests (attempt 1/3)
+[Healing] Wait healed: timeout: 5 -> timeout: 5000
+Healing status: AUTO_HEALED
+Generating Allure report...
+[Healing] PASS
+Playwright report generated
+Running 1 test using 1 worker
+Allure report generated
+  x  1 [chromium] › tests\_generated_local-timing-probe.spec.ts:3:5 › healable timing local probe (406ms)
+  x  2 [chromium] › tests\_generated_local-timing-probe.spec.ts:3:5 › healable timing local probe (retry #1) (448ms)
+  1) [chromium] › tests\_generated_local-timing-probe.spec.ts:3:5 › healable timing local probe ────
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+    Locator: locator('#ready')
+    Expected: visible
+    Timeout: 5ms
+    Error: element(s) not found
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5ms[22m
+    [2m  - waiting for locator('#ready')[22m
+       9 |   });
+      10 |   await page.waitForTimeout(1);
+    > 11 |   await expect(page.locator('#ready')).toBeVisible({ timeout: 5 });
+         |                                        ^
+      12 | });
+        at D:\TCGen-Buddy\automation\tests\_generated_local-timing-probe.spec.ts:11:40
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium\error-context.md
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium\trace.zip
+    Usage:
+        npx playwright show-trace reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+    Locator: locator('#ready')
+    Expected: visible
+    Timeout: 5ms
+    Error: element(s) not found
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5ms[22m
+    [2m  - waiting for locator('#ready')[22m
+       9 |   });
+      10 |   await page.waitForTimeout(1);
+    > 11 |   await expect(page.locator('#ready')).toBeVisible({ timeout: 5 });
+         |                                        ^
+      12 | });
+        at D:\TCGen-Buddy\automation\tests\_generated_local-timing-probe.spec.ts:11:40
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium-retry1\error-context.md
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium-retry1\trace.zip
+    Usage:
+        npx playwright show-trace reports\traces\generated-20260615-154254\_generated_local-timing-probe-healable-timing-local-probe-chromium-retry1\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+  1 failed
+    [chromium] › tests\_generated_local-timing-probe.spec.ts:3:5 › healable timing local probe ─────

@@ -9,6 +9,7 @@ import { exportApiCsv, exportApiExcel, exportApiJson } from "./api-testing-expor
 import { ApiExecutionResult, ApiFramework, ApiInputMode, ApiTestCase } from "./types";
 import { AiProviderId } from "@/src/services/ai/provider-orchestrator";
 import { useGlobalProgress } from "@/src/components/shared/ProgressProvider";
+import { projectKeyFromText, upsertMemoryVaultRecord } from "@/src/services/memory-vault/memory-vault.service";
 
 export interface ApiTestingWorkspaceProps {
     globalProvider: AiProviderId;
@@ -142,6 +143,33 @@ export function ApiTestingWorkspace({ globalProvider, globalModel }: ApiTestingW
             if (!response.ok || !data.success) throw new Error(data.error || "API test case generation failed");
             setTestCases(data.testCases || []);
             setSource(data.source || null);
+            const storyId = data.source?.jiraStoryId || jiraStoryId.match(/[A-Z][A-Z0-9]+-\d+/)?.[0] || "";
+            const projectKey = projectKeyFromText(storyId || swaggerUrl || rawEndpoint);
+            const sourceContent = [
+                inputMode === "swagger-url" ? swaggerUrl : "",
+                inputMode === "swagger-upload" ? swaggerJson : "",
+                inputMode === "curl" ? curlCommand : "",
+                inputMode === "postman" ? postmanJson : "",
+                inputMode === "raw" ? `${rawMethod} ${rawEndpoint}\n${rawPayload}` : "",
+            ].filter(Boolean).join("\n\n");
+            if (sourceContent.trim()) {
+                upsertMemoryVaultRecord({
+                    projectKey,
+                    sourceType: "api_spec",
+                    title: data.source?.title || storyId || "API Source",
+                    content: sourceContent,
+                    metadata: { inputMode, storyId },
+                });
+            }
+            if ((data.testCases || []).length) {
+                upsertMemoryVaultRecord({
+                    projectKey,
+                    sourceType: "api_test_cases",
+                    title: data.source?.title || storyId || "Generated API Test Cases",
+                    content: JSON.stringify(data.testCases || [], null, 2),
+                    metadata: { inputMode, storyId, count: (data.testCases || []).length },
+                });
+            }
             setNotice(`Generated ${(data.testCases || []).length} API test cases`);
             updateProgress(100, "Done");
         } catch (err) {

@@ -9,7 +9,8 @@ export async function generateTestCases(
     acceptanceCriteria?: string,
     provider: AiProviderId = "auto",
     jiraStoryId?: string,
-    providerSettings?: ProviderSettings
+    providerSettings?: ProviderSettings,
+    memoryContext?: string
 ) {
     const res = await fetch("/api/generate", {
         method: "POST",
@@ -24,6 +25,7 @@ export async function generateTestCases(
             provider,
             jiraStoryId,
             providerSettings,
+            memoryContext,
         }),
     });
     const contentType = res.headers.get("content-type") || "";

@@ -146,5 +146,26 @@ export async function fetchJiraStory(storyId: string) {
     if (!contentType.includes('application/json')) {
         return { success: false, error: 'Jira story lookup returned a non-JSON response.' };
     }
-    return res.json();
+    const data = await res.json();
+    if (data?.success) {
+        const { upsertMemoryVaultRecord, projectKeyFromText } = await import('@/src/services/memory-vault/memory-vault.service');
+        upsertMemoryVaultRecord({
+            id: `jira-story-${storyId}`,
+            projectKey: projectKeyFromText(storyId),
+            sourceType: 'jira_story',
+            title: data.key || storyId,
+            content: [
+                `Jira Story: ${data.key || storyId}`,
+                data.summary ? `Summary: ${data.summary}` : '',
+                data.description ? `Description:\n${data.description}` : '',
+                data.acceptanceCriteria ? `Acceptance Criteria:\n${data.acceptanceCriteria}` : '',
+            ].filter(Boolean).join('\n\n'),
+            metadata: {
+                key: data.key || storyId,
+                url: data.url,
+                status: data.status,
+            },
+        });
+    }
+    return data;
 }

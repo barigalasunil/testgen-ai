@@ -19,7 +19,7 @@ export type TestCase = {
 
 export type SuiteKey = 'smoke' | 'sanity' | 'regression';
 
-export type AutomationTargetSource = 'jira_story' | 'generated_script' | 'manual_session' | 'custom_run';
+export type AutomationTargetSource = 'jira_story' | 'generated_script' | 'manual_session';
 
 export type AutomationTarget = {
     sessionId: string;
@@ -37,7 +37,6 @@ export type AutomationRunStatus = 'passed' | 'failed' | 'partial_success' | 'err
 export type AutomationRunRecord = {
     runId: string;
     suite?: string;
-    suiteMode?: string;
     targetUrl?: string;
     browser?: string;
     mode?: 'Headed' | 'Headless';
@@ -109,7 +108,7 @@ export type AiGenerationMeta = {
 };
 
 export type PlatformType = 'web' | 'mobile' | 'api' | 'automation';
-export type WorkspacePanel = 'testcases' | 'api-testing' | 'automation' | 'defect-studio' | 'jira';
+export type WorkspacePanel = 'testcases' | 'api-testing' | 'automation' | 'defect-studio' | 'jira' | 'memory-vault';
 
 export type WorkspaceSectionHeader = {
     title: string;
