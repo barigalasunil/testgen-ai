@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Download, FileJson, FileSpreadsheet, Play, RefreshCw, Send, Upload, Zap } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, FileJson, FileSpreadsheet, Play, RefreshCw, Send, Upload, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSavedModel, getSavedProvider, loadProviderSettings } from "@/src/services/ai/ai-config.service";
 import { loadJiraCredentials } from "@/src/services/jira/jira.service";
@@ -9,6 +9,7 @@ import { exportApiCsv, exportApiExcel, exportApiJson } from "./api-testing-expor
 import { ApiExecutionResult, ApiFramework, ApiInputMode, ApiTestCase } from "./types";
 import { AiProviderId } from "@/src/services/ai/provider-orchestrator";
 import { useGlobalProgress } from "@/src/components/shared/ProgressProvider";
+import { projectKeyFromText, upsertMemoryVaultRecord } from "@/src/services/memory-vault/memory-vault.service";
 
 export interface ApiTestingWorkspaceProps {
     globalProvider: AiProviderId;
@@ -142,6 +143,33 @@ export function ApiTestingWorkspace({ globalProvider, globalModel }: ApiTestingW
             if (!response.ok || !data.success) throw new Error(data.error || "API test case generation failed");
             setTestCases(data.testCases || []);
             setSource(data.source || null);
+            const storyId = data.source?.jiraStoryId || jiraStoryId.match(/[A-Z][A-Z0-9]+-\d+/)?.[0] || "";
+            const projectKey = projectKeyFromText(storyId || swaggerUrl || rawEndpoint);
+            const sourceContent = [
+                inputMode === "swagger-url" ? swaggerUrl : "",
+                inputMode === "swagger-upload" ? swaggerJson : "",
+                inputMode === "curl" ? curlCommand : "",
+                inputMode === "postman" ? postmanJson : "",
+                inputMode === "raw" ? `${rawMethod} ${rawEndpoint}\n${rawPayload}` : "",
+            ].filter(Boolean).join("\n\n");
+            if (sourceContent.trim()) {
+                upsertMemoryVaultRecord({
+                    projectKey,
+                    sourceType: "api_spec",
+                    title: data.source?.title || storyId || "API Source",
+                    content: sourceContent,
+                    metadata: { inputMode, storyId },
+                });
+            }
+            if ((data.testCases || []).length) {
+                upsertMemoryVaultRecord({
+                    projectKey,
+                    sourceType: "api_test_cases",
+                    title: data.source?.title || storyId || "Generated API Test Cases",
+                    content: JSON.stringify(data.testCases || [], null, 2),
+                    metadata: { inputMode, storyId, count: (data.testCases || []).length },
+                });
+            }
             setNotice(`Generated ${(data.testCases || []).length} API test cases`);
             updateProgress(100, "Done");
         } catch (err) {
@@ -276,7 +304,7 @@ export function ApiTestingWorkspace({ globalProvider, globalModel }: ApiTestingW
                         {frameworks.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
                     </select>
                     <button onClick={handleGenerateAutomation} disabled={!hasInput || isGeneratingAutomation} className="inline-flex h-8 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700">
-                        {isGeneratingAutomation ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                        {isGeneratingAutomation ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                         Generate
                     </button>
                     <button onClick={handleExecute} disabled={!automationCode || execution.status === "running"} className="inline-flex h-8 items-center gap-1.5 rounded border border-gray-200 px-3 text-xs font-bold hover:bg-gray-50 dark:border-gray-700">

@@ -43,37 +43,16 @@ type AdfNode = {
     marks?: { type: string }[];
 };
 
-const projectPermissionMessage = "Jira project does not exist or your user does not have permission to create issues. Please verify Project Key, Issue Type, and Jira permissions.";
-
-function isProjectOrPermissionError(message: string) {
-    const normalized = message.toLowerCase();
-    return normalized.includes("\u76ee\u6807\u9879\u76ee\u4e0d\u5b58\u5728")
-        || normalized.includes("\u65e0\u6743")
-        || normalized.includes("permission")
-        || normalized.includes("project does not exist")
-        || normalized.includes("does not exist")
-        || normalized.includes("cannot create")
-        || normalized.includes("no permission");
-}
-
-function normalizeJiraError(responseText: string, status: number): string {
-    if (isProjectOrPermissionError(responseText)) {
-        return projectPermissionMessage;
-    }
-
+// ── Extract exact Jira error message ──────────────────────────────────────
+function extractJiraError(responseText: string, status: number): string {
     try {
         const errorJson = JSON.parse(responseText);
         const messages = Array.isArray(errorJson.errorMessages) ? errorJson.errorMessages : [];
         const errors = Object.entries(errorJson.errors || {}).map(([field, value]) => `${field}: ${String(value)}`);
-        const combined = [...messages, ...errors].filter(Boolean).join(", ");
-        if (isProjectOrPermissionError(combined)) return projectPermissionMessage;
-        if (combined) return `Jira rejected the request (${status}). Please verify Jira settings and project permissions.`;
+        const combined = [...messages, ...errors].filter(Boolean).join(', ');
+        if (combined) return `Jira API error (${status}): ${combined}`;
     } catch {}
-
-    if (status === 400) return "Jira defect creation failed. Check required Jira fields, project key, issue type, priority, and permissions.";
-    if (status === 401 || status === 403) return "Jira API token invalid or user lacks permission to create issues.";
-    if (status === 404) return projectPermissionMessage;
-    return `Jira defect creation failed with HTTP ${status}.`;
+    return `Jira API error (HTTP ${status}): ${responseText.slice(0, 500)}`;
 }
 
 function paragraph(text: string): AdfNode {
@@ -188,7 +167,7 @@ function getJiraConfig(credentials: JiraCredentials): JiraConfig | { error: stri
     };
 }
 
-async function validateProjectAndIssueType({
+async function runPreflight({
     normalizedUrl,
     auth,
     projectKey,
@@ -199,62 +178,74 @@ async function validateProjectAndIssueType({
     projectKey: string;
     requestedIssueType: "Bug" | "Defect";
 }): Promise<{ issueType: "Bug" | "Defect"; warning?: string } | { error: string; status: number }> {
-    const createmetaUrl = `${normalizedUrl}/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(projectKey)}&expand=projects.issuetypes`;
-    const res = await fetch(createmetaUrl, {
-        headers: {
-            Authorization: `Basic ${auth}`,
-            Accept: "application/json",
-        },
+    // ── Step 1: Validate project exists ──────────────────────────────
+    const projectRes = await fetch(`${normalizedUrl}/rest/api/3/project/${encodeURIComponent(projectKey)}`, {
+        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
     });
-    const text = await res.text();
-
-    if (!res.ok) {
-        console.warn("[JIRA DEFECT PREFLIGHT]", {
-            status: res.status,
-            projectKey,
-            requestedIssueType,
-            rawError: text,
-        });
-        return { error: normalizeJiraError(text, res.status), status: res.status };
+    const projectText = await projectRes.text();
+    if (!projectRes.ok) {
+        return { error: `Project validation failed: ${extractJiraError(projectText, projectRes.status)}`, status: projectRes.status };
     }
 
-    let data: {
-        projects?: {
-            key?: string;
-            issuetypes?: { name?: string; subtask?: boolean }[];
-        }[];
-    };
-    try {
-        data = JSON.parse(text);
-    } catch {
-        return { error: "Jira project validation returned an invalid response.", status: 502 };
+    // ── Step 2: Verify issue type exists ─────────────────────────────
+    const issuetypeRes = await fetch(`${normalizedUrl}/rest/api/3/issuetype`, {
+        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+    });
+    const issuetypeText = await issuetypeRes.text();
+    if (!issuetypeRes.ok) {
+        return { error: `Issue type lookup failed: ${extractJiraError(issuetypeText, issuetypeRes.status)}`, status: issuetypeRes.status };
     }
 
-    const project = data.projects?.find(item => item.key?.toUpperCase() === projectKey) || data.projects?.[0];
-    const issueTypes = project?.issuetypes?.filter(type => !type.subtask).map(type => type.name).filter(Boolean) || [];
-    if (!project || issueTypes.length === 0) {
-        console.warn("[JIRA DEFECT PREFLIGHT]", {
+    let issuetypeData: { name?: string }[];
+    try { issuetypeData = JSON.parse(issuetypeText); } catch {
+        return { error: "Issue type endpoint returned an invalid response.", status: 502 };
+    }
+
+    const typeExists = issuetypeData.some(t => t.name?.toLowerCase() === requestedIssueType.toLowerCase());
+    if (!typeExists) {
+        const available = issuetypeData.map(t => t.name || '?').join(', ');
+        return {
+            error: `Issue type "${requestedIssueType}" does not exist in this Jira instance. Available types: ${available}`,
             status: 400,
-            projectKey,
-            requestedIssueType,
-            rawError: "No creatable issue types returned for project.",
-        });
-        return { error: projectPermissionMessage, status: 400 };
+        };
     }
 
-    if (issueTypes.includes(requestedIssueType)) {
+    // ── Step 3: Verify create permission via createmeta ──────────────
+    const createmetaUrl = `${normalizedUrl}/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(projectKey)}&expand=projects.issuetypes`;
+    const cmRes = await fetch(createmetaUrl, {
+        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+    });
+    const cmText = await cmRes.text();
+
+    if (!cmRes.ok) {
+        return { error: `Permission check failed: ${extractJiraError(cmText, cmRes.status)}`, status: cmRes.status };
+    }
+
+    let cmData: { projects?: { key?: string; issuetypes?: { name?: string; subtask?: boolean }[] }[] };
+    try { cmData = JSON.parse(cmText); } catch {
+        return { error: "Permission check returned an invalid response.", status: 502 };
+    }
+
+    const projectMeta = cmData.projects?.find(p => p.key?.toUpperCase() === projectKey.toUpperCase());
+    const creatableTypes = projectMeta?.issuetypes?.filter(t => !t.subtask).map(t => t.name).filter(Boolean) || [];
+
+    if (!projectMeta || creatableTypes.length === 0) {
+        return { error: `User does not have permission to create issues in project "${projectKey}".`, status: 403 };
+    }
+
+    if (creatableTypes.some(t => t?.toLowerCase() === requestedIssueType.toLowerCase())) {
         return { issueType: requestedIssueType };
     }
 
-    if (requestedIssueType === "Defect" && issueTypes.includes("Bug")) {
+    if (requestedIssueType === "Defect" && creatableTypes.some(t => t?.toLowerCase() === "bug")) {
         return {
             issueType: "Bug",
-            warning: "Defect issue type not found. Created as Bug.",
+            warning: `Defect issue type not found in creatable types for ${projectKey}. Created as Bug. Available: ${creatableTypes.join(', ')}`,
         };
     }
 
     return {
-        error: `Jira issue type "${requestedIssueType}" is not available for project ${projectKey}. Please verify Project Key, Issue Type, and Jira permissions.`,
+        error: `Issue type "${requestedIssueType}" is not creatable in project "${projectKey}". Available creatable types: ${creatableTypes.join(', ')}`,
         status: 400,
     };
 }
@@ -291,13 +282,16 @@ export async function POST(request: Request) {
 
         const normalizedUrl = cleanBaseUrl(config.baseUrl);
         const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString("base64");
-        console.log("[JIRA DEFECT CONFIG]", {
-            source: config.source,
-            projectKey: config.projectKey,
-            baseUrl: normalizedUrl,
-        });
 
-        const preflight = await validateProjectAndIssueType({
+        // ── Log pre-creation details ─────────────────────────────────────
+        console.log('[JIRA DEFECT] --- Pre-creation audit ---');
+        console.log('[JIRA DEFECT] Base URL:', normalizedUrl);
+        console.log('[JIRA DEFECT] Project Key:', config.projectKey);
+        console.log('[JIRA DEFECT] Issue Type:', issueType);
+        console.log('[JIRA DEFECT] Parent Story ID:', body.storyId || '(none)');
+        console.log('[JIRA DEFECT] Auth user email:', config.email);
+
+        const preflight = await runPreflight({
             normalizedUrl,
             auth,
             projectKey: config.projectKey,
@@ -384,7 +378,7 @@ export async function POST(request: Request) {
                 res = await createIssue(resolvedIssueType, false);
                 const retryText = await res.text();
                 if (!res.ok) {
-                    return NextResponse.json({ success: false, error: normalizeJiraError(retryText, res.status) }, { status: res.status });
+                    return NextResponse.json({ success: false, error: extractJiraError(retryText, res.status) }, { status: res.status });
                 }
                 warning = warning
                     ? `${warning} Jira priority was not accepted and was omitted.`
@@ -395,7 +389,7 @@ export async function POST(request: Request) {
                 return successResponse({ issueKey, issueUrl, issueType: resolvedIssueType, warning });
             }
 
-            return NextResponse.json({ success: false, error: normalizeJiraError(responseText, res.status) }, { status: res.status });
+            return NextResponse.json({ success: false, error: extractJiraError(responseText, res.status) }, { status: res.status });
         }
 
         const data = JSON.parse(responseText);

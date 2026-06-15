@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, Server, Bug } from "lucide-react";
+import Image from "next/image";
+import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Bug, Database, Code2, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AutomationExecutionSummary, HistoryItem, SuiteKey, SuiteExecution, WorkspacePanel } from "../types";
 
@@ -63,10 +64,10 @@ export function Sidebar({
     };
 
     const navItems = [
-        { id: 'testcases', label: 'QA Workspace', icon: Bot },
-        { id: 'api-testing', label: 'API Lab', icon: Server },
-        { id: 'automation', label: 'Automation Hub', icon: Zap },
         { id: 'defect-studio', label: 'Defect Studio', icon: Bug },
+        { id: 'automation', label: 'Automation Hub', icon: Play },
+        { id: 'api-testing', label: 'API Lab', icon: Code2 },
+        { id: 'memory-vault', label: 'Memory Vault', icon: Database },
         { id: 'jira', label: 'Settings', icon: Settings },
     ] as const;
 
@@ -77,8 +78,15 @@ export function Sidebar({
         )}>
             {/* TOP SECTION: New Chat & History */}
             <div className="p-3 flex flex-col gap-4">
+                <div className="hidden items-center gap-2 px-1 md:flex">
+                    <Image src="/assets/logo/tcgen-buddy-sidebar-logo.png" alt="TCGen-Buddy" width={36} height={36} priority className="h-9 w-9 rounded-md object-contain" />
+                    <span className="truncate text-sm font-extrabold tracking-tight text-gray-900 dark:text-gray-100">TCGen-Buddy</span>
+                </div>
                 <div className="flex items-center justify-between md:hidden">
-                    <span className="text-sm font-bold dark:text-white">Menu</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <Image src="/assets/logo/tcgen-buddy-sidebar-logo.png" alt="TCGen-Buddy" width={32} height={32} priority className="h-8 w-8 rounded-md object-contain" />
+                        <span className="truncate text-sm font-extrabold tracking-tight text-gray-900 dark:text-gray-100">TCGen-Buddy</span>
+                    </div>
                     <button onClick={toggleSidebar} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md">
                         <X className="w-5 h-5 dark:text-gray-400" />
                     </button>
@@ -95,7 +103,7 @@ export function Sidebar({
                     )}
                 >
                     <Plus className={cn("w-4 h-4", loading ? "text-gray-400" : "text-[#10A37F]")} /> 
-                    New Workspace
+                    New Chat
                 </button>
             </div>
 
@@ -157,13 +165,12 @@ export function Sidebar({
                     ))}
                 </div>
 
-                {/* BOTTOM SECTION: Navigation & Workspaces */}
+                {/* BOTTOM SECTION: Workspaces */}
                 <div className="px-3 pb-4 mt-auto border-t border-gray-100 dark:border-gray-800 pt-4 space-y-1">
-                    <div className="text-[10px] uppercase tracking-widest text-[#10A37F] font-bold mb-3 px-1">Navigation</div>
                     {navItems.map((item) => (
                         <button
                             key={item.id}
-                            onClick={() => onChangePanel(item.id as any)}
+                            onClick={() => onChangePanel(item.id)}
                             className={cn(
                                 "w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-bold transition-all mb-0.5",
                                 activePanel === item.id

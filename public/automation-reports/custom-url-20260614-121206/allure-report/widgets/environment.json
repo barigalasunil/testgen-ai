@@ -1,1 +1,0 @@
-[{"values":["custom-url-20260614-121206"],"name":"RUN_ID"},{"values":["https://www.saucedemo.com"],"name":"TARGET_URL"},{"values":["regression"],"name":"SUITE_NAME"},{"values":["generic"],"name":"SUITE_MODE"},{"values":["Generic Website Validation"],"name":"SUITE_APP"},{"values":["chromium"],"name":"BROWSER_NAME"},{"values":["headless"],"name":"HEADLESS_MODE"}]

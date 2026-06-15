@@ -1,0 +1,27 @@
+Run ID: regression-20260616-065623
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: regression
+Suite app: SauceDemo
+Mode: Headless
+Status: initialized
+Status: environment validated
+Selected suite: SauceDemo regression
+Browser launch mode: headless
+Starting Playwright execution from tests/regression
+Status: passed
+Healing skipped: no failed tests.
+Playwright report generated
+Generating Allure report...
+Allure report generated
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\checkout-data.csv
+Running 5 tests using 1 worker
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\checkout-data.csv
+  ✓  1 [chromium] › tests\regression\purchase-flow.spec.ts:19:9 › SauceDemo Regression › complete purchase as John Doe (6.2s)
+  ✓  2 [chromium] › tests\regression\purchase-flow.spec.ts:19:9 › SauceDemo Regression › complete purchase as Jane Smith (26.8s)
+  ✓  3 [chromium] › tests\regression\purchase-flow.spec.ts:19:9 › SauceDemo Regression › complete purchase as Ravi Kumar (2.2s)
+  ✓  4 [chromium] › tests\regression\purchase-flow.spec.ts:19:9 › SauceDemo Regression › complete purchase as Test User (2.3s)
+  ✓  5 [chromium] › tests\regression\purchase-flow.spec.ts:19:9 › SauceDemo Regression › complete purchase as A B (2.7s)
+  5 passed (44.7s)

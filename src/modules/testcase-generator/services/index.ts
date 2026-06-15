@@ -1,5 +1,28 @@
 import { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
 
+type ModelOption = {
+    id?: unknown;
+    name?: unknown;
+};
+
+function normalizeModelList(models: unknown): string[] {
+    if (!Array.isArray(models)) return [];
+    return models
+        .map((model) => {
+            if (typeof model === 'string') return model;
+            if (model && typeof model === 'object') {
+                const option = model as ModelOption;
+                return typeof option.id === 'string'
+                    ? option.id
+                    : typeof option.name === 'string'
+                        ? option.name
+                        : '';
+            }
+            return '';
+        })
+        .filter(Boolean);
+}
+
 export async function generateTestCases(
     prompt: string,
     model: string,
@@ -9,7 +32,8 @@ export async function generateTestCases(
     acceptanceCriteria?: string,
     provider: AiProviderId = "auto",
     jiraStoryId?: string,
-    providerSettings?: ProviderSettings
+    providerSettings?: ProviderSettings,
+    memoryContext?: string
 ) {
     const res = await fetch("/api/generate", {
         method: "POST",
@@ -24,6 +48,7 @@ export async function generateTestCases(
             provider,
             jiraStoryId,
             providerSettings,
+            memoryContext,
         }),
     });
     const contentType = res.headers.get("content-type") || "";
@@ -42,5 +67,23 @@ export async function generateTestCases(
 
 export async function fetchModels(provider: AiProviderId = 'auto', ollamaBaseUrl: string = 'http://127.0.0.1:11434') {
     const res = await fetch(`/api/models?provider=${provider}&ollamaBaseUrl=${encodeURIComponent(ollamaBaseUrl)}`);
-    return await res.json();
+    const contentType = res.headers.get('content-type') || '';
+
+    if (!res.ok) {
+        throw new Error('Unable to load models');
+    }
+
+    if (!contentType.includes('application/json')) {
+        throw new Error('Unable to load models');
+    }
+
+    const payload = await res.json();
+    const chatModels = normalizeModelList(payload.chatModels || payload.models);
+    const models = normalizeModelList(payload.models);
+
+    return {
+        ...payload,
+        models,
+        chatModels,
+    };
 }

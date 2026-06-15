@@ -1,5 +1,0 @@
-Navigation attempt 1: domcontentloaded
-Navigation attempt 1 succeeded: domcontentloaded
-[Execution] Running generated regression checks
-[Planner] Discovered 0 links, 1 forms, 1 buttons
-[Generator] Created safe checks for regression suite

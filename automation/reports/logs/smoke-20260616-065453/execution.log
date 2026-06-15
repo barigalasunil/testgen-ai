@@ -1,0 +1,26 @@
+Run ID: smoke-20260616-065453
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: smoke
+Suite app: SauceDemo
+Mode: Headless
+Status: initialized
+Status: environment validated
+Selected suite: SauceDemo smoke
+Browser launch mode: headless
+Starting Playwright execution from tests/smoke
+Status: passed
+Healing skipped: no failed tests.
+Playwright report generated
+Generating Allure report...
+Allure report generated
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+Running 6 tests using 1 worker
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✓  1 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success (2.5s)
+  ✓  2 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail (2.7s)
+  ✓  3 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success (2.4s)
+  ✓  4 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success (7.8s)
+  ✓  5 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success (2.4s)
+  ✓  6 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success (1.6s)
+  6 passed (24.9s)

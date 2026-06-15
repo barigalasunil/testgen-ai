@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Bug, CheckCircle2, ExternalLink, Loader2, Pencil, Sparkles, XCircle } from "lucide-react";
+import { Bug, Loader2, Pencil, Sparkles } from "lucide-react";
 import { createDefect, DefectPayload, fetchJiraStory, reviewDefectWithAi } from "@/src/services/jira/jira.service";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import type { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
+import { memoryIdForJiraStory, projectKeyFromText, upsertDefectConvertedTestCase, upsertMemoryVaultRecord } from "@/src/services/memory-vault/memory-vault.service";
+import { DefectToast, DefectToastState } from "./DefectToast";
 
 const priorities = ["", "Lowest", "Low", "Medium", "High", "Highest"];
 const severities = ["", "Low", "Medium", "High", "Critical", "Blocker"];
@@ -14,13 +16,6 @@ type DefectStudioProps = {
     provider: AiProviderId;
     model: string;
     providerSettings: ProviderSettings;
-};
-
-type Notice = {
-    type: "success" | "error";
-    message: string;
-    url?: string;
-    key?: string;
 };
 
 const emptyDefect: DefectPayload = {
@@ -125,10 +120,11 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
     const [reviewed, setReviewed] = useState<DefectPayload | null>(null);
     const [errors, setErrors] = useState({ summary: "", description: "", actualResult: "", expectedResult: "", issueType: "" });
     const [reviewedErrors, setReviewedErrors] = useState({ summary: "", description: "", actualResult: "", expectedResult: "", issueType: "" });
-    const [notice, setNotice] = useState<Notice | null>(null);
+    const [toast, setToast] = useState<DefectToastState | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [isDrafting, setIsDrafting] = useState(false);
     const [isReviewing, setIsReviewing] = useState(false);
+    const [isSuggestingSteps, setIsSuggestingSteps] = useState(false);
     const [isCreatingReviewed, setIsCreatingReviewed] = useState(false);
     const firstReviewedField = useRef<HTMLInputElement>(null);
 
@@ -184,26 +180,71 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
         }
         const firstError = Object.values(validation).find(Boolean);
         if (firstError) {
-            setNotice({ type: "error", message: firstError });
+            setToast({ type: "error", message: firstError });
             return;
         }
 
-        reviewedMode ? setIsCreatingReviewed(true) : setIsCreating(true);
-        setNotice(null);
+        if (reviewedMode) {
+            setIsCreatingReviewed(true);
+        } else {
+            setIsCreating(true);
+        }
+        setToast(null);
         try {
             const explicitStoryId = await resolveStoryIdForCreate();
             const data = await createDefect({ ...payload, storyId: explicitStoryId || undefined });
             if (!data.success) throw new Error(data.error || "Jira defect creation failed");
-            setNotice({
+            const projectKey = projectKeyFromText(explicitStoryId || data.issueKey);
+            upsertMemoryVaultRecord({
+                id: data.issueKey ? `defect-${data.issueKey}` : undefined,
+                projectKey,
+                sourceType: "defect",
+                title: data.issueKey || payload.summary,
+                content: [
+                    `Defect: ${data.issueKey || payload.summary}`,
+                    `Summary: ${payload.summary}`,
+                    payload.description ? `Description:\n${payload.description}` : "",
+                    payload.actualResult ? `Actual Result: ${payload.actualResult}` : "",
+                    payload.expectedResult ? `Expected Result: ${payload.expectedResult}` : "",
+                    explicitStoryId ? `Linked Story: ${explicitStoryId}` : "",
+                ].filter(Boolean).join("\n\n"),
+                metadata: {
+                    issueKey: data.issueKey,
+                    issueUrl: data.issueUrl,
+                    issueType: data.issueType || payload.issueType,
+                    priority: payload.priority,
+                    severity: payload.severity,
+                    storyId: explicitStoryId || undefined,
+                    linkedMemoryStoryId: explicitStoryId ? memoryIdForJiraStory(explicitStoryId) : undefined,
+                    reviewedMode,
+                },
+            });
+            upsertDefectConvertedTestCase({
+                defectId: data.issueKey,
+                defectUrl: data.issueUrl,
+                projectKey,
+                summary: payload.summary,
+                description: payload.description,
+                actualResult: payload.actualResult,
+                expectedResult: payload.expectedResult,
+                priority: payload.priority,
+                severity: payload.severity,
+                storyId: explicitStoryId || undefined,
+            });
+            setToast({
                 type: "success",
-                message: `${data.issueType || payload.issueType || "Bug"} created successfully${data.warning ? `: ${data.warning}` : ""}`,
-                key: data.issueKey,
-                url: data.issueUrl,
+                message: `${data.issueType || payload.issueType || "Bug"} created successfully`,
+                issueKey: data.issueKey,
+                issueUrl: data.issueUrl,
             });
         } catch (error) {
-            setNotice({ type: "error", message: error instanceof Error ? error.message : String(error) });
+            setToast({ type: "error", message: error instanceof Error ? error.message : String(error) });
         } finally {
-            reviewedMode ? setIsCreatingReviewed(false) : setIsCreating(false);
+            if (reviewedMode) {
+                setIsCreatingReviewed(false);
+            } else {
+                setIsCreating(false);
+            }
         }
     };
 
@@ -212,12 +253,12 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
         setErrors(validation);
         const firstError = Object.values(validation).find(Boolean);
         if (firstError) {
-            setNotice({ type: "error", message: firstError });
+            setToast({ type: "error", message: firstError });
             return;
         }
 
         setIsReviewing(true);
-        setNotice(null);
+        setToast(null);
         try {
             const data = await reviewDefectWithAi({
                 ...manual,
@@ -235,22 +276,51 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
                 priority: data.defect.priority || "",
                 severity: data.defect.severity || "",
             });
-            setNotice({ type: "success", message: "AI review completed. Review and edit before creating the Jira defect." });
+            setToast({ type: "success", message: "AI review completed. Review and edit before creating the Jira defect." });
         } catch (error) {
-            setNotice({ type: "error", message: error instanceof Error ? error.message : String(error) });
+            setToast({ type: "error", message: error instanceof Error ? error.message : String(error) });
         } finally {
             setIsReviewing(false);
         }
     };
 
+    const suggestStepsWithAi = async () => {
+        const seed = [manual.summary, manual.description, quickDescription].filter(Boolean).join("\n\n");
+        if (!seed.trim()) {
+            setToast({ type: "error", message: "Enter a summary or plain English issue before asking AI for steps." });
+            return;
+        }
+        setIsSuggestingSteps(true);
+        setToast(null);
+        try {
+            const data = await reviewDefectWithAi({
+                quickDescription: seed,
+                summary: manual.summary,
+                description: manual.description,
+                actualResult: manual.actualResult,
+                expectedResult: manual.expectedResult,
+                issueType: manual.issueType,
+                provider,
+                model,
+                providerSettings,
+            });
+            if (!data.success) throw new Error(data.error || "AI step suggestion failed");
+            updateManual("description", data.defect.description || manual.description);
+        } catch (error) {
+            setToast({ type: "error", message: error instanceof Error ? error.message : String(error) });
+        } finally {
+            setIsSuggestingSteps(false);
+        }
+    };
+
     const generateDefectDraft = async () => {
         if (!quickDescription.trim()) {
-            setNotice({ type: "error", message: "Describe the issue in plain English before generating a draft." });
+            setToast({ type: "error", message: "Describe the issue in plain English before generating a draft." });
             return;
         }
 
         setIsDrafting(true);
-        setNotice(null);
+        setToast(null);
         try {
             const data = await reviewDefectWithAi({
                 quickDescription,
@@ -270,10 +340,10 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
                 priority: data.defect.priority || "",
                 severity: data.defect.severity || "",
             });
-            setNotice({ type: "success", message: "Defect draft generated. Review and edit before creating the Jira defect." });
+            setToast({ type: "success", message: "Defect draft generated. Review and edit before creating the Jira defect." });
             window.setTimeout(() => firstReviewedField.current?.focus(), 0);
         } catch (error) {
-            setNotice({ type: "error", message: error instanceof Error ? error.message : String(error) });
+            setToast({ type: "error", message: error instanceof Error ? error.message : String(error) });
         } finally {
             setIsDrafting(false);
         }
@@ -293,23 +363,7 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
                 </div>
             </div>
 
-            {notice && (
-                <div className={`mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-semibold ${
-                    notice.type === "success"
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300"
-                        : "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300"
-                }`}>
-                    <span className="flex items-center gap-2">
-                        {notice.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                        {notice.message}
-                    </span>
-                    {notice.url ? (
-                        <a href={notice.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs underline">
-                            Open {notice.key} <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                    ) : null}
-                </div>
-            )}
+            <DefectToast toast={toast} onClose={() => setToast(null)} />
 
             <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <div className="mb-3">
@@ -378,6 +432,10 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
                     <div className="space-y-4">
                         <Field label="Summary" required value={manual.summary} error={errors.summary} onChange={(value) => updateManual("summary", value)} />
                         <Field label="Description & Steps to Reproduce" required multiline value={manual.description} error={errors.description} onChange={(value) => updateManual("description", value)} />
+                        <button onClick={suggestStepsWithAi} disabled={isSuggestingSteps || isCreating || isReviewing} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#10A37F]/30 px-3 text-xs font-bold text-[#10A37F] hover:bg-[#10A37F]/10 disabled:opacity-50">
+                            {isSuggestingSteps ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                            Suggest Steps with AI
+                        </button>
                         <Field label="Actual Result" required multiline value={manual.actualResult} error={errors.actualResult} onChange={(value) => updateManual("actualResult", value)} />
                         <Field label="Expected Result" required multiline value={manual.expectedResult} error={errors.expectedResult} onChange={(value) => updateManual("expectedResult", value)} />
                         <SelectField label="Issue Type" required value={manual.issueType} options={issueTypes} error={errors.issueType} onChange={(value) => updateManual("issueType", value)} />

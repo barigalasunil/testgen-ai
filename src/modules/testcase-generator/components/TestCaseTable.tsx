@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { 
     AlertCircle, CheckCircle2, Copy, ExternalLink, FileText,
     Bug, FileSpreadsheet, FileJson, Tag, RefreshCw, ThumbsUp, Link,
-    ShieldCheck, Play
+    ShieldCheck, Play, Sparkles, Download, Terminal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TestCase } from "../types";

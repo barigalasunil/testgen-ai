@@ -11,7 +11,7 @@ import {
     RuntimeProviderId,
 } from './providers/types';
 import { getErrorMessage, normalizeUnknownError } from './providers/shared';
-import { filterChatModels, filterEmbeddingModels, splitModelsByType } from './providers/ollama-utils';
+import { splitModelsByType } from './providers/ollama-utils';
 
 export type ProviderOrchestratorResult = {
     content: string;
@@ -407,17 +407,28 @@ export class AiProviderOrchestrator {
                 const allModels = data.models?.map(m => m.name) || [];
                 const { chatModels, embeddingModels } = splitModelsByType(allModels);
                 const resolvedModel = model && chatModels.includes(model) ? model : (chatModels[0] || '');
+                if (chatModels.length === 0) {
+                    return {
+                        connected: false,
+                        provider,
+                        providerUsed: runtimeProvider,
+                        model: '',
+                        status: 'offline',
+                        message: embeddingModels.length > 0
+                            ? 'Ollama Local Offline - no generation models installed'
+                            : 'Ollama Local Offline - no models installed',
+                        checkedAt,
+                        chatModels,
+                        embeddingModels,
+                    };
+                }
                 return {
                     connected: true,
                     provider,
                     providerUsed: runtimeProvider,
                     model: resolvedModel,
                     status: 'connected',
-                    message: chatModels.length > 0
-                        ? `Ollama Local Connected (${chatModels.length} chat model${chatModels.length !== 1 ? 's' : ''})`
-                        : embeddingModels.length > 0
-                            ? 'Ollama Local (only embedding models)'
-                            : 'Ollama Local Connected',
+                    message: `Ollama Local Connected (${chatModels.length} chat model${chatModels.length !== 1 ? 's' : ''})`,
                     checkedAt,
                     chatModels,
                     embeddingModels,

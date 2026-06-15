@@ -48,6 +48,11 @@ export async function createIssue(payload: {
     priority: string;
     labels?: string[];
     storyId?: string;
+    traceability?: {
+        sourceId?: string;
+        sourceType?: string;
+        testCaseId?: string;
+    };
 }) {
     const credentials = loadJiraCredentials();
     const res = await fetch('/api/jira/create-issue', {
@@ -116,7 +121,7 @@ export async function reviewDefectWithAi(payload: DefectPayload & {
 
 // Used by 📋 Save All to Jira — creates ONE Task with all test cases as a table
 export async function saveTestCasesToJira(payload: {
-    testCases: any[];
+    testCases: unknown[];
     storyId?: string;
     prompt?: string;
 }) {
@@ -146,5 +151,34 @@ export async function fetchJiraStory(storyId: string) {
     if (!contentType.includes('application/json')) {
         return { success: false, error: 'Jira story lookup returned a non-JSON response.' };
     }
-    return res.json();
+    const data = await res.json();
+    if (data?.success) {
+        const { memoryIdForJiraStory, upsertMemoryVaultRecord, projectKeyFromText } = await import('@/src/services/memory-vault/memory-vault.service');
+        const jiraId = data.key || data.storyId || storyId;
+        const projectKey = projectKeyFromText(jiraId);
+        upsertMemoryVaultRecord({
+            id: memoryIdForJiraStory(jiraId) || `jira-story-${storyId}`,
+            projectKey,
+            sourceType: 'jira_story',
+            title: jiraId,
+            content: [
+                `Jira Story: ${jiraId}`,
+                data.summary ? `Summary: ${data.summary}` : '',
+                data.description ? `Description:\n${data.description}` : '',
+                data.acceptanceCriteria ? `Acceptance Criteria:\n${data.acceptanceCriteria}` : '',
+            ].filter(Boolean).join('\n\n'),
+            metadata: {
+                projectKey,
+                jiraId,
+                summary: data.summary || '',
+                description: data.description || '',
+                acceptanceCriteria: data.acceptanceCriteria || '',
+                originalJiraUrl: data.issueUrl || data.url || '',
+                key: jiraId,
+                url: data.issueUrl || data.url,
+                status: data.status,
+            },
+        });
+    }
+    return data;
 }

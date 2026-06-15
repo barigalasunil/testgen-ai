@@ -1,42 +1,26 @@
 import { NextResponse } from 'next/server';
 import { execSync, spawn } from 'child_process';
 import { join, basename, relative } from 'path';
-import { existsSync, mkdirSync, copyFileSync, unlinkSync, writeFileSync, readdirSync, statSync, cpSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, copyFileSync, unlinkSync, writeFileSync, readFileSync, readdirSync, statSync, cpSync, rmSync } from 'fs';
 import { appendFile, mkdir, writeFile } from 'fs/promises';
 import os from 'os';
 
 const VALID_SUITES = ['smoke', 'sanity', 'regression'] as const;
 type SuiteName = (typeof VALID_SUITES)[number];
 type BrowserName = 'chromium' | 'firefox' | 'webkit' | 'all';
-type SuiteMode = 'generic' | 'project-specific';
 
-const SAUCEDEMO_MISMATCH_MESSAGE = 'Selected suite is SauceDemo-specific and cannot run against this URL. Use Generic Custom URL Smoke or select matching project.';
 const SITE_NAVIGATION_TIMEOUT = 'SITE_NAVIGATION_TIMEOUT';
 
-const SUITE_PATHS: Record<SuiteMode, Record<SuiteName, string[]>> = {
-    generic: {
-        smoke: ['tests', 'generic', 'smoke.spec.ts'],
-        sanity: ['tests', 'generic', 'sanity.spec.ts'],
-        regression: ['tests', 'generic', 'regression.spec.ts'],
-    },
-    'project-specific': {
-        smoke: ['tests', 'smoke'],
-        sanity: ['tests', 'sanity'],
-        regression: ['tests', 'regression'],
-    },
+const SUITE_PATHS: Record<SuiteName, string[]> = {
+    smoke: ['tests', 'smoke'],
+    sanity: ['tests', 'sanity'],
+    regression: ['tests', 'regression'],
 };
 
-const SUITE_METADATA: Record<SuiteMode, { appName: string; requiredSelectors: string[]; requiresTestData: boolean }> = {
-    generic: {
-        appName: 'Generic Website Validation',
-        requiredSelectors: ['body'],
-        requiresTestData: false,
-    },
-    'project-specific': {
-        appName: 'SauceDemo',
-        requiredSelectors: ['[data-test="username"]', '[data-test="password"]', '[data-test="login-button"]'],
-        requiresTestData: true,
-    },
+const PROJECT_APP_NAME = 'SauceDemo';
+const PROJECT_BASE_URL = process.env.SAUCEDEMO_BASE_URL || 'https://www.saucedemo.com';
+const SUITE_METADATA = {
+    appName: PROJECT_APP_NAME,
 };
 
 type PlaywrightRunResult = {
@@ -136,79 +120,8 @@ function addMemoryLog(logs: string[], message: string) {
     logs.push(message);
 }
 
-function isSauceDemoUrl(targetUrl?: string) {
-    if (!targetUrl) return false;
-    try {
-        const hostname = new URL(targetUrl).hostname.toLowerCase();
-        return hostname === 'saucedemo.com' || hostname.endsWith('.saucedemo.com');
-    } catch {
-        return targetUrl.toLowerCase().includes('saucedemo.com');
-    }
-}
-
-function normalizeSuiteMode(value: unknown, customUrl?: string): SuiteMode {
-    if (value === 'project-specific' || value === 'projectSpecific') return 'project-specific';
-    if (value === 'generic') return 'generic';
-    return customUrl ? 'generic' : 'project-specific';
-}
-
-function normalizeTargetUrl(targetUrl: string) {
-    const trimmed = targetUrl.trim();
-    if (/^https?:\/\//i.test(trimmed)) return trimmed;
-    return `https://${trimmed}`;
-}
-
-function suiteLabel(suite: SuiteName, mode: SuiteMode) {
-    const prefix = mode === 'generic' ? 'Generic Website Validation' : 'SauceDemo';
-    return `${prefix} ${suite}`;
-}
-
-async function preflightTargetUrl(targetUrl: string) {
-    const startedAt = Date.now();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const redirects: string[] = [];
-
-    try {
-        const response = await fetch(targetUrl, {
-            method: 'GET',
-            redirect: 'follow',
-            signal: controller.signal,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-            },
-        });
-
-        if (response.url && response.url !== targetUrl) redirects.push(response.url);
-
-        return {
-            ok: response.status < 500,
-            status: response.status,
-            statusText: response.statusText,
-            finalUrl: response.url,
-            redirects,
-            durationMs: Date.now() - startedAt,
-            error: response.status >= 500 ? `HTTP ${response.status} ${response.statusText}` : undefined,
-        };
-    } catch (error) {
-        return {
-            ok: false,
-            status: undefined,
-            statusText: undefined,
-            finalUrl: targetUrl,
-            redirects,
-            durationMs: Date.now() - startedAt,
-            error: error instanceof Error && error.name === 'AbortError'
-                ? 'Response timeout after 15s'
-                : error instanceof Error
-                    ? error.message
-                    : String(error),
-        };
-    } finally {
-        clearTimeout(timeout);
-    }
+function suiteLabel(suite: SuiteName) {
+    return `${PROJECT_APP_NAME} ${suite}`;
 }
 
 function publishReports(artifacts: RunArtifacts) {
@@ -307,9 +220,7 @@ async function runAllureGenerate(artifacts: RunArtifacts) {
 function runPlaywright(args: string[], artifacts: RunArtifacts, options: {
     headed: boolean;
     browser: BrowserName;
-    customUrl?: string;
     incognito?: boolean;
-    suiteMode?: SuiteMode;
     suiteName?: string;
     suiteApp?: string;
 }): Promise<PlaywrightRunResult> {
@@ -326,13 +237,10 @@ function runPlaywright(args: string[], artifacts: RunArtifacts, options: {
             detached: false,
             env: {
                 ...process.env,
-                SAUCEDEMO_BASE_URL: options.customUrl || process.env.SAUCEDEMO_BASE_URL || 'https://www.saucedemo.com',
-                TARGET_URL: options.customUrl || process.env.TARGET_URL || process.env.SAUCEDEMO_BASE_URL || 'https://www.saucedemo.com',
-                GENERIC_CUSTOM_URL: options.suiteMode === 'generic' ? 'true' : 'false',
+                SAUCEDEMO_BASE_URL: PROJECT_BASE_URL,
                 RUN_ID: artifacts.runId,
                 SUITE_NAME: options.suiteName || 'generated',
-                SUITE_MODE: options.suiteMode || 'generated',
-                SUITE_APP: options.suiteApp || (options.suiteMode ? SUITE_METADATA[options.suiteMode].appName : 'Generated Script'),
+                SUITE_APP: options.suiteApp || 'Generated Script',
                 BROWSER_NAME: options.browser,
                 HEADLESS_MODE: options.headed ? 'headed' : 'headless',
                 PW_REPORT_DIR: artifacts.playwrightHtmlDir,
@@ -376,16 +284,15 @@ function runPlaywright(args: string[], artifacts: RunArtifacts, options: {
     });
 }
 
-async function runPlaywrightSuite(suite: SuiteName, suiteMode: SuiteMode, artifacts: RunArtifacts, options: {
+async function runPlaywrightSuite(suite: SuiteName, artifacts: RunArtifacts, options: {
     headed: boolean;
     browser: BrowserName;
-    customUrl?: string;
     incognito?: boolean;
 }): Promise<PlaywrightRunResult> {
     const rootDir = getProjectRoot();
     const automationDir = join(rootDir, 'automation');
     const configPath = join(automationDir, 'playwright.config.ts');
-    const suitePathParts = SUITE_PATHS[suiteMode][suite];
+    const suitePathParts = SUITE_PATHS[suite];
     const suitePath = join(automationDir, ...suitePathParts);
 
     if (!existsSync(suitePath)) {
@@ -397,16 +304,29 @@ async function runPlaywrightSuite(suite: SuiteName, suiteMode: SuiteMode, artifa
     if (options.browser !== 'all') args.push('--project', options.browser);
     return runPlaywright(args, artifacts, {
         ...options,
-        suiteMode,
         suiteName: suite,
-        suiteApp: SUITE_METADATA[suiteMode].appName,
+        suiteApp: SUITE_METADATA.appName,
     });
+}
+
+function collectSuiteSourceFile(suite: SuiteName, failedTitle?: string) {
+    const rootDir = getProjectRoot();
+    const automationDir = join(rootDir, 'automation');
+    const suitePath = join(automationDir, ...SUITE_PATHS[suite]);
+    const specs = collectArtifactFiles(suitePath, ['.spec.ts']);
+    if (!failedTitle || specs.length <= 1) return specs[0];
+    return specs.find(file => {
+        try {
+            return readFileSync(file, 'utf-8').includes(failedTitle);
+        } catch {
+            return false;
+        }
+    }) || specs[0];
 }
 
 async function runGeneratedScript(scriptFile: string, artifacts: RunArtifacts, options: {
     headed: boolean;
     browser: BrowserName;
-    customUrl?: string;
     incognito?: boolean;
 }, scriptCode?: string): Promise<PlaywrightRunResult> {
     const rootDir = getProjectRoot();
@@ -433,7 +353,7 @@ async function runGeneratedScript(scriptFile: string, artifacts: RunArtifacts, o
     copyFileSync(scriptPath, tempTestPath);
 
     try {
-        const args = ['playwright', 'test', tempTestFile, '--config', configPath];
+        const args = ['playwright', 'test', `tests/${tempTestFile}`, '--config', configPath];
         if (options.browser !== 'all') args.push('--project', options.browser);
         return await runPlaywright(args, artifacts, {
             ...options,
@@ -474,16 +394,123 @@ function summarizePlaywrightResult(result: PlaywrightRunResult) {
     };
 }
 
-function classifyFailure(output: string) {
-    const lower = output.toLowerCase();
-    if (output.includes(SITE_NAVIGATION_TIMEOUT) || lower.includes('page.goto: timeout')) return SITE_NAVIGATION_TIMEOUT;
-    if (lower.includes('locator') || lower.includes('selector')) return 'selector not found';
-    if (lower.includes('timeout')) return 'timeout';
-    if (lower.includes('expect') || lower.includes('tohave')) return 'assertion mismatch';
-    if (lower.includes('not visible')) return 'element not visible';
-    if (lower.includes('navigation')) return 'navigation failure';
-    if (lower.includes('net::') || lower.includes('network')) return 'network/load delay';
-    return 'needs analysis';
+type HealingStatus = 'AUTO_HEALED' | 'PARTIALLY_HEALED' | 'NEEDS_MANUAL_REVIEW' | 'NOT_HEALABLE';
+type HealingCategory = 'HEALABLE' | 'NOT_HEALABLE' | 'UNKNOWN';
+type FailureType =
+    | 'LOCATOR_NOT_FOUND'
+    | 'ELEMENT_DETACHED'
+    | 'ELEMENT_HIDDEN'
+    | 'TIMING_ISSUE'
+    | 'WAIT_ISSUE'
+    | 'TEXT_ASSERTION_MISMATCH'
+    | 'NAVIGATION_WAIT_ISSUE'
+    | 'SITE_DOWN'
+    | 'DNS_FAILURE'
+    | 'SSL_FAILURE'
+    | 'HTTP_5XX'
+    | 'AUTHENTICATION_FAILURE'
+    | 'INVALID_TEST_DATA'
+    | 'BUSINESS_LOGIC_FAILURE'
+    | 'UNKNOWN';
+
+type FailureClassification = {
+    type: FailureType;
+    category: HealingCategory;
+    rootCause: string;
+};
+
+type HealingChange = {
+    kind: 'locator' | 'wait' | 'assertion';
+    original: string;
+    replacement: string;
+    reason: string;
+};
+
+type HealingEvidence = {
+    screenshots: string[];
+    traces: string[];
+    videos: string[];
+    errorStackPath: string;
+    testTitles: string[];
+    failedLocator?: string;
+};
+
+type HealingAttemptResult = {
+    attempted: boolean;
+    finalStatus: HealingStatus;
+    classification: FailureClassification;
+    evidence: HealingEvidence;
+    healedScriptPath?: string;
+    failedOnlyGrep?: string;
+    changes: HealingChange[];
+    rerunResult?: PlaywrightRunResult;
+    originalLocator?: string;
+    replacementLocator?: string;
+    error?: string;
+};
+
+function classifyFailure(output: string): FailureClassification {
+    const cleanOutput = stripAnsi(output);
+    const lower = cleanOutput.toLowerCase();
+    if (output.includes(SITE_NAVIGATION_TIMEOUT) || lower.includes('net::err_connection') || lower.includes('site down')) {
+        return { type: 'SITE_DOWN', category: 'NOT_HEALABLE', rootCause: 'Application was unreachable from the automation runtime.' };
+    }
+    if (lower.includes('net::err_name_not_resolved') || lower.includes('dns')) {
+        return { type: 'DNS_FAILURE', category: 'NOT_HEALABLE', rootCause: 'DNS resolution failed.' };
+    }
+    if (lower.includes('ssl') || lower.includes('certificate') || lower.includes('net::err_cert')) {
+        return { type: 'SSL_FAILURE', category: 'NOT_HEALABLE', rootCause: 'TLS or certificate validation failed.' };
+    }
+    if (/\b50\d\b/.test(output) || lower.includes('http 5')) {
+        return { type: 'HTTP_5XX', category: 'NOT_HEALABLE', rootCause: 'Server returned a 5xx response.' };
+    }
+    if (lower.includes('epic sadface') || lower.includes('authentication') || lower.includes('unauthorized') || lower.includes('invalid credentials')) {
+        return { type: 'AUTHENTICATION_FAILURE', category: 'NOT_HEALABLE', rootCause: 'Authentication failed or credentials were rejected.' };
+    }
+    if (lower.includes('test data') || lower.includes('csv') || lower.includes('expected at least one')) {
+        return { type: 'INVALID_TEST_DATA', category: 'NOT_HEALABLE', rootCause: 'Input data required by the test is invalid or missing.' };
+    }
+    if (lower.includes('business') || lower.includes('order complete') || lower.includes('checkout')) {
+        return { type: 'BUSINESS_LOGIC_FAILURE', category: 'NOT_HEALABLE', rootCause: 'Failure appears tied to product behavior rather than automation mechanics.' };
+    }
+    if (lower.includes('detached') || lower.includes('not attached to the dom')) {
+        return { type: 'ELEMENT_DETACHED', category: 'HEALABLE', rootCause: 'Element detached while Playwright was interacting with it.' };
+    }
+    if (lower.includes('tohavetext') || lower.includes('expected string') || lower.includes('received string') || (lower.includes('expected:') && lower.includes('received:'))) {
+        return { type: 'TEXT_ASSERTION_MISMATCH', category: 'HEALABLE', rootCause: 'Assertion text differs from runtime text.' };
+    }
+    if (/timeout:\s*\d{1,3}ms/i.test(cleanOutput)) {
+        return { type: 'TIMING_ISSUE', category: 'HEALABLE', rootCause: 'A very short wait or assertion timeout expired before the UI became ready.' };
+    }
+    if (lower.includes('waiting for locator(') || /locator\([^)]*\)\.(click|fill|check|selectoption|hover|press):\s*timeout/i.test(cleanOutput)) {
+        return { type: 'LOCATOR_NOT_FOUND', category: 'HEALABLE', rootCause: 'Locator could not resolve to a usable element.' };
+    }
+    if (lower.includes('not visible') || lower.includes('hidden') || lower.includes('to be visible')) {
+        return { type: 'ELEMENT_HIDDEN', category: 'HEALABLE', rootCause: 'Element exists but is not visible at assertion or action time.' };
+    }
+    if (lower.includes('expect')) {
+        return { type: 'TEXT_ASSERTION_MISMATCH', category: 'HEALABLE', rootCause: 'Assertion text differs from runtime text.' };
+    }
+    if (lower.includes('locator') || lower.includes('selector') || lower.includes('strict mode violation')) {
+        return { type: 'LOCATOR_NOT_FOUND', category: 'HEALABLE', rootCause: 'Locator could not resolve to a usable element.' };
+    }
+    if (lower.includes('tohaveurl') || lower.includes('waitforurl') || lower.includes('navigation')) {
+        return { type: 'NAVIGATION_WAIT_ISSUE', category: 'HEALABLE', rootCause: 'Navigation did not reach the expected state within the timeout.' };
+    }
+    if (lower.includes('waitfortimeout') || lower.includes('timeout')) {
+        return { type: 'TIMING_ISSUE', category: 'HEALABLE', rootCause: 'A wait or action timed out before the UI became ready.' };
+    }
+    return { type: 'UNKNOWN', category: 'UNKNOWN', rootCause: 'Failure did not match a known healing pattern.' };
+}
+
+function failureReasonLabel(output: string) {
+    const classification = classifyFailure(output);
+    if (classification.type === 'SITE_DOWN') return SITE_NAVIGATION_TIMEOUT;
+    return classification.type.toLowerCase().replace(/_/g, ' ');
+}
+
+function stripAnsi(value: string) {
+    return value.replace(/\u001b\[[0-9;]*m/g, '');
 }
 
 function collectArtifactFiles(dir: string, suffixes: string[]) {
@@ -517,19 +544,15 @@ function escapePropertiesValue(value: unknown) {
 
 function writeAllureRunMetadata(params: {
     artifacts: RunArtifacts;
-    targetUrl: string;
     browser: BrowserName;
     headed: boolean;
     suiteName: string;
-    suiteMode: SuiteMode | 'generated';
     suiteApp: string;
 }) {
     mkdirSync(params.artifacts.allureResultsDir, { recursive: true });
     const environment = [
         ['RUN_ID', params.artifacts.runId],
-        ['TARGET_URL', params.targetUrl],
         ['SUITE_NAME', params.suiteName],
-        ['SUITE_MODE', params.suiteMode],
         ['SUITE_APP', params.suiteApp],
         ['BROWSER_NAME', params.browser],
         ['HEADLESS_MODE', params.headed ? 'headed' : 'headless'],
@@ -542,90 +565,394 @@ function writeAllureRunMetadata(params: {
         name: 'TCGen-Buddy Automation Hub',
         type: 'playwright',
         buildName: params.suiteName,
-        buildUrl: params.targetUrl,
+        buildUrl: PROJECT_BASE_URL,
         reportName: `${params.suiteApp} ${params.suiteName}`,
         reportUrl: params.artifacts.allureReportUrl,
     }, null, 2), 'utf-8');
 }
 
-function writeHealingReport(params: {
+function sanitizeFilePart(value: string) {
+    return value.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'artifact';
+}
+
+function copyEvidenceFiles(files: string[], evidenceDir: string) {
+    const copied: string[] = [];
+    mkdirSync(evidenceDir, { recursive: true });
+    for (const file of files) {
+        if (!existsSync(file)) continue;
+        const destination = join(evidenceDir, `${copied.length + 1}-${sanitizeFilePart(basename(file))}`);
+        try {
+            copyFileSync(file, destination);
+            copied.push(destination);
+        } catch {}
+    }
+    return copied;
+}
+
+function extractFailedTestTitles(result: PlaywrightRunResult, fallback: string[]) {
+    const output = `${result.output || ''}\n${result.stderr || ''}`;
+    const titles = new Set<string>(fallback.filter(Boolean));
+    for (const line of output.split('\n')) {
+        const failureList = line.match(/^\s*\d+\)\s+.*›\s+(.+)$/);
+        if (failureList?.[1]) titles.add(failureList[1].trim());
+        const bracketed = line.match(/\[[^\]]+\]\s+›\s+.*›\s+(.+)$/);
+        if (bracketed?.[1] && /failed|error|timeout/i.test(output)) titles.add(bracketed[1].trim());
+    }
+    return [...titles]
+        .map(title => title.replace(/\s+\(retry\s+#\d+\)/i, '').replace(/\s+\(\d+(?:\.\d+)?s\)$/, '').trim())
+        .filter(Boolean)
+        .filter((title, index, all) => all.indexOf(title) === index);
+}
+
+function extractFailedLocator(output: string) {
+    const locatorPatterns = [
+        /locator\((['"`][^'"`\n]+['"`])\)/,
+        /(getBy(?:Role|Label|Placeholder|Text|TestId)\([^)\n]+\))/,
+        /waiting for ([^\n]+locator\([^)]+\))/i,
+    ];
+    for (const pattern of locatorPatterns) {
+        const match = output.match(pattern);
+        if (match?.[1]) return match[1].trim();
+    }
+    return undefined;
+}
+
+function replacementForLocator(originalLocator: string) {
+    const selector = originalLocator.replace(/^['"`]|['"`]$/g, '');
+    const idMatch = selector.match(/^#([a-z0-9_-]+)$/i);
+    const dataTestMatch = selector.match(/\[data-test(?:id)?=["']([^"']+)["']\]/i);
+    const textMatch = selector.match(/text=(.+)/i);
+    const normalizeToken = (value: string) => value
+        .replace(/[-_](broken|missing|wrong|invalid|old|stale)$/i, '')
+        .replace(/[-_]+$/, '');
+
+    if (dataTestMatch?.[1]) {
+        return { locator: `getByTestId('${normalizeToken(dataTestMatch[1])}')`, reason: 'Prefer data-test/data-testid selector.' };
+    }
+    if (idMatch?.[1]) {
+        const id = normalizeToken(idMatch[1]);
+        if (/button|login|submit|checkout|continue|finish|cancel|remove|add/i.test(id)) {
+            const buttonName = id.replace(/[-_]*button$/i, '').replace(/[-_]+/g, ' ').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return { locator: `getByRole('button', { name: /${buttonName}/i })`, reason: 'Use accessible role before falling back to CSS.' };
+        }
+        return { locator: `getByTestId('${id}')`, reason: 'Try project data-test attribute derived from stable id.' };
+    }
+    if (textMatch?.[1]) {
+        return { locator: `getByText(/${textMatch[1].trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/i)`, reason: 'Use text locator with case-insensitive matching.' };
+    }
+    if (/^\.[a-z0-9_-]+$/i.test(selector)) {
+        return { locator: `locator('${selector}:visible')`, reason: 'Retain stable CSS selector but require visible element.' };
+    }
+    return undefined;
+}
+
+function applyLocatorHealing(source: string, failedLocator: string | undefined, changes: HealingChange[]) {
+    if (!failedLocator) return source;
+    const replacement = replacementForLocator(failedLocator);
+    if (!replacement) return source;
+    const escaped = failedLocator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const locatorCall = new RegExp(`\\.locator\\(${escaped}\\)`, 'g');
+    const next = source.replace(locatorCall, `.${replacement.locator}`);
+    if (next !== source) {
+        changes.push({
+            kind: 'locator',
+            original: `.locator(${failedLocator})`,
+            replacement: `.${replacement.locator}`,
+            reason: replacement.reason,
+        });
+        return next;
+    }
+    return source;
+}
+
+function applyWaitHealing(source: string, changes: HealingChange[]) {
+    const waitRegex = /await\s+([a-zA-Z0-9_$.]+)\.waitForTimeout\(\s*\d+\s*\);?/g;
+    let next = source.replace(waitRegex, (_match, pageRef: string) => {
+        const replacement = `await ${pageRef}.waitForLoadState('networkidle');`;
+        changes.push({
+            kind: 'wait',
+            original: _match,
+            replacement,
+            reason: 'Replace hard timeout with Playwright load-state wait.',
+        });
+        return replacement;
+    });
+    next = next.replace(/timeout:\s*(\d{1,3})/g, (_match, timeoutValue: string) => {
+        const replacement = 'timeout: 5000';
+        changes.push({
+            kind: 'wait',
+            original: `timeout: ${timeoutValue}`,
+            replacement,
+            reason: 'Increase unrealistically short explicit timeout for Playwright auto-waiting.',
+        });
+        return replacement;
+    });
+    return next;
+}
+
+function parseExpectedActual(output: string) {
+    const clean = stripAnsi(output);
+    const expected = clean.match(/Expected(?: string)?:\s*["'`](.+?)["'`]/i)?.[1];
+    const actual = clean.match(/Received(?: string)?:\s*["'`](.+?)["'`]/i)?.[1];
+    if (!expected || !actual) return undefined;
+    return { expected, actual };
+}
+
+function canHealAssertion(expected: string, actual: string) {
+    if (expected.trim() === actual.trim()) return 'whitespace difference';
+    if (expected.toLowerCase() === actual.toLowerCase()) return 'casing difference';
+    const dynamicPattern = /\d{2,}|\d{4}-\d{2}-\d{2}|\$?\d+(?:\.\d{2})?/;
+    if (dynamicPattern.test(expected) && dynamicPattern.test(actual)) return 'dynamic value pattern';
+    return undefined;
+}
+
+function applyAssertionHealing(source: string, output: string, changes: HealingChange[]) {
+    const pair = parseExpectedActual(output);
+    if (!pair) return source;
+    const reason = canHealAssertion(pair.expected, pair.actual);
+    if (!reason) return source;
+    const escapedExpected = pair.expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const exactText = new RegExp(`toHaveText\\((['"\`])${escapedExpected}\\1\\)`, 'g');
+    const replacement = reason === 'dynamic value pattern'
+        ? `toHaveText(/${pair.actual.replace(/\d+/g, '\\d+').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\\d\+/g, '\\d+')}/i)`
+        : `toHaveText(/${pair.expected.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/i)`;
+    const next = source.replace(exactText, replacement);
+    if (next !== source) {
+        changes.push({
+            kind: 'assertion',
+            original: `toHaveText('${pair.expected}')`,
+            replacement,
+            reason: `Allowed assertion healing: ${reason}.`,
+        });
+    }
+    return next;
+}
+
+function createHealedScript(params: {
     artifacts: RunArtifacts;
-    result: PlaywrightRunResult;
-    failedTests: string[];
-    scriptFile?: string;
-    scriptCode?: string;
+    sourceCode?: string;
+    sourceFile?: string;
+    classification: FailureClassification;
+    output: string;
+    failedLocator?: string;
 }) {
     const rootDir = getProjectRoot();
     const automationDir = join(rootDir, 'automation');
-    mkdirSync(params.artifacts.healingDir, { recursive: true });
-    const reason = classifyFailure(`${params.result.output}\n${params.result.stderr}`);
-    const screenshots = collectArtifactFiles(join(automationDir, 'reports'), ['.png']).slice(0, 10);
-    const traces = collectArtifactFiles(join(automationDir, 'reports'), ['.zip']).slice(0, 10);
-    const failedTests = params.failedTests.length ? params.failedTests : ['Unknown failed test'];
-    const healedScriptDir = join(automationDir, 'scripts', 'healed', params.artifacts.runId);
-    mkdirSync(healedScriptDir, { recursive: true });
+    const changes: HealingChange[] = [];
+    const source = params.sourceCode ?? (params.sourceFile && existsSync(params.sourceFile) ? readFileSync(params.sourceFile, 'utf-8') : '');
+    if (!source.trim()) return { changes, healedScriptPath: undefined };
 
-    const isSiteNavigationTimeout = reason === SITE_NAVIGATION_TIMEOUT;
-
-    if (params.scriptCode?.trim() && !isSiteNavigationTimeout) {
-        const healedName = `${basename(params.scriptFile || 'generated.spec.ts', '.ts')}.healed.spec.ts`;
-        writeFileSync(join(healedScriptDir, healedName), [
-            params.scriptCode,
-            '',
-            '// Self-healing review notes:',
-            `// Failure type: ${reason}`,
-            '// Status: Needs Manual Review',
-        ].join('\n'), 'utf-8');
+    let healed = source;
+    if (['LOCATOR_NOT_FOUND', 'ELEMENT_DETACHED', 'ELEMENT_HIDDEN'].includes(params.classification.type)) {
+        healed = applyLocatorHealing(healed, params.failedLocator, changes);
+    }
+    if (['TIMING_ISSUE', 'WAIT_ISSUE', 'NAVIGATION_WAIT_ISSUE', 'ELEMENT_DETACHED', 'ELEMENT_HIDDEN'].includes(params.classification.type)) {
+        healed = applyWaitHealing(healed, changes);
+    }
+    if (params.classification.type === 'TEXT_ASSERTION_MISMATCH') {
+        healed = applyAssertionHealing(healed, params.output, changes);
     }
 
+    const header = [
+        '// Auto-healed by TCGen-Buddy.',
+        `// Run ID: ${params.artifacts.runId}`,
+        `// Failure Type: ${params.classification.type}`,
+        '',
+    ].join('\n');
+    const healedScriptPath = join(automationDir, 'scripts', 'healed', `${params.artifacts.runId}.spec.ts`);
+    mkdirSync(join(automationDir, 'scripts', 'healed'), { recursive: true });
+    writeFileSync(healedScriptPath, `${header}${healed}`, 'utf-8');
+    return { changes, healedScriptPath };
+}
+
+function buildFailedOnlyGrep(titles: string[]) {
+    const escaped = titles
+        .map(title => title.trim())
+        .filter(Boolean)
+        .map(title => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return escaped[0];
+}
+
+async function runHealedScript(healedScriptPath: string, grep: string | undefined, artifacts: RunArtifacts, options: {
+    headed: boolean;
+    browser: BrowserName;
+    incognito?: boolean;
+}) {
+    const rootDir = getProjectRoot();
+    const automationDir = join(rootDir, 'automation');
+    const configPath = join(automationDir, 'playwright.config.ts');
+    const tempTestFile = `_healed_${basename(healedScriptPath)}`;
+    const tempTestPath = join(automationDir, 'tests', tempTestFile);
+    copyFileSync(healedScriptPath, tempTestPath);
+    try {
+        const args = ['playwright', 'test', `tests/${tempTestFile}`, '--config', configPath];
+        if (grep) args.push('--grep', grep);
+        if (options.browser !== 'all') args.push('--project', options.browser);
+        return await runPlaywright(args, artifacts, {
+            ...options,
+            suiteName: 'healed',
+            suiteApp: 'Healed Script',
+        });
+    } finally {
+        try {
+            unlinkSync(tempTestPath);
+        } catch {}
+    }
+}
+
+function collectHealingEvidence(params: {
+    artifacts: RunArtifacts;
+    result: PlaywrightRunResult;
+    failedTests: string[];
+}) {
+    const rootDir = getProjectRoot();
+    const evidenceDir = join(params.artifacts.healingDir, 'evidence');
+    const errorStackPath = join(params.artifacts.healingDir, 'error-stack.txt');
+    mkdirSync(params.artifacts.healingDir, { recursive: true });
+    writeFileSync(errorStackPath, `${params.result.output || ''}\n${params.result.stderr || ''}`.trim(), 'utf-8');
+
+    const searchRoots = [params.artifacts.tracesDir, params.artifacts.playwrightHtmlDir];
+    const screenshots = copyEvidenceFiles(searchRoots.flatMap(dir => collectArtifactFiles(dir, ['.png'])).slice(0, 10), evidenceDir);
+    const traces = copyEvidenceFiles(searchRoots.flatMap(dir => collectArtifactFiles(dir, ['.zip'])).slice(0, 10), evidenceDir);
+    const videos = copyEvidenceFiles(searchRoots.flatMap(dir => collectArtifactFiles(dir, ['.webm'])).slice(0, 10), evidenceDir);
+    const output = `${params.result.output || ''}\n${params.result.stderr || ''}`;
+    return {
+        screenshots: screenshots.map(file => relative(rootDir, file)),
+        traces: traces.map(file => relative(rootDir, file)),
+        videos: videos.map(file => relative(rootDir, file)),
+        errorStackPath: relative(rootDir, errorStackPath),
+        testTitles: extractFailedTestTitles(params.result, params.failedTests),
+        failedLocator: extractFailedLocator(output),
+    };
+}
+
+function writeHealingReport(params: {
+    artifacts: RunArtifacts;
+    attempt: HealingAttemptResult;
+}) {
+    const attempt = params.attempt;
     const report = [
         `# Healing Report - ${params.artifacts.runId}`,
         '',
-        `Final status: ${params.result.success ? 'Passed' : isSiteNavigationTimeout ? 'Healing Skipped' : 'Needs Manual Review'}`,
-        `Failure reason: ${reason}`,
+        `Final Status: ${attempt.finalStatus}`,
+        `Failure Type: ${attempt.classification.type}`,
+        `Classification: ${attempt.classification.category}`,
+        `Root Cause: ${attempt.classification.rootCause}`,
         '',
         '## Failed Tests',
-        ...failedTests.map(test => `- ${test}`),
+        ...(attempt.evidence.testTitles.length ? attempt.evidence.testTitles.map(test => `- ${test}`) : ['- Unknown failed test']),
         '',
         '## Evidence',
-        `- Screenshots: ${screenshots.map(file => relative(rootDir, file)).join(', ') || 'Not captured'}`,
-        `- Traces: ${traces.map(file => relative(rootDir, file)).join(', ') || 'Not captured'}`,
+        `- Error Stack: ${attempt.evidence.errorStackPath}`,
+        `- Screenshots: ${attempt.evidence.screenshots.join(', ') || 'Not captured'}`,
+        `- Traces: ${attempt.evidence.traces.join(', ') || 'Not captured'}`,
+        `- Videos: ${attempt.evidence.videos.join(', ') || 'Not captured'}`,
+        `- Failed Locator: ${attempt.evidence.failedLocator || 'Not detected'}`,
         '',
-        '## Healing Attempts',
-        ...(isSiteNavigationTimeout
-            ? ['- Healing skipped because failure is site navigation timeout.']
-            : [
-                '- Attempt 1: Evidence captured and failure classified.',
-                '- Attempt 2: Healed script stub saved when generated script was available.',
-                '- Attempt 3: Marked as Needs Manual Review if failure persists.',
-            ]),
+        '## Locator Healing',
+        `- Original Locator: ${attempt.originalLocator || 'Not applicable'}`,
+        `- Replacement Locator: ${attempt.replacementLocator || 'Not applicable'}`,
         '',
-        '## Recommended Healing Strategy',
-        ...(isSiteNavigationTimeout
-            ? [
-                '- Confirm the target URL is reachable from the automation runtime.',
-                '- Retry in headed mode if the site blocks or delays headless browser navigation.',
-                '- Review redirects, TLS/certificate behavior, proxy requirements, and bot protection.',
-            ]
-            : [
-                '- Prefer data-testid, role, label, placeholder, text, then stable CSS selectors.',
-                '- Replace hard waits with locator waits and Playwright expect auto-waiting.',
-                '- Verify UI text changes before changing assertions.',
-            ]),
-    ].join('\n');
+        '## Code Changes',
+        ...(attempt.changes.length
+            ? attempt.changes.map(change => `- ${change.kind}: ${change.original} -> ${change.replacement} (${change.reason})`)
+            : ['- No safe automatic code change was generated.']),
+        '',
+        '## Re-run Result',
+        `- Failed-only grep: ${attempt.failedOnlyGrep || 'Not available'}`,
+        `- Healed Script: ${attempt.healedScriptPath || 'Not created'}`,
+        `- Re-run Status: ${attempt.rerunResult ? (attempt.rerunResult.success ? 'PASS' : 'FAIL') : 'Not run'}`,
+        attempt.error ? `- Error: ${attempt.error}` : '',
+    ].filter(Boolean).join('\n');
 
     writeFileSync(params.artifacts.healingReportPath, report, 'utf-8');
 }
 
-function safeWriteHealingReport(params: Parameters<typeof writeHealingReport>[0]) {
-    try {
-        writeHealingReport(params);
-        return { success: existsSync(params.artifacts.healingReportPath), error: undefined };
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn('[HEALING] Report generation failed:', message);
-        return { success: false, error: 'Healing report not generated for this run.' };
+async function attemptSelfHealing(params: {
+    artifacts: RunArtifacts;
+    result: PlaywrightRunResult;
+    failedTests: string[];
+    sourceCode?: string;
+    sourceFile?: string;
+    headed: boolean;
+    browser: BrowserName;
+    incognito?: boolean;
+    log: (message: string) => void | Promise<void>;
+}): Promise<HealingAttemptResult> {
+    const output = `${params.result.output || ''}\n${params.result.stderr || ''}`;
+    const classification = classifyFailure(output);
+    const evidence = collectHealingEvidence({ artifacts: params.artifacts, result: params.result, failedTests: params.failedTests });
+    await params.log(`[Healing] Failure classified: ${classification.type} (${classification.category})`);
+
+    const baseAttempt: HealingAttemptResult = {
+        attempted: false,
+        finalStatus: classification.category === 'NOT_HEALABLE' ? 'NOT_HEALABLE' : 'NEEDS_MANUAL_REVIEW',
+        classification,
+        evidence,
+        changes: [],
+        originalLocator: evidence.failedLocator,
+    };
+
+    if (classification.category !== 'HEALABLE') {
+        await params.log(`[Healing] Not healable: ${classification.rootCause}`);
+        writeHealingReport({ artifacts: params.artifacts, attempt: baseAttempt });
+        return baseAttempt;
     }
+
+    await params.log('[Healing] Healing started');
+    if (classification.type === 'LOCATOR_NOT_FOUND') await params.log('[Healing] Locator failure detected');
+
+    const created = createHealedScript({
+        artifacts: params.artifacts,
+        sourceCode: params.sourceCode,
+        sourceFile: params.sourceFile,
+        classification,
+        output,
+        failedLocator: evidence.failedLocator,
+    });
+
+    const attempt: HealingAttemptResult = {
+        ...baseAttempt,
+        attempted: true,
+        healedScriptPath: created.healedScriptPath,
+        changes: created.changes,
+        replacementLocator: created.changes.find(change => change.kind === 'locator')?.replacement,
+    };
+
+    if (!created.healedScriptPath || created.changes.length === 0) {
+        attempt.finalStatus = 'NEEDS_MANUAL_REVIEW';
+        attempt.error = 'No safe automatic code change was available.';
+        await params.log('[Healing] No safe automatic code change was available');
+        writeHealingReport({ artifacts: params.artifacts, attempt });
+        return attempt;
+    }
+
+    for (const change of created.changes) {
+        await params.log(`[Healing] ${change.kind === 'locator' ? 'Locator healed' : change.kind === 'wait' ? 'Wait healed' : 'Assertion healed'}: ${change.original} -> ${change.replacement}`);
+    }
+
+    const grep = buildFailedOnlyGrep(evidence.testTitles);
+    attempt.failedOnlyGrep = grep;
+    for (let attemptNumber = 1; attemptNumber <= 3; attemptNumber += 1) {
+        await params.log(`[Healing] Re-running failed test${evidence.testTitles.length === 1 ? '' : 's'} (attempt ${attemptNumber}/3)`);
+        const rerun = await runHealedScript(created.healedScriptPath, grep, params.artifacts, {
+            headed: params.headed,
+            browser: params.browser,
+            incognito: params.incognito,
+        });
+        attempt.rerunResult = rerun;
+        if (rerun.success) {
+            attempt.finalStatus = 'AUTO_HEALED';
+            await params.log('[Healing] PASS');
+            writeHealingReport({ artifacts: params.artifacts, attempt });
+            return attempt;
+        }
+        await params.log('[Healing] Re-run failed');
+    }
+
+    attempt.finalStatus = 'PARTIALLY_HEALED';
+    writeHealingReport({ artifacts: params.artifacts, attempt });
+    return attempt;
 }
 
 function availableUrl(url: string, filePath: string) {
@@ -653,7 +980,7 @@ function resultPayload(params: {
     const healingReportUrl = availableUrl(params.artifacts.healingReportUrl, params.artifacts.healingReportPath);
     const logUrl = availableUrl(`/automation-reports/${params.artifacts.runId}/execution.log`, join(params.artifacts.publicRunDir, 'execution.log'));
     const hasReportError = Boolean(params.allureError || params.healingError || !playwrightReportUrl);
-    const failureReason = params.result.success ? undefined : classifyFailure(`${params.result.output || ''}\n${params.stderr || ''}`);
+    const failureReason = params.result.success ? undefined : failureReasonLabel(`${params.result.output || ''}\n${params.stderr || ''}`);
     const status = params.status === 'failed'
         ? 'failed'
         : hasReportError
@@ -711,67 +1038,21 @@ export async function POST(request: Request) {
         const scriptCode = typeof body?.scriptCode === 'string' ? body.scriptCode : undefined;
         const headed = body?.headed === true;
         const browser = (body?.browser || 'chromium') as BrowserName;
-        const customUrl = typeof body?.customUrl === 'string' && body.customUrl.trim() ? body.customUrl.trim() : undefined;
-        const sessionTargetUrl = typeof body?.targetUrl === 'string' && body.targetUrl.trim() ? body.targetUrl.trim() : undefined;
-        const suiteMode = normalizeSuiteMode(body?.runType ?? body?.suiteMode, customUrl);
         const incognito = body?.incognito === true;
-        runId = makeRunId(customUrl ? 'custom-url' : type === 'generated' ? 'generated' : suite || 'suite');
+        runId = makeRunId(type === 'generated' ? 'generated' : suite || 'suite');
         artifacts = makeArtifacts(runId);
         const startedAt = new Date().toISOString();
-        const targetUrl = normalizeTargetUrl(customUrl || sessionTargetUrl || process.env.SAUCEDEMO_BASE_URL || 'https://www.saucedemo.com');
+        const targetUrl = PROJECT_BASE_URL;
         const runLogs: string[] = [];
         addMemoryLog(runLogs, `Run ID: ${runId}`);
         addMemoryLog(runLogs, `Target URL: ${targetUrl}`);
         addMemoryLog(runLogs, `Browser: ${browser}`);
         addMemoryLog(runLogs, `Suite: ${type === 'generated' ? 'generated' : suite || 'unknown'}`);
-        addMemoryLog(runLogs, `Suite mode: ${suiteMode}`);
         addMemoryLog(runLogs, `Mode: ${headed ? 'Headed' : 'Headless'}`);
 
         if (browser && !['chromium', 'firefox', 'webkit', 'all'].includes(browser)) {
             addMemoryLog(runLogs, 'Status: error');
             return NextResponse.json({ success: false, error: true, status: 'error', runId, logs: runLogs, message: 'Invalid browser. Expected chromium, firefox, webkit, or all.' }, { status: 400 });
-        }
-
-        const requestedSuiteIsValid = suite && VALID_SUITES.includes(suite as SuiteName);
-        const suiteTargetMismatch = requestedSuiteIsValid
-            && type !== 'generated'
-            && suiteMode === 'project-specific'
-            && !isSauceDemoUrl(targetUrl);
-
-        if (suiteTargetMismatch) {
-            addMemoryLog(runLogs, 'Status: blocked');
-            addMemoryLog(runLogs, 'Blocked before execution: suite-target mismatch');
-            addMemoryLog(runLogs, `Suite app: ${SUITE_METADATA['project-specific'].appName}`);
-            addMemoryLog(runLogs, `Required selectors: ${SUITE_METADATA['project-specific'].requiredSelectors.join(', ')}`);
-            addMemoryLog(runLogs, `Required test data: ${SUITE_METADATA['project-specific'].requiresTestData ? 'yes' : 'no'}`);
-            addMemoryLog(runLogs, 'Healing skipped: suite-target mismatch is a mapping issue, not a selector/timing failure.');
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: true,
-                    status: 'blocked',
-                    executionStatus: 'blocked',
-                    runId,
-                    suite,
-                    suiteMode,
-                    targetUrl,
-                    browser,
-                    mode: headed ? 'Headed' : 'Headless',
-                    logs: runLogs,
-                    reportUrl: null,
-                    playwrightReportUrl: null,
-                    allureReportUrl: null,
-                    healingReportUrl: null,
-                    logUrl: null,
-                    total: 0,
-                    passed: 0,
-                    failed: 0,
-                    failedTests: [],
-                    message: SAUCEDEMO_MISMATCH_MESSAGE,
-                    errors: { execution: 'Needs Suite Mapping Review' },
-                },
-                { status: 409 }
-            );
         }
 
         await initializeRunArtifacts(artifacts);
@@ -780,8 +1061,7 @@ export async function POST(request: Request) {
         await appendExecutionLog(artifacts, runLogs, `Target URL: ${targetUrl}`);
         await appendExecutionLog(artifacts, runLogs, `Browser: ${browser}`);
         await appendExecutionLog(artifacts, runLogs, `Suite: ${type === 'generated' ? 'generated' : suite || 'unknown'}`);
-        await appendExecutionLog(artifacts, runLogs, `Suite mode: ${suiteMode}`);
-        await appendExecutionLog(artifacts, runLogs, `Suite app: ${type === 'generated' ? 'Generated Script' : SUITE_METADATA[suiteMode].appName}`);
+        await appendExecutionLog(artifacts, runLogs, `Suite app: ${type === 'generated' ? 'Generated Script' : SUITE_METADATA.appName}`);
         await appendExecutionLog(artifacts, runLogs, `Mode: ${headed ? 'Headed' : 'Headless'}`);
         await appendExecutionLog(artifacts, runLogs, 'Status: initialized');
 
@@ -800,44 +1080,49 @@ export async function POST(request: Request) {
                     addLog('Launching automation execution...');
                     addLog(`Script: ${basename(scriptFile)}`);
                     addLog(`Run ID: ${runId}`);
-                    if (customUrl) addLog(`Opening custom URL: ${customUrl}`);
 
                     try {
                         await validateEnvironment();
                         writeAllureRunMetadata({
                             artifacts,
-                            targetUrl,
                             browser,
                             headed,
                             suiteName: 'generated',
-                            suiteMode: 'generated',
                             suiteApp: 'Generated Script',
                         });
                         addLog(`Launching ${browser}...`);
                         addLog('Running generated Playwright script...');
-                        const result = await runGeneratedScript(scriptFile, artifacts, { headed, browser, customUrl: targetUrl, incognito }, scriptCode);
+                        const result = await runGeneratedScript(scriptFile, artifacts, { headed, browser, incognito }, scriptCode);
+                        let finalResult = result;
                         addLog(`Status: ${result.success ? 'passed' : 'failed'}`);
+                        const generatedSummary = summarizePlaywrightResult(result);
+                        let healingError: string | undefined;
+                        if (generatedSummary.failed > 0) {
+                            const healing = await attemptSelfHealing({
+                                artifacts,
+                                result,
+                                failedTests: generatedSummary.failedTests,
+                                sourceCode: scriptCode,
+                                headed,
+                                browser,
+                                incognito,
+                                log: addLog,
+                            });
+                            healingError = healing.finalStatus === 'AUTO_HEALED' ? undefined : healing.finalStatus;
+                            if (healing.rerunResult?.success) finalResult = healing.rerunResult;
+                            addLog(`Healing status: ${healing.finalStatus}`);
+                        } else {
+                            addLog('Healing skipped: no failed tests.');
+                        }
                         addLog(existsSync(join(artifacts.playwrightHtmlDir, 'index.html')) ? 'Playwright report generated' : 'Playwright report not generated');
                         addLog('Generating Allure report...');
                         const allure = await runAllureGenerate(artifacts);
                         if (allure.success) addLog('Allure report generated');
                         else addLog(`Allure report not generated: ${allure.error}`);
-                        const generatedSummary = summarizePlaywrightResult(result);
-                        const healing = generatedSummary.failed > 0
-                            ? safeWriteHealingReport({
-                                artifacts,
-                                result,
-                                failedTests: generatedSummary.failedTests,
-                                scriptFile,
-                                scriptCode,
-                            })
-                            : { success: false, error: undefined };
-                        if (healing.success) addLog('Healing report generated');
-                        else addLog(generatedSummary.failed > 0 ? 'Healing report not generated for this run.' : 'Healing skipped: no failed tests.');
                         for (const line of result.output.split('\n').filter(Boolean)) await appendExecutionLog(artifacts, runLogs, line);
                         for (const line of result.stderr?.split('\n').filter(Boolean) || []) await appendExecutionLog(artifacts, runLogs, line);
                         publishReports(artifacts);
-                        const payload = resultPayload({ suite: 'generated', status: result.success ? 'completed' : 'failed', startedAt, artifacts, result, output: result.output, stderr: result.stderr, targetUrl, browser, headed, allureError: allure.error, healingError: healing.error, logs: runLogs });
+                        const payload = resultPayload({ suite: 'generated', status: finalResult.success ? 'completed' : 'failed', startedAt, artifacts, result: finalResult, output: `${result.output}\n${finalResult.output || ''}`, stderr: `${result.stderr || ''}\n${finalResult.stderr || ''}`, targetUrl, browser, headed, allureError: allure.error, healingError, logs: runLogs });
                         addResult({ type: 'summary', ...payload });
                         if (payload.passedTests.length > 0) addResult({ type: 'passed', tests: payload.passedTests });
                         if (payload.failedTests.length > 0) addResult({ type: 'failed', tests: payload.failedTests });
@@ -896,113 +1181,67 @@ export async function POST(request: Request) {
 
         await validateEnvironment();
         await appendExecutionLog(artifacts, runLogs, 'Status: environment validated');
-        await appendExecutionLog(artifacts, runLogs, `Selected suite: ${suiteLabel(suite as SuiteName, suiteMode)}`);
-        if (suiteMode === 'generic') {
-            await appendExecutionLog(artifacts, runLogs, 'Preflight started');
-            const preflight = await preflightTargetUrl(targetUrl);
-            if (preflight.ok) {
-                await appendExecutionLog(
-                    artifacts,
-                    runLogs,
-                    `Preflight passed: ${preflight.status} ${preflight.statusText || ''}`.trim()
-                );
-                if (preflight.finalUrl && preflight.finalUrl !== targetUrl) {
-                    await appendExecutionLog(artifacts, runLogs, `Preflight final URL: ${preflight.finalUrl}`);
-                }
-            } else {
-                await appendExecutionLog(artifacts, runLogs, `Preflight failed: ${preflight.error || 'Target URL is not reachable from automation runtime.'}`);
-                await appendExecutionLog(artifacts, runLogs, 'Status: TARGET_URL_NOT_REACHABLE');
-                publishReports(artifacts);
-                return NextResponse.json(
-                    {
-                        success: false,
-                        error: true,
-                        status: 'failed',
-                        executionStatus: 'TARGET_URL_NOT_REACHABLE',
-                        startedAt,
-                        finishedAt: new Date().toISOString(),
-                        durationMs: preflight.durationMs,
-                        suite,
-                        suiteMode,
-                        targetUrl,
-                        browser,
-                        mode: headed ? 'Headed' : 'Headless',
-                        runId,
-                        logs: runLogs,
-                        reportUrl: null,
-                        playwrightReportUrl: null,
-                        allureReportUrl: null,
-                        healingReportUrl: null,
-                        logUrl: existsSync(join(artifacts.publicRunDir, 'execution.log')) ? `/automation-reports/${runId}/execution.log` : null,
-                        total: 0,
-                        passed: 0,
-                        failed: 1,
-                        failedTests: ['Target URL preflight'],
-                        message: 'Target URL is not reachable from automation runtime.',
-                        errors: { execution: preflight.error || 'Target URL is not reachable from automation runtime.' },
-                    },
-                    { status: 424 }
-                );
-            }
-        }
+        await appendExecutionLog(artifacts, runLogs, `Selected suite: ${suiteLabel(suite as SuiteName)}`);
         await appendExecutionLog(artifacts, runLogs, `Browser launch mode: ${headed ? 'headed' : 'headless'}`);
-        await appendExecutionLog(artifacts, runLogs, `Starting Playwright execution from ${SUITE_PATHS[suiteMode][suite as SuiteName].join('/')}`);
+        await appendExecutionLog(artifacts, runLogs, `Starting Playwright execution from ${SUITE_PATHS[suite as SuiteName].join('/')}`);
         writeAllureRunMetadata({
             artifacts,
-            targetUrl,
             browser,
             headed,
             suiteName: suite,
-            suiteMode,
-            suiteApp: SUITE_METADATA[suiteMode].appName,
+            suiteApp: SUITE_METADATA.appName,
         });
-        const result = await runPlaywrightSuite(suite as SuiteName, suiteMode, artifacts, { headed, browser, customUrl: targetUrl, incognito });
+        const result = await runPlaywrightSuite(suite as SuiteName, artifacts, { headed, browser, incognito });
+        let finalResult = result;
         await appendExecutionLog(artifacts, runLogs, `Status: ${result.success ? 'passed' : 'failed'}`);
-        await appendExecutionLog(artifacts, runLogs, existsSync(join(artifacts.playwrightHtmlDir, 'index.html')) ? 'Playwright report generated' : 'Playwright report not generated');
-        await appendExecutionLog(artifacts, runLogs, 'Generating Allure report...');
-        const allure = await runAllureGenerate(artifacts);
-        await appendExecutionLog(artifacts, runLogs, allure.success ? 'Allure report generated' : `Allure report not generated: ${allure.error}`);
         const summary = summarizePlaywrightResult(result);
-        const failureReason = result.success ? undefined : classifyFailure(`${result.output}\n${result.stderr}`);
+        const failureReason = result.success ? undefined : failureReasonLabel(`${result.output}\n${result.stderr}`);
         if (failureReason) {
             await appendExecutionLog(artifacts, runLogs, `Final failure reason: ${failureReason}`);
             if (failureReason === SITE_NAVIGATION_TIMEOUT && !headed) {
                 await appendExecutionLog(artifacts, runLogs, 'Headless navigation timed out. Try headed mode.');
             }
         }
-        const healing = summary.failed > 0
-            ? safeWriteHealingReport({
+        let healingError: string | undefined;
+        if (summary.failed > 0) {
+            const sourceFile = collectSuiteSourceFile(suite as SuiteName, summary.failedTests[0]);
+            const healing = await attemptSelfHealing({
                 artifacts,
                 result,
                 failedTests: summary.failedTests,
-            })
-            : { success: false, error: undefined };
-        await appendExecutionLog(
-            artifacts,
-            runLogs,
-            failureReason === SITE_NAVIGATION_TIMEOUT
-                ? 'Healing skipped because failure is site navigation timeout.'
-                : healing.success
-                    ? 'Healing report generated'
-                    : summary.failed > 0 ? 'Healing report not generated for this run.' : 'Healing skipped: no failed tests.'
-        );
+                sourceFile,
+                headed,
+                browser,
+                incognito,
+                log: (message) => appendExecutionLog(artifacts, runLogs, message),
+            });
+            healingError = healing.finalStatus === 'AUTO_HEALED' ? undefined : healing.finalStatus;
+            if (healing.rerunResult?.success) finalResult = healing.rerunResult;
+            await appendExecutionLog(artifacts, runLogs, `Healing status: ${healing.finalStatus}`);
+        } else {
+            await appendExecutionLog(artifacts, runLogs, 'Healing skipped: no failed tests.');
+        }
+        await appendExecutionLog(artifacts, runLogs, existsSync(join(artifacts.playwrightHtmlDir, 'index.html')) ? 'Playwright report generated' : 'Playwright report not generated');
+        await appendExecutionLog(artifacts, runLogs, 'Generating Allure report...');
+        const allure = await runAllureGenerate(artifacts);
+        await appendExecutionLog(artifacts, runLogs, allure.success ? 'Allure report generated' : `Allure report not generated: ${allure.error}`);
         for (const line of result.output.split('\n').filter(Boolean)) await appendExecutionLog(artifacts, runLogs, line);
         for (const line of result.stderr?.split('\n').filter(Boolean) || []) await appendExecutionLog(artifacts, runLogs, line);
         publishReports(artifacts);
 
         const payload = resultPayload({
             suite,
-            status: result.success ? 'completed' : 'failed',
+            status: finalResult.success ? 'completed' : 'failed',
             startedAt,
             artifacts,
-            result,
-            output: result.output,
-            stderr: result.stderr,
+            result: finalResult,
+            output: `${result.output}\n${finalResult.output || ''}`,
+            stderr: `${result.stderr || ''}\n${finalResult.stderr || ''}`,
             targetUrl,
             browser,
             headed,
             allureError: allure.error,
-            healingError: healing.error,
+            healingError,
             logs: runLogs,
         });
 

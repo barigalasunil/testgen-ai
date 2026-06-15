@@ -10,19 +10,14 @@ import {
     Download,
     ExternalLink,
     FileText,
-    Globe2,
     Play,
     ShieldCheck,
-    TerminalSquare,
+    Terminal,
     Wrench,
     Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AutomationExecutionSummary, AutomationRunRecord, AutomationTarget, SuiteExecution, SuiteKey } from '../types';
-
-type BrowserName = 'chromium' | 'firefox' | 'webkit' | 'all';
-type CustomSuite = SuiteKey;
-type CustomRunType = 'generic' | 'project-specific';
+import { AutomationExecutionSummary, AutomationRunRecord, SuiteExecution, SuiteKey } from '../types';
 
 interface AutomationSidebarContentProps {
     automation: Record<SuiteKey, SuiteExecution>;
@@ -33,6 +28,7 @@ interface AutomationSidebarContentProps {
     onRunAutomation: () => void;
     isGeneratingScript: boolean;
     isRunningAutomation: boolean;
+    anySuiteRunning?: boolean;
     executionLogs: string[];
     executionSummary: AutomationExecutionSummary | null;
     passedTests: string[];
@@ -40,7 +36,6 @@ interface AutomationSidebarContentProps {
     headed: boolean;
     onHeadedChange: (val: boolean) => void;
     reportUrl: string | null;
-    automationTarget?: AutomationTarget;
     automationRuns?: AutomationRunRecord[];
     automationToast?: {
         type: 'success' | 'failed' | 'error' | 'warning' | 'partial_success';
@@ -49,7 +44,6 @@ interface AutomationSidebarContentProps {
         persistent: boolean;
     } | null;
     onCloseToast?: () => void;
-    onSaveAutomationTarget?: (targetUrl: string, source?: 'manual_session' | 'custom_run') => void;
     onCopyScript?: () => void;
     onDownloadScript?: () => void;
     platformType?: string;
@@ -154,6 +148,7 @@ export function AutomationSidebarContent({
     onRunAutomation,
     isGeneratingScript,
     isRunningAutomation,
+    anySuiteRunning = false,
     executionLogs,
     executionSummary,
     passedTests,
@@ -161,24 +156,13 @@ export function AutomationSidebarContent({
     headed,
     onHeadedChange,
     reportUrl,
-    automationTarget,
     automationRuns = [],
     automationToast,
     onCloseToast,
-    onSaveAutomationTarget,
     onCopyScript,
     onDownloadScript,
 }: AutomationSidebarContentProps) {
     const hasScript = Boolean(scriptCode);
-    const [customUrl, setCustomUrl] = useState('');
-    const [customBrowser, setCustomBrowser] = useState<BrowserName>('chromium');
-    const [customSuite, setCustomSuite] = useState<CustomSuite>('smoke');
-    const [customRunType, setCustomRunType] = useState<CustomRunType>('generic');
-    const [projectSuiteConfirmed, setProjectSuiteConfirmed] = useState(false);
-    const [customHeaded, setCustomHeaded] = useState(false);
-    const [customIncognito, setCustomIncognito] = useState(true);
-    const [customRun, setCustomRun] = useState<SuiteExecution>({ status: 'idle' });
-    const [customLogs, setCustomLogs] = useState<string[]>([]);
     const [showReportsPanel, setShowReportsPanel] = useState(false);
     const [logCopyToast, setLogCopyToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const logsRef = useRef<HTMLDivElement>(null);
@@ -186,33 +170,11 @@ export function AutomationSidebarContent({
     const latestPlaywrightUrl = executionSummary?.playwrightReportUrl || executionSummary?.reportUrl || reportUrl || null;
     const latestAllureUrl = executionSummary?.allureReportUrl || null;
     const latestHealingUrl = executionSummary?.healingReportUrl || null;
-    const latestLogUrl = customRun.logUrl || executionSummary?.logUrl || null;
+    const latestLogUrl = executionSummary?.logUrl || null;
     const resolvedReportUrl = latestPlaywrightUrl;
     const hasResults = Boolean(executionSummary);
-    const displayLogs = customLogs.length ? customLogs : executionLogs;
-    const savedTargetUrl = automationTarget?.targetUrl;
-    const targetSourceLabel = automationTarget?.targetUrlSource
-        ? automationTarget.targetUrlSource.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
-        : 'Not Provided';
-    const customRunRecord: AutomationRunRecord | null = customRun.runId ? {
-            runId: customRun.runId,
-            suite: customSuite,
-            targetUrl: customUrl,
-            browser: customBrowser,
-            mode: customHeaded ? 'Headed' as const : 'Headless' as const,
-            status: customRun.status === 'completed' ? 'passed' as const : 'failed' as const,
-            durationMs: customRun.durationMs,
-            playwrightReportUrl: customRun.playwrightReportUrl || null,
-            allureReportUrl: customRun.allureReportUrl || null,
-            healingReportUrl: customRun.healingReportUrl || null,
-            logUrl: customRun.logUrl || null,
-            logs: customLogs,
-            errors: customRun.message ? { execution: customRun.message } : undefined,
-        } : null;
-    const reportRuns: AutomationRunRecord[] = [
-        ...automationRuns,
-        ...(customRunRecord ? [customRunRecord] : []),
-    ];
+    const displayLogs = executionLogs;
+    const reportRuns: AutomationRunRecord[] = automationRuns;
 
     useEffect(() => {
         logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight, behavior: 'smooth' });
@@ -232,78 +194,6 @@ export function AutomationSidebarContent({
         }
     };
 
-    const runCustomUrlSuite = async () => {
-        const trimmedUrl = customUrl.trim();
-        if (!trimmedUrl) {
-            setCustomRun({ status: 'failed', lastRunAt: new Date().toISOString(), message: 'Enter an application URL.' });
-            return;
-        }
-
-        const startedAt = new Date().toISOString();
-        if (customRunType === 'project-specific' && !projectSuiteConfirmed) {
-            setCustomRun({
-                status: 'failed',
-                lastRunAt: startedAt,
-                message: 'Confirm that the selected project-specific suite belongs to this target URL.',
-            });
-            return;
-        }
-
-        const runTypeLabel = customRunType === 'generic' ? 'Generic Website Validation' : 'Project-Specific Suite';
-        const logs: string[] = [`[${new Date().toLocaleTimeString()}] Running ${runTypeLabel} ${customSuite} suite against ${trimmedUrl}`];
-        setCustomLogs(logs);
-        setCustomRun({ status: 'running', lastRunAt: startedAt });
-        setTimeout(() => document.getElementById('automation-execution-logs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-
-        try {
-            const response = await fetch('/api/automation/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    suite: customSuite,
-                    runType: customRunType,
-                    browser: customBrowser,
-                    customUrl: trimmedUrl,
-                    headed: customHeaded,
-                    incognito: customIncognito,
-                }),
-            });
-            const payload = await response.json();
-            const nextState: SuiteExecution = {
-                status: response.ok && !payload.error && payload.status !== 'failed' && payload.status !== 'error' ? 'completed' : 'failed',
-                lastRunAt: payload.finishedAt || new Date().toISOString(),
-                reportUrl: payload.reportUrl,
-                playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl,
-                allureReportUrl: payload.allureReportUrl,
-                healingReportUrl: payload.healingReportUrl,
-                logUrl: payload.logUrl,
-                runId: payload.runId,
-                message: payload.message,
-                durationMs: payload.durationMs,
-                output: payload.output,
-                stderr: payload.stderr,
-                failedTests: payload.failedTests,
-            };
-            setCustomRun(nextState);
-            const payloadLogs = Array.isArray(payload.logs)
-                ? payload.logs.map((line: string) => `[${new Date().toLocaleTimeString()}] ${line}`)
-                : [];
-            setCustomLogs([
-                ...logs,
-                ...payloadLogs,
-                `[${new Date().toLocaleTimeString()}] Status: ${nextState.status}`,
-                `[${new Date().toLocaleTimeString()}] Run ID: ${payload.runId}`,
-                `[${new Date().toLocaleTimeString()}] Playwright report: ${nextState.playwrightReportUrl || 'Report not generated'}`,
-                `[${new Date().toLocaleTimeString()}] Allure report: ${nextState.allureReportUrl || 'Report not generated'}`,
-                `[${new Date().toLocaleTimeString()}] Healing report: ${nextState.healingReportUrl || 'Healing report not generated for this run.'}`,
-            ]);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            setCustomRun({ status: 'failed', lastRunAt: new Date().toISOString(), message });
-            setCustomLogs([...logs, `[${new Date().toLocaleTimeString()}] Execution error: ${message}`]);
-        }
-    };
-
     return (
         <div className="space-y-4">
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
@@ -312,7 +202,7 @@ export function AutomationSidebarContent({
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Automation</p>
                         <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">Automation Dashboard</h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-                            Run generated or existing Playwright automation suites, validate custom URLs, view execution reports, and heal failing tests automatically.
+                            Run generated or existing Playwright automation suites, view execution reports, and heal failing tests automatically.
                         </p>
                     </div>
                     <div className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
@@ -320,143 +210,6 @@ export function AutomationSidebarContent({
                         Test Cases {'->'} Script {'->'} Execution {'->'} Reports {'->'} Healing {'->'} Defects
                     </div>
                 </div>
-            </section>
-
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Automation Target</h2>
-                        <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-400">
-                            <div>Story: {automationTarget?.jiraStoryId || 'Not Provided'}</div>
-                            <div>URL: {savedTargetUrl || 'Not Provided'}</div>
-                            <div>Source: {targetSourceLabel}</div>
-                        </div>
-                    </div>
-                    {!savedTargetUrl && (
-                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
-                            No automation target URL found. Generate from Jira/story with URL or use Custom URL Run.
-                        </div>
-                    )}
-                </div>
-            </section>
-
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Custom URL Test Run</h2>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Run a selected suite against a URL without saving configuration.</p>
-                    </div>
-                    <span className={cn('w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold', suiteStatusClass(customRun.status))}>
-                        {formatSuiteStatus(customRun.status)}
-                    </span>
-                </div>
-                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_190px_140px_150px_150px]">
-                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                        Application URL
-                        <input
-                            value={customUrl}
-                            onChange={(event) => setCustomUrl(event.target.value)}
-                            placeholder="https://your-app.example.com"
-                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] focus:ring-2 focus:ring-[#10A37F]/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                        />
-                    </label>
-                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                        Run Type
-                        <select
-                            value={customRunType}
-                            onChange={(event) => {
-                                setCustomRunType(event.target.value as CustomRunType);
-                                setProjectSuiteConfirmed(false);
-                            }}
-                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                        >
-                            <option value="generic">Generic Website Validation</option>
-                            <option value="project-specific">Project-Specific Suite</option>
-                        </select>
-                    </label>
-                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                        Run Mode
-                        <select value={customHeaded ? 'headed' : 'headless'} onChange={(event) => setCustomHeaded(event.target.value === 'headed')} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
-                            <option value="headless">Headless</option>
-                            <option value="headed">Headed</option>
-                        </select>
-                    </label>
-                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                        Browser
-                        <select value={customBrowser} onChange={(event) => setCustomBrowser(event.target.value as BrowserName)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
-                            <option value="chromium">Chromium</option>
-                            <option value="firefox">Firefox</option>
-                            <option value="webkit">WebKit</option>
-                            <option value="all">All</option>
-                        </select>
-                    </label>
-                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                        Suite
-                        <select
-                            value={customSuite}
-                            onChange={(event) => {
-                                setCustomSuite(event.target.value as CustomSuite);
-                                setProjectSuiteConfirmed(false);
-                            }}
-                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                        >
-                            <option value="smoke">Smoke</option>
-                            <option value="sanity">Sanity</option>
-                            <option value="regression">Regression</option>
-                        </select>
-                    </label>
-                </div>
-                {customRunType === 'project-specific' && (
-                    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
-                        <div className="font-semibold">Project-specific suite selected: SauceDemo {customSuite}</div>
-                        <label className="mt-2 inline-flex items-center gap-2 font-medium">
-                            <input
-                                type="checkbox"
-                                checked={projectSuiteConfirmed}
-                                onChange={(event) => setProjectSuiteConfirmed(event.target.checked)}
-                                className="h-4 w-4 rounded border-amber-300 dark:border-amber-800 dark:bg-slate-900"
-                            />
-                            I confirm this target belongs to the selected project suite.
-                        </label>
-                    </div>
-                )}
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
-                        <input type="checkbox" checked={customIncognito} onChange={(event) => setCustomIncognito(event.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 dark:bg-slate-800" />
-                        Incognito run
-                    </label>
-                    <button
-                        type="button"
-                        onClick={runCustomUrlSuite}
-                        disabled={customRun.status === 'running'}
-                        className={cn(
-                            'inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition',
-                            customRun.status === 'running'
-                                ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
-                                : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-[#10A37F] dark:hover:bg-[#10A37F]/90'
-                        )}
-                    >
-                        {customRun.status === 'running' ? <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <Globe2 className="h-4 w-4" />}
-                        {customRun.status === 'running' ? 'Running...' : 'Run Suite Against URL'}
-                    </button>
-                </div>
-                {customUrl.trim() && onSaveAutomationTarget && (
-                    <button
-                        type="button"
-                        onClick={() => onSaveAutomationTarget(customUrl.trim(), 'custom_run')}
-                        className="mt-3 inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                    >
-                        Save as Session Target
-                    </button>
-                )}
-                {(customRun.playwrightReportUrl || customRun.allureReportUrl || customRun.healingReportUrl) && (
-                    <div className="mt-4">
-                        <ReportButtons playwrightUrl={customRun.playwrightReportUrl} allureUrl={customRun.allureReportUrl} healingUrl={customRun.healingReportUrl} compact />
-                    </div>
-                )}
-                {customRun.message && customRun.status === 'failed' && (
-                    <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400">{customRun.message}</div>
-                )}
             </section>
 
             <section className="space-y-3">
@@ -474,8 +227,9 @@ export function AutomationSidebarContent({
                 <div className="grid gap-4 md:grid-cols-3">
                     {suites.map((suite) => {
                         const state = automation[suite.key];
-                        const isRunning = state.status === 'running';
-                        const suiteDisabled = isRunning || !savedTargetUrl;
+                        const isThisSuiteRunning = state.status === 'running';
+                        const anotherSuiteRunning = anySuiteRunning && !isThisSuiteRunning;
+                        const suiteDisabled = isThisSuiteRunning || anySuiteRunning;
 
                         return (
                             <article key={suite.key} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-slate-800 dark:bg-slate-900/50">
@@ -500,6 +254,11 @@ export function AutomationSidebarContent({
                                     )}
                                 </div>
                                 <div className="mt-4 space-y-2">
+                                    {anotherSuiteRunning && (
+                                        <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-700 dark:border-amber-900/30 dark:bg-amber-900/10 dark:text-amber-400">
+                                            Automation already running
+                                        </div>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={() => onExecuteSuite(suite.key, headed)}
@@ -510,10 +269,9 @@ export function AutomationSidebarContent({
                                                 ? 'cursor-not-allowed bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
                                                 : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-[#10A37F] dark:hover:bg-[#10A37F]/90'
                                         )}
-                                        title={!savedTargetUrl ? 'No automation target URL found. Generate from Jira/story with URL or use Custom URL Run.' : undefined}
                                     >
-                                        {isRunning ? <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <Play className="h-4 w-4" />}
-                                        {isRunning ? 'Running...' : suite.cta}
+                                        {isThisSuiteRunning ? <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" /> : <Play className="h-4 w-4" />}
+                                        {isThisSuiteRunning ? 'Running...' : anotherSuiteRunning ? 'Waiting...' : suite.cta}
                                     </button>
                                     <ReportButtons playwrightUrl={state.playwrightReportUrl || state.reportUrl} allureUrl={state.allureReportUrl} healingUrl={state.healingReportUrl} compact />
                                 </div>
@@ -583,17 +341,6 @@ export function AutomationSidebarContent({
                     )}
                 </Card>
 
-                <Card title="Execution Logs" description={displayLogs.length ? 'Jump to the latest automation logs.' : 'Logs appear after a run starts.'} status={`${displayLogs.length} log line${displayLogs.length === 1 ? '' : 's'}`}>
-                    <button
-                        type="button"
-                        onClick={() => document.getElementById('automation-execution-logs')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                    >
-                        <TerminalSquare className="h-4 w-4" />
-                        View Logs
-                    </button>
-                </Card>
-
                 <Card title="Download Script" description={hasScript ? 'Download or copy the generated Playwright script.' : 'No script generated yet.'} status={hasScript ? 'Download enabled' : 'Download disabled'}>
                     <div className="grid grid-cols-2 gap-2">
                         <button
@@ -643,7 +390,7 @@ export function AutomationSidebarContent({
                         <div className="mt-3 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-500">
                             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                             {passedTests.length} passed
-                            <TerminalSquare className="ml-2 h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                            <Terminal className="ml-2 h-3.5 w-3.5 text-red-600 dark:text-red-400" />
                             {failedTests.length} failed
                         </div>
                     )}

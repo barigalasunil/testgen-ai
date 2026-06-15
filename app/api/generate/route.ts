@@ -113,6 +113,7 @@ export async function POST(req: Request) {
             customPrompt,
             acceptanceCriteria,
             jiraStoryId: requestJiraStoryId,
+            memoryContext,
         } = await req.json();
 
         if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
@@ -123,6 +124,9 @@ export async function POST(req: Request) {
         }
 
         const resolvedPrompt = await resolveTestCasePrompt(prompt);
+        const promptWithMemory = typeof memoryContext === 'string' && memoryContext.trim()
+            ? `${memoryContext.trim()}\n\nCURRENT GENERATION REQUEST:\n${resolvedPrompt.prompt}`
+            : resolvedPrompt.prompt;
         const resolvedJiraStoryId = requestJiraStoryId || resolvedPrompt.jiraStoryId || null;
 
         let selectedModel = model || "auto";
@@ -134,7 +138,7 @@ export async function POST(req: Request) {
         const activeProvider = provider as AiProviderId;
         const budget = getTokenBudget(activeProvider);
         const maxChunkChars = safeCharsForProvider(activeProvider);
-        const chunkedRequirement = chunkRequirement(resolvedPrompt.prompt, maxChunkChars);
+        const chunkedRequirement = chunkRequirement(promptWithMemory, maxChunkChars);
         if (chunkedRequirement.chunkingApplied) {
             console.log(`[GENERATE] Requirement chunked into ${chunkedRequirement.chunks.length} chunks (safe input ${budget.safeInputTokens} tokens)`);
         }

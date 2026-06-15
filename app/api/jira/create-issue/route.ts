@@ -20,20 +20,25 @@ type JiraIssuePayload = {
     };
 };
 
-// ── ADF Builder ─────────────────────────────────────────────────────────────
-function normalizeJiraError(responseText: string, status: number): string {
+// ── Helpers ────────────────────────────────────────────────────────────────
+function cleanBaseUrl(url: string) {
+    return (url.startsWith('http') ? url : `https://${url}`).replace(/\/$/, '');
+}
+
+function buildAuth(email: string, apiToken: string) {
+    return Buffer.from(`${email}:${apiToken}`).toString('base64');
+}
+
+// ── Extract exact Jira error message ──────────────────────────────────────
+function extractJiraError(responseText: string, status: number): string {
     try {
         const errorJson = JSON.parse(responseText);
         const messages = Array.isArray(errorJson.errorMessages) ? errorJson.errorMessages : [];
         const errors = Object.entries(errorJson.errors || {}).map(([field, value]) => `${field}: ${String(value)}`);
         const combined = [...messages, ...errors].filter(Boolean).join(', ');
-        if (combined) return `Jira rejected the request (${status}): ${combined}`;
+        if (combined) return `Jira API error (${status}): ${combined}`;
     } catch {}
-
-    if (status === 400) return 'Jira rejected the request. Check required fields, project key, issue type, and description format.';
-    if (status === 401 || status === 403) return 'Jira authentication failed. Check Jira email, API token, and project permissions.';
-    if (status === 404) return 'Jira project or endpoint was not found. Check Jira base URL and project key.';
-    return `Jira API error ${status}. Check Jira settings and project permissions.`;
+    return `Jira API error (HTTP ${status}): ${responseText.slice(0, 500)}`;
 }
 
 function toADF(text: string): AdfNode {
@@ -117,16 +122,148 @@ export async function POST(request: Request) {
             );
         }
 
-        const normalizedUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
-        const auth = Buffer.from(`${email}:${apiToken}`).toString('base64');
+        const normalizedUrl = cleanBaseUrl(baseUrl);
+        const auth = buildAuth(email, apiToken);
+        const resolvedIssueType = issueType || 'Bug';
 
-        // Issue 4: Prepend [storyId] to summary if not already present
+        // ── Log pre-creation details ─────────────────────────────────────
+        console.log('[JIRA CREATE] --- Pre-creation audit ---');
+        console.log('[JIRA CREATE] Base URL:', normalizedUrl);
+        console.log('[JIRA CREATE] Project Key:', projectKey);
+        console.log('[JIRA CREATE] Issue Type:', resolvedIssueType);
+        console.log('[JIRA CREATE] Parent Story ID:', storyId || '(none)');
+        console.log('[JIRA CREATE] Auth user email:', email);
+
+        // ── Step 1: Validate project exists ──────────────────────────────
+        console.log('[JIRA CREATE] Validating project:', projectKey);
+        const projectRes = await fetch(`${normalizedUrl}/rest/api/3/project/${encodeURIComponent(projectKey)}`, {
+            headers: {
+                Authorization: `Basic ${auth}`,
+                Accept: 'application/json',
+            },
+        });
+        const projectText = await projectRes.text();
+
+        if (!projectRes.ok) {
+            const errorMsg = extractJiraError(projectText, projectRes.status);
+            console.warn('[JIRA CREATE] Project validation failed:', projectRes.status, errorMsg);
+            return NextResponse.json(
+                { success: false, error: `Project validation failed: ${errorMsg}` },
+                { status: projectRes.status }
+            );
+        }
+        console.log('[JIRA CREATE] Project exists ✓');
+
+        // ── Step 2: Verify issue type exists ─────────────────────────────
+        console.log('[JIRA CREATE] Validating issue type:', resolvedIssueType);
+        const issuetypeRes = await fetch(`${normalizedUrl}/rest/api/3/issuetype`, {
+            headers: {
+                Authorization: `Basic ${auth}`,
+                Accept: 'application/json',
+            },
+        });
+        const issuetypeText = await issuetypeRes.text();
+
+        if (!issuetypeRes.ok) {
+            const errorMsg = extractJiraError(issuetypeText, issuetypeRes.status);
+            console.warn('[JIRA CREATE] Issue type lookup failed:', issuetypeRes.status, errorMsg);
+            return NextResponse.json(
+                { success: false, error: `Issue type lookup failed: ${errorMsg}` },
+                { status: issuetypeRes.status }
+            );
+        }
+
+        let issuetypeData: { name?: string }[];
+        try {
+            issuetypeData = JSON.parse(issuetypeText);
+        } catch {
+            return NextResponse.json(
+                { success: false, error: 'Issue type endpoint returned an invalid response.' },
+                { status: 502 }
+            );
+        }
+
+        const typeExists = issuetypeData.some(
+            (t: { name?: string }) => t.name?.toLowerCase() === resolvedIssueType.toLowerCase()
+        );
+        if (!typeExists) {
+            const available = issuetypeData.map((t: { name?: string }) => t.name || '?').join(', ');
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: `Issue type "${resolvedIssueType}" does not exist in this Jira instance. Available types: ${available}`,
+                },
+                { status: 400 }
+            );
+        }
+        console.log('[JIRA CREATE] Issue type exists ✓');
+
+        // ── Step 3: Verify create permission via createmeta ──────────────
+        console.log('[JIRA CREATE] Checking create permission for', projectKey);
+        const createmetaRes = await fetch(
+            `${normalizedUrl}/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(projectKey)}&expand=projects.issuetypes`,
+            {
+                headers: {
+                    Authorization: `Basic ${auth}`,
+                    Accept: 'application/json',
+                },
+            }
+        );
+        const createmetaText = await createmetaRes.text();
+
+        if (!createmetaRes.ok) {
+            const errorMsg = extractJiraError(createmetaText, createmetaRes.status);
+            console.warn('[JIRA CREATE] Permission check failed:', createmetaRes.status, errorMsg);
+            return NextResponse.json(
+                { success: false, error: `Permission check failed: ${errorMsg}` },
+                { status: createmetaRes.status }
+            );
+        }
+
+        let createmetaData: { projects?: { key?: string; issuetypes?: { name?: string; subtask?: boolean }[] }[] };
+        try {
+            createmetaData = JSON.parse(createmetaText);
+        } catch {
+            return NextResponse.json(
+                { success: false, error: 'Permission check returned an invalid response.' },
+                { status: 502 }
+            );
+        }
+
+        const projectMeta = createmetaData.projects?.find(
+            (p) => p.key?.toUpperCase() === projectKey.toUpperCase()
+        );
+        const creatableTypes = projectMeta?.issuetypes
+            ?.filter((t) => !t.subtask)
+            .map((t) => t.name) || [];
+
+        if (!projectMeta || creatableTypes.length === 0) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: `User does not have permission to create issues in project "${projectKey}". Check Jira project permissions and issue type availability.`,
+                },
+                { status: 403 }
+            );
+        }
+
+        if (!creatableTypes.some((t) => t?.toLowerCase() === resolvedIssueType.toLowerCase())) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: `Issue type "${resolvedIssueType}" is not available for project "${projectKey}". Available creatable types: ${creatableTypes.join(', ')}`,
+                },
+                { status: 400 }
+            );
+        }
+        console.log('[JIRA CREATE] Create permission confirmed ✓');
+
+        // ── All validations passed — build payload ───────────────────────
         let finalSummary = summary || 'No summary';
         if (storyId?.trim() && !finalSummary.startsWith('[')) {
             finalSummary = `[${storyId.trim()}] ${finalSummary}`;
         }
 
-        // Issue 7: Detect code and use ADF codeBlock
         const adfDescription = toADF(description || 'No description provided');
 
         if (storyId) {
@@ -140,7 +277,7 @@ export async function POST(request: Request) {
             fields: {
                 project: { key: projectKey },
                 summary: finalSummary,
-                issuetype: { name: issueType || 'Bug' },
+                issuetype: { name: resolvedIssueType },
                 description: adfDescription,
                 labels: Array.isArray(labels) ? labels : ['tcgen-buddy', 'qa-defect'],
             },
@@ -159,9 +296,9 @@ export async function POST(request: Request) {
 
         if (priority) payload.fields.priority = { name: priority };
 
-        console.log('[JIRA] Creating issue:', issueType, 'in project:', projectKey);
-
-        const res = await fetch(`${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issue`, {
+        // ── Create the issue ──────────────────────────────────────────────
+        console.log('[JIRA CREATE] Creating issue...');
+        const res = await fetch(`${normalizedUrl}/rest/api/3/issue`, {
             method: 'POST',
             headers: {
                 Authorization: `Basic ${auth}`,
@@ -172,20 +309,23 @@ export async function POST(request: Request) {
         });
 
         const responseText = await res.text();
-        console.log('[JIRA] Response status:', res.status);
 
         if (!res.ok) {
-            return NextResponse.json({ success: false, error: normalizeJiraError(responseText, res.status) }, { status: res.status });
+            const exactError = extractJiraError(responseText, res.status);
+            console.warn('[JIRA CREATE] Create failed:', res.status, exactError);
+            return NextResponse.json({ success: false, error: exactError }, { status: res.status });
         }
 
         const data = JSON.parse(responseText);
         const issueKey = data.key;
-        const issueUrl = `${normalizedUrl.replace(/\/$/, '')}/browse/${issueKey}`;
+        const issueUrl = `${normalizedUrl}/browse/${issueKey}`;
 
-        // Create formal "Relates" link between new defect and parent story
+        console.log('[JIRA CREATE] Created:', issueKey);
+
+        // ── Link to parent story ─────────────────────────────────────────
         if (storyId?.trim() && issueKey) {
             try {
-                const linkRes = await fetch(`${normalizedUrl.replace(/\/$/, '')}/rest/api/3/issueLink`, {
+                const linkRes = await fetch(`${normalizedUrl}/rest/api/3/issueLink`, {
                     method: 'POST',
                     headers: {
                         Authorization: `Basic ${auth}`,

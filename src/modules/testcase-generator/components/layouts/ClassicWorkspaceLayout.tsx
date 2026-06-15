@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 import { Sidebar } from "../Sidebar";
 import { ChatMessage } from "../ChatMessage";
 import { JiraPanel } from "../JiraPanel";
@@ -9,15 +10,18 @@ import { useTCGenWorkspace } from "../../hooks/useTCGenWorkspace";
 import { AutomationSidebarContent } from "../AutomationSidebarContent";
 import { ApiTestingWorkspace } from "@/src/modules/api-testing/ApiTestingWorkspace";
 import { DefectStudio } from "@/src/modules/defect-studio/DefectStudio";
+import { MemoryVaultPanel } from "@/src/modules/memory-vault/MemoryVaultPanel";
 import { 
   X, 
-  ChevronLeft, 
-  ChevronRight, 
   RefreshCw, 
   Settings, 
   AlertCircle,
   Plus,
-  Send
+  Send,
+  Wifi,
+  WifiOff,
+  Server,
+  Bot
 } from "lucide-react";
 
 interface LayoutProps {
@@ -39,6 +43,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         generationProgress,
         generationFailed,
         models,
+        modelLoadError,
         selectedModel, setSelectedModel,
         provider, setProvider,
         providerStatus,
@@ -56,8 +61,8 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         reportUrl,
         automationError,
         automationToast, setAutomationToast,
-        automationTarget,
         automationRuns,
+        anySuiteRunning,
         jiraModalOpen, setJiraModalOpen,
         jiraTargetCase,
         textareaRef,
@@ -73,13 +78,15 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         handleGenerateScript,
         handleRunGeneratedScript,
         handleExecuteSuite,
-        handleSaveAutomationTarget,
         copyTableData,
         handleCopyScript,
         handleDownloadScript,
         attachedDocuments,
         handleAttachDocuments,
         handleRemoveAttachment,
+        attachedMemoryContext,
+        handleUseMemoryAsContext,
+        handleClearMemoryContext,
         saveProvider,
         saveModel,
         providerSettings
@@ -95,16 +102,31 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
     ] as const;
     const platformOptions = ['web', 'api', 'mobile'] as const;
 
-    const statusClasses = providerStatusInfo.connected
-        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900/30'
-        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/30';
-    const statusDotClass = providerStatusInfo.connected
-        ? 'bg-green-500'
-        : 'bg-red-500';
-    
-    // Status text formatting
-    const providerLabel = providerOptions.find(o => o.value === provider)?.label || 'AI Provider';
-    const statusText = `${providerLabel} ${providerStatusInfo.connected ? 'Online' : 'Offline'}`;
+    const isOllama = provider === 'ollama';
+    const ollamaHasChatModels = isOllama && Array.isArray(providerStatusInfo.chatModels) && providerStatusInfo.chatModels.length > 0;
+    const ollamaReachableNoModels = isOllama && !providerStatusInfo.connected && providerStatusInfo.chatModels && providerStatusInfo.chatModels.length === 0;
+
+    let statusClasses: string;
+    let statusDotClass: string;
+    let statusText: string;
+
+    if (isOllama && !providerStatusInfo.connected && providerStatusInfo.chatModels) {
+        statusClasses = 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/30';
+        statusDotClass = 'bg-amber-500';
+        statusText = `Ollama Local Not Ready — No generation models found`;
+    } else if (providerStatusInfo.connected) {
+        statusClasses = 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900/30';
+        statusDotClass = 'bg-green-500';
+        const label = providerOptions.find(o => o.value === provider)?.label || 'AI Provider';
+        statusText = isOllama
+            ? `Ollama Local Online (${providerStatusInfo.chatModels?.length || 0} model${(providerStatusInfo.chatModels?.length || 0) !== 1 ? 's' : ''})`
+            : `${label} Online`;
+    } else {
+        statusClasses = 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/30';
+        statusDotClass = 'bg-red-500';
+        const label = providerOptions.find(o => o.value === provider)?.label || 'AI Provider';
+        statusText = isOllama ? 'Ollama Local Offline' : `${label} Offline`;
+    }
 
     return (
         <div className="flex h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-200">
@@ -148,12 +170,20 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                 {/* Fixed Header */}
                 <header className="min-h-16 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-between gap-4 px-4 py-2 sticky top-0 z-30 shadow-sm">
                     <div className="flex min-w-0 items-center gap-3">
-                        <button
-                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500"
-                        >
-                            {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-                        </button>
+                        <div className="hidden shrink-0 items-center gap-2 sm:flex">
+                            <Image
+                                src="/assets/logo/tcgen-buddy-header-logo.png"
+                                alt="TCGen-Buddy"
+                                width={32}
+                                height={32}
+                                priority
+                                className="h-8 w-8 rounded-md object-contain"
+                            />
+                            <span className="hidden text-sm font-extrabold tracking-tight text-gray-900 dark:text-gray-100 lg:inline">
+                                TCGen-Buddy
+                            </span>
+                        </div>
+                        <div className="hidden h-8 w-px bg-gray-200 dark:bg-gray-800 sm:block" />
                         <div className="min-w-0">
                             <h1 className="truncate text-sm font-bold text-gray-900 dark:text-gray-100 md:text-base">
                                 {currentSectionHeader.title}
@@ -182,17 +212,19 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                             <select
                                 value={selectedModel}
                                 onChange={(e) => { setSelectedModel(e.target.value); saveModel(e.target.value); }}
-                                disabled={provider !== 'ollama' || !providerStatusInfo.connected || (providerStatusInfo.connected && models.length === 0)}
+                                disabled={!isOllama || !ollamaHasChatModels}
                                 className="h-9 min-w-[170px] rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 outline-none focus:ring-1 focus:ring-[#10A37F] disabled:opacity-60 hidden sm:block"
                             >
                                 {provider === 'auto' ? (
                                     <option value="auto">[ Auto Provider Selection ]</option>
-                                ) : provider === 'ollama' ? (
-                                    providerStatusInfo.connected ? (
+                                ) : isOllama ? (
+                                    modelLoadError ? (
+                                        <option value="disabled">Unable to load models</option>
+                                    ) : ollamaHasChatModels ? (
                                         models.length > 0 ? (
                                             models.map(m => <option key={m} value={m}>{m}</option>)
                                         ) : (
-                                            <option value="disabled">No Ollama chat models installed</option>
+                                            <option value="disabled">No chat models installed</option>
                                         )
                                     ) : (
                                         <option value="disabled">[ Ollama Offline ]</option>
@@ -203,8 +235,12 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                             </select>
                         </div>
 
-                        <div className={cn("flex max-w-[300px] items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold", statusClasses)}>
-                            <span className={cn("h-2 w-2 rounded-full", statusDotClass)} />
+                        <div className={cn("flex max-w-[320px] items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold", statusClasses)}>
+                            {providerStatusInfo.connected || ollamaReachableNoModels ? (
+                                <Wifi className="h-3.5 w-3.5 shrink-0" />
+                            ) : (
+                                <WifiOff className="h-3.5 w-3.5 shrink-0" />
+                            )}
                             <span className="truncate">
                                 {statusText}
                                 {provider === 'auto' && providerStatusInfo.providerUsed ? ` (${providerStatusInfo.providerUsed.toUpperCase()})` : ''}
@@ -253,6 +289,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                         onDownloadScript={handleDownloadScript}
                                         isGeneratingScript={isGeneratingScript}
                                         isRunningAutomation={isRunningAutomation}
+                                        anySuiteRunning={anySuiteRunning}
                                         executionLogs={executionLogs}
                                         executionSummary={executionSummary}
                                         passedTests={passedTests}
@@ -260,11 +297,9 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                         headed={headed}
                                         onHeadedChange={setHeaded}
                                         reportUrl={reportUrl}
-                                        automationTarget={automationTarget}
                                         automationRuns={automationRuns}
                                         automationToast={automationToast}
                                         onCloseToast={() => setAutomationToast(null)}
-                                        onSaveAutomationTarget={handleSaveAutomationTarget}
                                         platformType={platformType}
                                     />
                                     {automationError && (
@@ -307,13 +342,20 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                 </div>
                             )}
 
+                            {activePanel === 'memory-vault' && (
+                                <MemoryVaultPanel
+                                    onUseAsContext={handleUseMemoryAsContext}
+                                    attachedContextId={attachedMemoryContext?.id}
+                                />
+                            )}
+
                             {activePanel === 'testcases' && (
                                 <div className="flex flex-col min-h-full">
                                     {!currentThread?.prompt ? (
                                         <div className="flex-1 flex items-center justify-center p-8 bg-gray-50/50 dark:bg-gray-950/50">
                                             <div className="max-w-md w-full text-center space-y-6">
                                                 <div className="w-16 h-16 bg-[#10A37F]/10 dark:bg-[#10A37F]/20 rounded-2xl flex items-center justify-center mx-auto ring-8 ring-[#10A37F]/5">
-                                                    <Settings className="w-8 h-8 text-[#10A37F]" />
+                                                    <Bot className="w-8 h-8 text-[#10A37F]" />
                                                 </div>
                                                 <div className="space-y-2">
                                                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">Start your first workspace</h3>
@@ -348,7 +390,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                             {(currentThread.result || currentThread.error) && (
                                                 <div className="flex gap-4">
                                                     <div className="w-8 h-8 rounded-lg bg-[#10A37F] flex items-center justify-center shrink-0 shadow-md shadow-[#10A37F]/20">
-                                                        <Settings className="w-4 h-4 text-white" />
+                                                        <Bot className="w-4 h-4 text-white" />
                                                     </div>
                                                     <div className="flex-1 pt-1 space-y-6">
                                                         {currentThread.error ? (
@@ -448,6 +490,16 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                             ))}
                                         </div>
                                     )}
+                                    {attachedMemoryContext && (
+                                        <div className="mb-2 flex flex-wrap gap-2">
+                                            <span className="inline-flex items-center gap-2 rounded-full border border-[#10A37F]/30 bg-white px-3 py-1 text-xs font-semibold text-[#10A37F] shadow-sm dark:bg-gray-900">
+                                                Context attached: {attachedMemoryContext.title}
+                                                <button onClick={handleClearMemoryContext} className="text-[#10A37F]/70 hover:text-red-500" title="Remove Memory Vault context">
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </span>
+                                        </div>
+                                    )}
                                     <div className="relative flex w-full flex-col rounded-3xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg focus-within:border-[#10A37F] focus-within:ring-2 focus-within:ring-[#10A37F]/10 transition-all">
                                         <textarea
                                             ref={textareaRef}
@@ -499,7 +551,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                                 </select>
                                                 <button
                                                     onClick={() => handleSend()}
-                                                    disabled={loading || !value.trim() || (provider === 'ollama' && models.length === 0)}
+                                                    disabled={loading || !value.trim() || (isOllama && !ollamaHasChatModels)}
                                                     className="flex h-9 w-9 items-center justify-center rounded-full bg-[#10A37F] text-white shadow-md transition-all hover:bg-[#10A37F]/90 disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-gray-800 active:scale-95"
                                                     title="Send"
                                                 >
