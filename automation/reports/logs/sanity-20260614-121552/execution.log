@@ -1,0 +1,24 @@
+Run ID: sanity-20260614-121552
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: sanity
+Suite mode: project-specific
+Suite app: SauceDemo
+Mode: Headless
+Status: initialized
+Status: environment validated
+Selected suite: SauceDemo sanity
+Browser launch mode: headless
+[Planner] Skipped: project-specific suite already has authored workflow steps
+[Generator] Skipped: project-specific suite already has authored specs
+Starting Playwright execution from tests/sanity
+Status: passed
+[Reports] Playwright HTML generated
+[Reports] Generating Allure report
+[Reports] Allure report generated
+[Healing] Skipped: no healable failure
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+Running 1 test using 1 worker
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✓  1 [chromium] › tests\sanity\add-to-cart.spec.ts:15:7 › SauceDemo Sanity › login and add first inventory item to cart (1.2s)
+  1 passed (2.4s)

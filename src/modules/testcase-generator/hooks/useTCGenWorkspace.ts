@@ -67,7 +67,8 @@ type AutomationRunResponse = {
     success?: boolean;
     error: boolean;
     suite: SuiteKey;
-    status: 'passed' | 'failed' | 'partial_success' | 'error' | 'completed';
+    suiteMode?: string;
+    status: 'passed' | 'failed' | 'partial_success' | 'error' | 'completed' | 'blocked';
     startedAt: string;
     finishedAt: string;
     durationMs: number;
@@ -79,6 +80,7 @@ type AutomationRunResponse = {
     playwrightReportUrl?: string | null;
     allureReportUrl?: string | null;
     healingReportUrl?: string | null;
+    logUrl?: string | null;
     runId?: string;
     total?: number;
     passed?: number;
@@ -972,6 +974,7 @@ export function useTCGenWorkspace() {
                 playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl || undefined,
                 allureReportUrl: payload.allureReportUrl || undefined,
                 healingReportUrl: payload.healingReportUrl || undefined,
+                logUrl: payload.logUrl || undefined,
                 runId: payload.runId,
                 message: payload.message,
                 durationMs: payload.durationMs,
@@ -990,6 +993,7 @@ export function useTCGenWorkspace() {
                 playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl || undefined,
                 allureReportUrl: payload.allureReportUrl || undefined,
                 healingReportUrl: payload.healingReportUrl || undefined,
+                logUrl: payload.logUrl || undefined,
                 runId: payload.runId || undefined,
             });
             setReportUrl(payload.playwrightReportUrl || payload.reportUrl || null);
@@ -1037,6 +1041,7 @@ export function useTCGenWorkspace() {
                                         playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl || null,
                                         allureReportUrl: payload.allureReportUrl || null,
                                         healingReportUrl: payload.healingReportUrl || null,
+                                        logUrl: payload.logUrl || null,
                                         errors: payload.errors,
                                     },
                                     ...(s.automationRuns || []),

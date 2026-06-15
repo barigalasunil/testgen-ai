@@ -1,0 +1,2 @@
+Navigation attempt 1: domcontentloaded
+Navigation attempt 1 succeeded: domcontentloaded

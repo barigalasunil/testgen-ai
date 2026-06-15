@@ -1,0 +1,24 @@
+Run ID: custom-url-20260614-115656
+Target URL: https://www.myvi.in/
+Browser: chromium
+Suite: smoke
+Suite mode: generic
+Suite app: Generic Website Validation
+Mode: Headless
+Status: initialized
+Status: environment validated
+Selected suite: Generic Website Validation smoke
+Preflight started
+Preflight passed: 200 OK
+Browser launch mode: headless
+Starting Playwright execution from tests/generic/smoke.spec.ts
+Status: passed
+Playwright report generated
+Generating Allure report
+Allure report generated
+Healing skipped: no failed tests.
+Running 1 test using 1 worker
+Navigation attempt 1: domcontentloaded
+Navigation attempt 1 succeeded: domcontentloaded
+  ✓  1 [chromium] › tests\generic\smoke.spec.ts:13:7 › Generic Custom URL Smoke › Generic Custom URL Smoke - Page loads successfully (4.4s)
+  1 passed (5.3s)

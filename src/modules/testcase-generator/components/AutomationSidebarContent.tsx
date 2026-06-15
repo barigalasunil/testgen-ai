@@ -22,6 +22,7 @@ import { AutomationExecutionSummary, AutomationRunRecord, AutomationTarget, Suit
 
 type BrowserName = 'chromium' | 'firefox' | 'webkit' | 'all';
 type CustomSuite = SuiteKey;
+type CustomRunType = 'generic' | 'project-specific';
 
 interface AutomationSidebarContentProps {
     automation: Record<SuiteKey, SuiteExecution>;
@@ -172,16 +173,20 @@ export function AutomationSidebarContent({
     const [customUrl, setCustomUrl] = useState('');
     const [customBrowser, setCustomBrowser] = useState<BrowserName>('chromium');
     const [customSuite, setCustomSuite] = useState<CustomSuite>('smoke');
+    const [customRunType, setCustomRunType] = useState<CustomRunType>('generic');
+    const [projectSuiteConfirmed, setProjectSuiteConfirmed] = useState(false);
     const [customHeaded, setCustomHeaded] = useState(false);
     const [customIncognito, setCustomIncognito] = useState(true);
     const [customRun, setCustomRun] = useState<SuiteExecution>({ status: 'idle' });
     const [customLogs, setCustomLogs] = useState<string[]>([]);
     const [showReportsPanel, setShowReportsPanel] = useState(false);
+    const [logCopyToast, setLogCopyToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const logsRef = useRef<HTMLDivElement>(null);
 
     const latestPlaywrightUrl = executionSummary?.playwrightReportUrl || executionSummary?.reportUrl || reportUrl || null;
     const latestAllureUrl = executionSummary?.allureReportUrl || null;
     const latestHealingUrl = executionSummary?.healingReportUrl || null;
+    const latestLogUrl = customRun.logUrl || executionSummary?.logUrl || null;
     const resolvedReportUrl = latestPlaywrightUrl;
     const hasResults = Boolean(executionSummary);
     const displayLogs = customLogs.length ? customLogs : executionLogs;
@@ -189,9 +194,7 @@ export function AutomationSidebarContent({
     const targetSourceLabel = automationTarget?.targetUrlSource
         ? automationTarget.targetUrlSource.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
         : 'Not Provided';
-    const reportRuns = [
-        ...automationRuns,
-        ...(customRun.runId ? [{
+    const customRunRecord: AutomationRunRecord | null = customRun.runId ? {
             runId: customRun.runId,
             suite: customSuite,
             targetUrl: customUrl,
@@ -202,13 +205,32 @@ export function AutomationSidebarContent({
             playwrightReportUrl: customRun.playwrightReportUrl || null,
             allureReportUrl: customRun.allureReportUrl || null,
             healingReportUrl: customRun.healingReportUrl || null,
+            logUrl: customRun.logUrl || null,
+            logs: customLogs,
             errors: customRun.message ? { execution: customRun.message } : undefined,
-        }] : []),
+        } : null;
+    const reportRuns: AutomationRunRecord[] = [
+        ...automationRuns,
+        ...(customRunRecord ? [customRunRecord] : []),
     ];
 
     useEffect(() => {
         logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight, behavior: 'smooth' });
     }, [displayLogs]);
+
+    const showLogToast = (type: 'success' | 'error', message: string) => {
+        setLogCopyToast({ type, message });
+        window.setTimeout(() => setLogCopyToast(null), 3200);
+    };
+
+    const copyExecutionLogs = async () => {
+        try {
+            await navigator.clipboard.writeText(displayLogs.join('\n'));
+            showLogToast('success', 'Execution logs copied');
+        } catch {
+            showLogToast('error', 'Unable to copy logs');
+        }
+    };
 
     const runCustomUrlSuite = async () => {
         const trimmedUrl = customUrl.trim();
@@ -218,7 +240,17 @@ export function AutomationSidebarContent({
         }
 
         const startedAt = new Date().toISOString();
-        const logs: string[] = [`[${new Date().toLocaleTimeString()}] Running ${customSuite} suite against ${trimmedUrl}`];
+        if (customRunType === 'project-specific' && !projectSuiteConfirmed) {
+            setCustomRun({
+                status: 'failed',
+                lastRunAt: startedAt,
+                message: 'Confirm that the selected project-specific suite belongs to this target URL.',
+            });
+            return;
+        }
+
+        const runTypeLabel = customRunType === 'generic' ? 'Generic Website Validation' : 'Project-Specific Suite';
+        const logs: string[] = [`[${new Date().toLocaleTimeString()}] Running ${runTypeLabel} ${customSuite} suite against ${trimmedUrl}`];
         setCustomLogs(logs);
         setCustomRun({ status: 'running', lastRunAt: startedAt });
         setTimeout(() => document.getElementById('automation-execution-logs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
@@ -229,6 +261,7 @@ export function AutomationSidebarContent({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     suite: customSuite,
+                    runType: customRunType,
                     browser: customBrowser,
                     customUrl: trimmedUrl,
                     headed: customHeaded,
@@ -243,6 +276,7 @@ export function AutomationSidebarContent({
                 playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl,
                 allureReportUrl: payload.allureReportUrl,
                 healingReportUrl: payload.healingReportUrl,
+                logUrl: payload.logUrl,
                 runId: payload.runId,
                 message: payload.message,
                 durationMs: payload.durationMs,
@@ -251,8 +285,12 @@ export function AutomationSidebarContent({
                 failedTests: payload.failedTests,
             };
             setCustomRun(nextState);
+            const payloadLogs = Array.isArray(payload.logs)
+                ? payload.logs.map((line: string) => `[${new Date().toLocaleTimeString()}] ${line}`)
+                : [];
             setCustomLogs([
                 ...logs,
+                ...payloadLogs,
                 `[${new Date().toLocaleTimeString()}] Status: ${nextState.status}`,
                 `[${new Date().toLocaleTimeString()}] Run ID: ${payload.runId}`,
                 `[${new Date().toLocaleTimeString()}] Playwright report: ${nextState.playwrightReportUrl || 'Report not generated'}`,
@@ -312,7 +350,7 @@ export function AutomationSidebarContent({
                         {formatSuiteStatus(customRun.status)}
                     </span>
                 </div>
-                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_140px_150px_150px]">
+                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(220px,1fr)_190px_140px_150px_150px]">
                     <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
                         Application URL
                         <input
@@ -321,6 +359,20 @@ export function AutomationSidebarContent({
                             placeholder="https://your-app.example.com"
                             className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] focus:ring-2 focus:ring-[#10A37F]/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                         />
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        Run Type
+                        <select
+                            value={customRunType}
+                            onChange={(event) => {
+                                setCustomRunType(event.target.value as CustomRunType);
+                                setProjectSuiteConfirmed(false);
+                            }}
+                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        >
+                            <option value="generic">Generic Website Validation</option>
+                            <option value="project-specific">Project-Specific Suite</option>
+                        </select>
                     </label>
                     <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
                         Run Mode
@@ -340,13 +392,34 @@ export function AutomationSidebarContent({
                     </label>
                     <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
                         Suite
-                        <select value={customSuite} onChange={(event) => setCustomSuite(event.target.value as CustomSuite)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                        <select
+                            value={customSuite}
+                            onChange={(event) => {
+                                setCustomSuite(event.target.value as CustomSuite);
+                                setProjectSuiteConfirmed(false);
+                            }}
+                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        >
                             <option value="smoke">Smoke</option>
                             <option value="sanity">Sanity</option>
                             <option value="regression">Regression</option>
                         </select>
                     </label>
                 </div>
+                {customRunType === 'project-specific' && (
+                    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
+                        <div className="font-semibold">Project-specific suite selected: SauceDemo {customSuite}</div>
+                        <label className="mt-2 inline-flex items-center gap-2 font-medium">
+                            <input
+                                type="checkbox"
+                                checked={projectSuiteConfirmed}
+                                onChange={(event) => setProjectSuiteConfirmed(event.target.checked)}
+                                className="h-4 w-4 rounded border-amber-300 dark:border-amber-800 dark:bg-slate-900"
+                            />
+                            I confirm this target belongs to the selected project suite.
+                        </label>
+                    </div>
+                )}
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
                         <input type="checkbox" checked={customIncognito} onChange={(event) => setCustomIncognito(event.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 dark:bg-slate-800" />
@@ -619,10 +692,10 @@ export function AutomationSidebarContent({
                                     {run.allureReportUrl ? (
                                         <a href={run.allureReportUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><BarChart3 className="h-4 w-4" /> Open Allure Report</a>
                                     ) : (
-                                        <div className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400 dark:border-slate-800">Report not generated</div>
+                                        <div className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400 dark:border-slate-800">Allure report not generated</div>
                                     )}
-                                    {run.logs?.length ? (
-                                        <button type="button" onClick={() => navigator.clipboard.writeText(run.logs?.join('\n') || '')} className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><Download className="h-4 w-4" /> Download Logs</button>
+                                    {run.logUrl ? (
+                                        <a href={run.logUrl} download className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"><Download className="h-4 w-4" /> Download Logs</a>
                                     ) : (
                                         <div className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-400 dark:border-slate-800">No logs captured</div>
                                     )}
@@ -636,12 +709,34 @@ export function AutomationSidebarContent({
             )}
 
             <section id="automation-execution-logs" className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
-                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Execution Logs</h2>
                         <p className="text-xs text-slate-500 dark:text-slate-400">Live automation output, report generation status, and healing analysis.</p>
                     </div>
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-500">{displayLogs.length} line{displayLogs.length === 1 ? '' : 's'}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-500">{displayLogs.length} line{displayLogs.length === 1 ? '' : 's'}</span>
+                        <button
+                            type="button"
+                            onClick={copyExecutionLogs}
+                            disabled={!displayLogs.length}
+                            className={cn(
+                                'inline-flex items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition',
+                                displayLogs.length
+                                    ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                                    : 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-600'
+                            )}
+                        >
+                            <Copy className="h-3.5 w-3.5" />
+                            Copy Logs
+                        </button>
+                        {latestLogUrl && (
+                            <a href={latestLogUrl} download className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+                                <Download className="h-3.5 w-3.5" />
+                                Download Logs
+                            </a>
+                        )}
+                    </div>
                 </div>
                 <div ref={logsRef} className="h-[420px] overflow-y-auto rounded-md border border-slate-800 bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-200 shadow-inner">
                     {displayLogs.length ? displayLogs.map((log, index) => {
@@ -681,6 +776,16 @@ export function AutomationSidebarContent({
                             Close
                         </button>
                     </div>
+                </div>
+            )}
+            {logCopyToast && (
+                <div className={cn(
+                    'fixed bottom-5 left-5 z-50 max-w-sm rounded-lg border px-4 py-3 text-sm font-semibold shadow-xl',
+                    logCopyToast.type === 'success'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900 dark:text-emerald-100'
+                        : 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/40 dark:bg-red-900 dark:text-red-100'
+                )}>
+                    {logCopyToast.message}
                 </div>
             )}
         </div>

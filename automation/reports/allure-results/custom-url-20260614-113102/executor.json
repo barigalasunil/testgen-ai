@@ -1,0 +1,8 @@
+{
+  "name": "TCGen-Buddy Automation Hub",
+  "type": "playwright",
+  "buildName": "smoke",
+  "buildUrl": "https://www.saucedemo.com",
+  "reportName": "Generic Website Validation smoke",
+  "reportUrl": "/automation-reports/custom-url-20260614-113102/allure-report/index.html"
+}

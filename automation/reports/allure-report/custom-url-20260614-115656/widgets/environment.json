@@ -1,0 +1,1 @@
+[{"values":["custom-url-20260614-115656"],"name":"RUN_ID"},{"values":["https://www.myvi.in/"],"name":"TARGET_URL"},{"values":["smoke"],"name":"SUITE_NAME"},{"values":["generic"],"name":"SUITE_MODE"},{"values":["Generic Website Validation"],"name":"SUITE_APP"},{"values":["chromium"],"name":"BROWSER_NAME"},{"values":["headless"],"name":"HEADLESS_MODE"}]

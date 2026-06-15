@@ -1,0 +1,67 @@
+Run ID: custom-url-20260614-104912
+Target URL: https://www.myvi.in/
+Browser: chromium
+Suite: smoke
+Suite mode: generic
+Suite app: Generic Website Validation
+Mode: Headless
+Status: initialized
+Status: environment validated
+Selected suite: Generic Website Validation smoke
+Starting Playwright execution from tests/generic/smoke.spec.ts
+Status: failed
+Playwright report generated
+Generating Allure report
+Allure report generated
+Healing report generated
+Running 1 test using 1 worker
+  ✘  1 [chromium] › tests\generic\smoke.spec.ts:12:7 › Generic Custom URL Smoke › page loads successfully with title, body, and non-5xx response (59.4s)
+  ✘  2 [chromium] › tests\generic\smoke.spec.ts:12:7 › Generic Custom URL Smoke › page loads successfully with title, body, and non-5xx response (retry #1) (59.5s)
+  1) [chromium] › tests\generic\smoke.spec.ts:12:7 › Generic Custom URL Smoke › page loads successfully with title, body, and non-5xx response 
+    TimeoutError: page.goto: Timeout 45000ms exceeded.
+    Call log:
+    [2m  - navigating to "https://www.myvi.in/", waiting until "commit"[22m
+       at generic\generic-website.helpers.ts:8
+       6 |
+       7 | export async function openTarget(page: Page) {
+    >  8 |   const response = await page.goto(getTargetUrl(), { waitUntil: 'commit', timeout: 45000 });
+         |                               ^
+       9 |   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => undefined);
+      10 |   await page.waitForLoadState('load', { timeout: 15000 }).catch(() => undefined);
+      11 |   return response;
+        at openTarget (D:\TCGen-Buddy\automation\tests\generic\generic-website.helpers.ts:8:31)
+        at D:\TCGen-Buddy\automation\tests\generic\smoke.spec.ts:13:38
+    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\custom-url-20260614-104912\generic-smoke-Generic-Cust-4b633-e-body-and-non-5xx-response-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\custom-url-20260614-104912\generic-smoke-Generic-Cust-4b633-e-body-and-non-5xx-response-chromium\error-context.md
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\custom-url-20260614-104912\generic-smoke-Generic-Cust-4b633-e-body-and-non-5xx-response-chromium\trace.zip
+    Usage:
+        npx playwright show-trace reports\traces\custom-url-20260614-104912\generic-smoke-Generic-Cust-4b633-e-body-and-non-5xx-response-chromium\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    TimeoutError: page.goto: Timeout 45000ms exceeded.
+    Call log:
+    [2m  - navigating to "https://www.myvi.in/", waiting until "commit"[22m
+       at generic\generic-website.helpers.ts:8
+       6 |
+       7 | export async function openTarget(page: Page) {
+    >  8 |   const response = await page.goto(getTargetUrl(), { waitUntil: 'commit', timeout: 45000 });
+         |                               ^
+       9 |   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => undefined);
+      10 |   await page.waitForLoadState('load', { timeout: 15000 }).catch(() => undefined);
+      11 |   return response;
+        at openTarget (D:\TCGen-Buddy\automation\tests\generic\generic-website.helpers.ts:8:31)
+        at D:\TCGen-Buddy\automation\tests\generic\smoke.spec.ts:13:38
+    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\custom-url-20260614-104912\generic-smoke-Generic-Cust-4b633-e-body-and-non-5xx-response-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\custom-url-20260614-104912\generic-smoke-Generic-Cust-4b633-e-body-and-non-5xx-response-chromium-retry1\error-context.md
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\custom-url-20260614-104912\generic-smoke-Generic-Cust-4b633-e-body-and-non-5xx-response-chromium-retry1\trace.zip
+    Usage:
+        npx playwright show-trace reports\traces\custom-url-20260614-104912\generic-smoke-Generic-Cust-4b633-e-body-and-non-5xx-response-chromium-retry1\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+  1 failed
+    [chromium] › tests\generic\smoke.spec.ts:12:7 › Generic Custom URL Smoke › page loads successfully with title, body, and non-5xx response 

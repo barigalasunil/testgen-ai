@@ -1,0 +1,1 @@
+[{"values":["sanity-20260614-121552"],"name":"RUN_ID"},{"values":["https://www.saucedemo.com"],"name":"TARGET_URL"},{"values":["sanity"],"name":"SUITE_NAME"},{"values":["project-specific"],"name":"SUITE_MODE"},{"values":["SauceDemo"],"name":"SUITE_APP"},{"values":["chromium"],"name":"BROWSER_NAME"},{"values":["headless"],"name":"HEADLESS_MODE"}]

@@ -1,0 +1,32 @@
+Run ID: custom-url-20260614-121206
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: regression
+Suite mode: generic
+Suite app: Generic Website Validation
+Mode: Headless
+Status: initialized
+Status: environment validated
+Selected suite: Generic Website Validation regression
+Preflight started
+Preflight passed: 200 OK
+Preflight final URL: https://www.saucedemo.com/
+Browser launch mode: headless
+[Planner] Started deterministic DOM discovery
+[Generator] Preparing safe checks for regression suite
+Starting Playwright execution from tests/generic/regression.spec.ts
+Status: passed
+[Planner] Completed: discovered 0 links, 1 forms, 1 buttons, 0 sections, 0 images
+[Generator] Created safe checks: 0 safe actions, 2 unsafe actions avoided
+[Reports] Playwright HTML generated
+[Reports] Generating Allure report
+[Reports] Allure report generated
+[Healing] Skipped: no healable failure
+Running 1 test using 1 worker
+Navigation attempt 1: domcontentloaded
+Navigation attempt 1 succeeded: domcontentloaded
+[Execution] Running generated regression checks
+[Planner] Discovered 0 links, 1 forms, 1 buttons
+[Generator] Created safe checks for regression suite
+  ✓  1 [chromium] › tests\generic\regression.spec.ts:22:7 › Generic Custom URL Regression › Generic Custom URL Regression - Core links and interactions (9.1s)
+  1 passed (10.1s)

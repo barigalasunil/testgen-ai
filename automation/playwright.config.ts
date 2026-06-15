@@ -14,6 +14,8 @@ const outputDir = process.env.PW_OUTPUT_DIR
 
 const isHeaded = process.env.PW_HEADED === 'true';
 const browserName = process.env.PW_BROWSER || 'chromium';
+const isGenericCustomUrl = process.env.GENERIC_CUSTOM_URL === 'true';
+const genericChromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
 // Find Chrome on Windows — use real Chrome for headed mode to avoid CMD flash
 const WIN_CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
@@ -27,15 +29,23 @@ export default defineConfig({
     reporter: [
         ['list'],
         ['html', { outputFolder: reportDir, open: 'never' }],
-        ['allure-playwright', { outputFolder: allureResultsDir }],
+        ['allure-playwright', { resultsDir: allureResultsDir }],
     ],
     retries: 1,
     workers: 1,
     fullyParallel: false,
     use: {
         baseURL: process.env.SAUCEDEMO_BASE_URL || 'https://www.saucedemo.com',
+        ignoreHTTPSErrors: isGenericCustomUrl,
         headless: !isHeaded,
         viewport: { width: 1280, height: 720 },
+        userAgent: isGenericCustomUrl ? genericChromeUserAgent : undefined,
+        locale: isGenericCustomUrl ? 'en-US' : undefined,
+        extraHTTPHeaders: isGenericCustomUrl
+            ? {
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+            : undefined,
         screenshot: 'only-on-failure',
         video: isHeaded ? 'on' : 'retain-on-failure',
         trace: 'retain-on-failure',
@@ -53,7 +63,9 @@ export default defineConfig({
                     executablePath: chromeExe,
                     args: isHeaded
                         ? ['--start-maximized', '--disable-infobars', '--no-sandbox']
-                        : [],
+                        : isGenericCustomUrl
+                            ? ['--disable-blink-features=AutomationControlled', '--ignore-certificate-errors']
+                            : [],
                 },
             },
         },

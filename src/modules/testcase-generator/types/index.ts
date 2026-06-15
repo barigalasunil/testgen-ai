@@ -32,11 +32,12 @@ export type AutomationTarget = {
     latestRunId?: string;
 };
 
-export type AutomationRunStatus = 'passed' | 'failed' | 'partial_success' | 'error';
+export type AutomationRunStatus = 'passed' | 'failed' | 'partial_success' | 'error' | 'blocked';
 
 export type AutomationRunRecord = {
     runId: string;
     suite?: string;
+    suiteMode?: string;
     targetUrl?: string;
     browser?: string;
     mode?: 'Headed' | 'Headless';
@@ -50,6 +51,7 @@ export type AutomationRunRecord = {
     playwrightReportUrl?: string | null;
     allureReportUrl?: string | null;
     healingReportUrl?: string | null;
+    logUrl?: string | null;
     errors?: {
         execution?: string;
         playwrightReport?: string;
@@ -65,6 +67,7 @@ export type SuiteExecution = {
     playwrightReportUrl?: string;
     allureReportUrl?: string;
     healingReportUrl?: string;
+    logUrl?: string;
     runId?: string;
     message?: string;
     durationMs?: number;
@@ -84,6 +87,7 @@ export type AutomationExecutionSummary = {
     playwrightReportUrl?: string;
     allureReportUrl?: string;
     healingReportUrl?: string;
+    logUrl?: string;
     runId?: string;
 };
 
