@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
+<<<<<<< HEAD
 import Image from "next/image";
 import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Bug, Database, Code2, Play } from "lucide-react";
+=======
+import { Plus, X, Bot, MoreHorizontal, Pencil, Trash, Settings, Zap, Server, Bug, Database } from "lucide-react";
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 import { cn } from "@/lib/utils";
 import { AutomationExecutionSummary, HistoryItem, SuiteKey, SuiteExecution, WorkspacePanel } from "../types";
 
@@ -64,11 +68,17 @@ export function Sidebar({
     };
 
     const navItems = [
+<<<<<<< HEAD
+=======
+        { id: 'api-testing', label: 'API Lab', icon: Server },
+        { id: 'automation', label: 'Automation Hub', icon: Zap },
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
         { id: 'defect-studio', label: 'Defect Studio', icon: Bug },
         { id: 'automation', label: 'Automation Hub', icon: Play },
         { id: 'api-testing', label: 'API Lab', icon: Code2 },
         { id: 'memory-vault', label: 'Memory Vault', icon: Database },
         { id: 'jira', label: 'Settings', icon: Settings },
+        { id: 'memory-vault', label: 'Memory Vault', icon: Database },
     ] as const;
 
     return (

@@ -4,7 +4,10 @@ export type MemorySourceType =
     | "jira_story"
     | "generated_test_cases"
     | "defect"
+<<<<<<< HEAD
     | "defect_converted_test_case"
+=======
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     | "api_spec"
     | "api_test_cases"
     | "automation_summary"
@@ -39,6 +42,7 @@ export function projectKeyFromText(text?: string | null, fallback?: string | nul
     return normalizeProjectKey(issue || fallback);
 }
 
+<<<<<<< HEAD
 export function normalizeJiraId(value?: string | null) {
     return String(value || "").trim().toUpperCase().match(/[A-Z][A-Z0-9]+-\d+/)?.[0] || "";
 }
@@ -54,6 +58,8 @@ export function memoryIdForGeneratedTestCases(jiraId?: string | null, fallbackId
     return fallbackId ? `mv_testcases_${fallbackId.replace(/[^a-zA-Z0-9_]/g, "_")}` : "";
 }
 
+=======
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 export function loadMemoryVaultRecords(): MemoryVaultRecord[] {
     if (!canUseStorage()) return [];
     try {
@@ -101,6 +107,7 @@ export function findMemoryVaultRecord(id?: string | null) {
     return loadMemoryVaultRecords().find(item => item.id === id) || null;
 }
 
+<<<<<<< HEAD
 export function memoryIdForDefectConvertedTestCase(defectId?: string | null) {
     const normalized = String(defectId || "").trim().toUpperCase();
     return normalized ? `mv_defect_tc_${normalized.replace(/[^A-Z0-9_]/g, "_")}` : "";
@@ -166,6 +173,8 @@ export function upsertDefectConvertedTestCase(input: {
     });
 }
 
+=======
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 export function buildMemoryContextBlock(record: MemoryVaultRecord) {
     return [
         "MEMORY VAULT CONTEXT:",

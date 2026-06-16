@@ -9,10 +9,14 @@ import { fetchJiraStory } from "@/src/services/jira/jira.service";
 import { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
 import {
     buildMemoryContextBlock,
+<<<<<<< HEAD
     memoryIdForGeneratedTestCases,
     memoryIdForJiraStory,
     MemoryVaultRecord,
     normalizeJiraId,
+=======
+    MemoryVaultRecord,
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     normalizeProjectKey,
     projectKeyFromText,
     upsertMemoryVaultRecord,
@@ -570,15 +574,22 @@ export function useTCGenWorkspace() {
         setAttachedDocuments(prev => prev.filter(doc => doc.name !== name));
     };
 
+<<<<<<< HEAD
     const handleUseMemoryAsContext = (record: MemoryVaultRecord, destination: WorkspacePanel | 'testcases' = 'testcases') => {
         setAttachedMemoryContext(record);
         setActivePanel(destination);
+=======
+    const handleUseMemoryAsContext = (record: MemoryVaultRecord) => {
+        setAttachedMemoryContext(record);
+        setActivePanel('testcases');
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     };
 
     const handleClearMemoryContext = () => {
         setAttachedMemoryContext(null);
     };
 
+<<<<<<< HEAD
     const ensureJiraStoryInMemory = async (jiraStoryId?: string) => {
         const jiraId = normalizeJiraId(jiraStoryId);
         if (!jiraId) return null;
@@ -612,11 +623,15 @@ export function useTCGenWorkspace() {
     };
 
     const saveGeneratedTestCasesToMemory = async (params: {
+=======
+    const saveGeneratedTestCasesToMemory = (params: {
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
         prompt: string;
         result: ParsedTestCaseResult;
         jiraStoryId?: string;
         sessionTitle?: string;
     }) => {
+<<<<<<< HEAD
         const jiraId = normalizeJiraId(params.jiraStoryId);
         const projectKey = projectKeyFromText(jiraId || params.prompt);
         const linkedMemoryStoryId = await ensureJiraStoryInMemory(jiraId);
@@ -633,6 +648,16 @@ export function useTCGenWorkspace() {
                 generatedFromStoryId: jiraId || undefined,
                 linkedMemoryStoryId,
                 testCases: params.result.testCases,
+=======
+        const projectKey = projectKeyFromText(params.jiraStoryId || params.prompt);
+        upsertMemoryVaultRecord({
+            projectKey,
+            sourceType: "generated_test_cases",
+            title: params.jiraStoryId || params.sessionTitle || generateWorkspaceName(params.prompt),
+            content: JSON.stringify(params.result.testCases, null, 2),
+            metadata: {
+                jiraStoryId: params.jiraStoryId,
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                 prompt: params.prompt,
                 count: params.result.testCases.length,
             },
@@ -656,11 +681,17 @@ export function useTCGenWorkspace() {
         });
     };
 
+<<<<<<< HEAD
     const saveAutomationSummaryToMemory = (summary: AutomationRunResponse | AutomationExecutionSummary & { status?: string; suite?: string }, prompt?: string, session?: HistoryItem | null) => {
         if (!summary.runId) return;
         const storyId = session?.aiOptions?.jiraStoryId || "";
         const generatedTestCaseMemoryId = memoryIdForGeneratedTestCases(storyId, session?.title);
         const projectKey = projectKeyFromText(storyId || prompt || summary.runId);
+=======
+    const saveAutomationSummaryToMemory = (summary: AutomationRunResponse | AutomationExecutionSummary & { status?: string; suite?: string }, prompt?: string) => {
+        if (!summary.runId) return;
+        const projectKey = projectKeyFromText(prompt || summary.runId);
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
         upsertMemoryVaultRecord({
             id: `automation-${summary.runId}`,
             projectKey,
@@ -682,10 +713,13 @@ export function useTCGenWorkspace() {
                 runId: summary.runId,
                 suite: summary.suite || "generated",
                 status: summary.status,
+<<<<<<< HEAD
                 storyId,
                 linkedMemoryStoryId: storyId ? memoryIdForJiraStory(storyId) : undefined,
                 generatedTestCaseMemoryId,
                 generatedTestCaseIds: session?.result?.testCases?.map(testCase => testCase.testCaseId) || [],
+=======
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                 playwrightReportUrl: summary.playwrightReportUrl,
                 allureReportUrl: summary.allureReportUrl,
                 healingReportUrl: summary.healingReportUrl,
@@ -870,7 +904,11 @@ export function useTCGenWorkspace() {
                     : s
             ));
             if (parsedResult?.testCases?.length) {
+<<<<<<< HEAD
                 await saveGeneratedTestCasesToMemory({
+=======
+                saveGeneratedTestCasesToMemory({
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                     prompt: currentPrompt,
                     result: parsedResult,
                     jiraStoryId: generationOptions.jiraStoryId,
@@ -1084,7 +1122,11 @@ export function useTCGenWorkspace() {
                                 const data = JSON.parse(line.slice('__RESULT__:'.length));
                                 if (data.type === 'summary') {
                                     setExecutionSummary(data);
+<<<<<<< HEAD
                                     saveAutomationSummaryToMemory(data, currentThread?.prompt, currentThread);
+=======
+                                    saveAutomationSummaryToMemory(data, currentThread?.prompt);
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                                     if (data.playwrightReportUrl || data.reportUrl) setReportUrl(data.playwrightReportUrl || data.reportUrl);
                                     showAutomationToast({
                                         type: data.status === 'partial_success' ? 'partial_success' : data.failed > 0 ? 'failed' : 'success',
@@ -1127,10 +1169,13 @@ export function useTCGenWorkspace() {
         const targetId = activeId;
         const currentThread = sessions.find(s => s.id === targetId);
         focusAutomationLogs();
+<<<<<<< HEAD
         setExecutionLogs([]);
         setExecutionSummary(null);
         setPassedTests([]);
         setFailedTests([]);
+=======
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
         const startedAt = new Date().toISOString();
         const runningState: SuiteExecution = { status: 'running', lastRunAt: startedAt };
 
@@ -1195,7 +1240,11 @@ export function useTCGenWorkspace() {
                 reportUrl: payload.playwrightReportUrl || payload.reportUrl,
                 persistent: suiteState.status === 'failed' || payload.status === 'partial_success' || Boolean(payload.playwrightReportUrl || payload.reportUrl),
             });
+<<<<<<< HEAD
             saveAutomationSummaryToMemory({ ...payload, suite }, currentThread?.prompt, currentThread);
+=======
+            saveAutomationSummaryToMemory({ ...payload, suite }, currentThread?.prompt);
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 
             if (targetId) {
                 setSessions(prev => prev.map(s =>

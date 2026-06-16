@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+<<<<<<< HEAD
 import { Database, Eye, Search, Trash2, Link2, X } from "lucide-react";
+=======
+import { Database, Eye, Search, Trash2, Link2 } from "lucide-react";
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 import {
     deleteMemoryVaultRecord,
     loadMemoryVaultRecords,
@@ -13,7 +17,10 @@ const sourceLabels: Record<MemorySourceType, string> = {
     jira_story: "Jira Story",
     generated_test_cases: "Generated Test Cases",
     defect: "Defect",
+<<<<<<< HEAD
     defect_converted_test_case: "Defect Converted Test Case",
+=======
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     api_spec: "API Spec",
     api_test_cases: "API Test Cases",
     automation_summary: "Automation Summary",
@@ -21,7 +28,11 @@ const sourceLabels: Record<MemorySourceType, string> = {
 };
 
 type MemoryVaultPanelProps = {
+<<<<<<< HEAD
     onUseAsContext: (record: MemoryVaultRecord, destination?: "testcases" | "automation" | "api-testing" | "defect-studio") => void;
+=======
+    onUseAsContext: (record: MemoryVaultRecord) => void;
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     attachedContextId?: string | null;
 };
 
@@ -31,12 +42,16 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
     const [sourceType, setSourceType] = useState<MemorySourceType | "all">("all");
     const [query, setQuery] = useState("");
     const [viewRecord, setViewRecord] = useState<MemoryVaultRecord | null>(null);
+<<<<<<< HEAD
     const [deleteRecord, setDeleteRecord] = useState<MemoryVaultRecord | null>(null);
     const [contextRecord, setContextRecord] = useState<MemoryVaultRecord | null>(null);
+=======
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 
     const refresh = () => setRecords(loadMemoryVaultRecords());
 
     useEffect(() => {
+<<<<<<< HEAD
         const timeout = window.setTimeout(() => refresh(), 0);
         const handler = () => refresh();
         window.addEventListener("tcgen-memory-vault-updated", handler);
@@ -55,6 +70,12 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
+=======
+        refresh();
+        const handler = () => refresh();
+        window.addEventListener("tcgen-memory-vault-updated", handler);
+        return () => window.removeEventListener("tcgen-memory-vault-updated", handler);
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     }, []);
 
     const projectKeys = useMemo(() => Array.from(new Set(records.map(item => item.projectKey))).sort(), [records]);
@@ -75,6 +96,7 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
     }, [projectKey, query, records, sourceType]);
 
     const handleDelete = (record: MemoryVaultRecord) => {
+<<<<<<< HEAD
         deleteMemoryVaultRecord(record.id);
         if (viewRecord?.id === record.id) setViewRecord(null);
         setDeleteRecord(null);
@@ -158,6 +180,14 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
         ? "bg-violet-50/70 dark:bg-violet-950/20"
         : "";
 
+=======
+        if (!window.confirm(`Delete "${record.title}" from Memory Vault?`)) return;
+        deleteMemoryVaultRecord(record.id);
+        if (viewRecord?.id === record.id) setViewRecord(null);
+        refresh();
+    };
+
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     return (
         <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-5">
             <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -188,33 +218,54 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
             </section>
 
             <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+<<<<<<< HEAD
                 <div className="grid grid-cols-[110px_160px_1fr_180px_150px_220px] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
                     <div>Project Key</div>
                     <div>Source Type</div>
                     <div>Title / ID</div>
                     <div>Linked To</div>
+=======
+                <div className="grid grid-cols-[120px_170px_1fr_160px_220px] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+                    <div>Project Key</div>
+                    <div>Source Type</div>
+                    <div>Title / ID</div>
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                     <div>Created Date</div>
                     <div>Actions</div>
                 </div>
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                     {filteredRecords.length ? filteredRecords.map(record => (
+<<<<<<< HEAD
                         <article key={record.id} className={`grid grid-cols-[110px_160px_1fr_180px_150px_220px] items-center gap-3 px-4 py-3 text-sm ${recordClass(record)}`}>
+=======
+                        <article key={record.id} className="grid grid-cols-[120px_170px_1fr_160px_220px] items-center gap-3 px-4 py-3 text-sm">
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                             <div className="font-bold text-[#10A37F]">{record.projectKey}</div>
                             <div className="text-gray-600 dark:text-gray-300">{sourceLabels[record.sourceType]}</div>
                             <div className="min-w-0">
                                 <p className="truncate font-semibold text-gray-900 dark:text-white">{record.title}</p>
                                 {attachedContextId === record.id && <p className="mt-0.5 text-xs font-semibold text-[#10A37F]">Attached to next generation</p>}
                             </div>
+<<<<<<< HEAD
                             <div className="truncate text-xs font-semibold text-gray-600 dark:text-gray-300">{linkedToLabel(record)}</div>
+=======
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                             <div className="text-xs text-gray-500">{new Date(record.createdAt).toLocaleString()}</div>
                             <div className="flex flex-wrap gap-2">
                                 <button onClick={() => setViewRecord(record)} className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
                                     <Eye className="h-3.5 w-3.5" /> View
                                 </button>
+<<<<<<< HEAD
                                 <button onClick={() => setContextRecord(record)} className="inline-flex items-center gap-1.5 rounded-md border border-[#10A37F]/30 px-2.5 py-1.5 text-xs font-bold text-[#10A37F] hover:bg-[#10A37F]/10">
                                     <Link2 className="h-3.5 w-3.5" /> Use as Context
                                 </button>
                                 <button onClick={() => setDeleteRecord(record)} className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/20">
+=======
+                                <button onClick={() => onUseAsContext(record)} className="inline-flex items-center gap-1.5 rounded-md border border-[#10A37F]/30 px-2.5 py-1.5 text-xs font-bold text-[#10A37F] hover:bg-[#10A37F]/10">
+                                    <Link2 className="h-3.5 w-3.5" /> Use as Context
+                                </button>
+                                <button onClick={() => handleDelete(record)} className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/20">
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                                     <Trash2 className="h-3.5 w-3.5" /> Delete
                                 </button>
                             </div>
@@ -233,6 +284,7 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
                                 <h3 className="font-bold text-gray-900 dark:text-white">{viewRecord.title}</h3>
                                 <p className="mt-1 text-xs text-gray-500">{viewRecord.projectKey} - {sourceLabels[viewRecord.sourceType]}</p>
                             </div>
+<<<<<<< HEAD
                             <button onClick={() => setViewRecord(null)} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close view modal">
                                 <X className="h-4 w-4" />
                             </button>
@@ -325,6 +377,11 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
                         <div className="flex justify-end border-t border-gray-200 p-4 dark:border-gray-800">
                             <button onClick={() => setContextRecord(null)} className="h-9 rounded-lg border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
                         </div>
+=======
+                            <button onClick={() => setViewRecord(null)} className="rounded-md px-2 py-1 text-sm font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">Close</button>
+                        </div>
+                        <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap p-4 text-xs leading-6 text-gray-700 dark:text-gray-200">{viewRecord.content}</pre>
+>>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                     </section>
                 </div>
             )}
