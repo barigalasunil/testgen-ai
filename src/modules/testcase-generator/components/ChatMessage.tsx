@@ -3,7 +3,7 @@
 import { Bot, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TestCaseTable } from "./TestCaseTable";
-import { TestCase } from "../types";
+import { QualityReport, TestCase } from "../types";
 
 interface TestCaseResult {
     testCases: TestCase[];
@@ -18,6 +18,7 @@ interface ChatMessageProps {
     content?: string;
     isTable?: boolean;
     tableData?: { testCases: TestCase[] };
+    qualityReport?: QualityReport;
     jiraStoryId?: string;
     platformType?: "web" | "mobile" | "api" | "automation";
     onCopy?: () => void;
@@ -38,6 +39,7 @@ export function ChatMessage({
     content, 
     isTable, 
     tableData, 
+    qualityReport,
     jiraStoryId,
     platformType,
     onCopy, 
@@ -81,6 +83,7 @@ export function ChatMessage({
                         isTestCaseResult(tableData) ? (
                             <TestCaseTable 
                                 data={tableData} 
+                                qualityReport={qualityReport}
                                 jiraStoryId={jiraStoryId}
                                 platformType={platformType}
                                 onCopy={onCopy || (() => {})} 

@@ -12,6 +12,7 @@ export type TestCase = {
     
     // Traceability fields
     linkedRequirementId?: string;
+    linkedAcceptanceCriteriaIds?: string[];
     projectKey?: string;
     defectId?: string;
     executionStatus?: 'Passed' | 'Failed' | 'Blocked' | 'Untested';
@@ -57,6 +58,57 @@ export type AutomationRunRecord = {
         allureReport?: string;
         healingReport?: string;
     };
+};
+
+export type QualityRiskLevel = 'Low' | 'Medium' | 'High';
+
+export type TraceabilityMatrixRow = {
+    acceptanceCriterion: string;
+    testCaseIds: string[];
+    automationRunIds: string[];
+    defectIds: string[];
+    memoryRecordIds: string[];
+};
+
+export type TestCaseQualityScore = {
+    overall: number;
+    requirementCoverage: number;
+    positiveCoverage: number;
+    negativeCoverage: number;
+    boundaryCoverage: number;
+    duplicateDetection: number;
+    clarity: number;
+    missingScenarios: number;
+};
+
+export type RagasStyleScore = {
+    available: boolean;
+    unavailableReason?: string;
+    contextRelevance?: number;
+    contextPrecision?: number;
+    contextRecall?: number;
+    faithfulness?: number;
+    answerRelevance?: number;
+    hallucinationRisk: QualityRiskLevel;
+};
+
+export type QualityReport = {
+    id: string;
+    generatedAt: string;
+    jiraStoryId?: string;
+    requirement: string;
+    acceptanceCriteria: string[];
+    qualityScore: TestCaseQualityScore;
+    ragasScore: RagasStyleScore;
+    traceabilityMatrix: TraceabilityMatrixRow[];
+    acToTestCaseMapping: TraceabilityMatrixRow[];
+    missingCoverage: string[];
+    duplicateScenarios: {
+        scenario: string;
+        testCaseIds: string[];
+    }[];
+    improvementSuggestions: string[];
+    memoryVaultRecordIds: string[];
 };
 
 export type SuiteExecution = {
@@ -108,7 +160,7 @@ export type AiGenerationMeta = {
 };
 
 export type PlatformType = 'web' | 'mobile' | 'api' | 'automation';
-export type WorkspacePanel = 'testcases' | 'api-testing' | 'automation' | 'defect-studio' | 'jira' | 'memory-vault';
+export type WorkspacePanel = 'testcases' | 'api-testing' | 'automation' | 'defect-studio' | 'jira' | 'memory-vault' | 'traceability';
 
 export type WorkspaceSectionHeader = {
     title: string;
@@ -124,12 +176,40 @@ export type AiGenerationOptions = {
     jiraStoryId?: string;
 };
 
+export type ConversationMessageType =
+    | 'jira_story'
+    | 'generated_test_cases'
+    | 'api_test_cases'
+    | 'automation_run'
+    | 'defect'
+    | 'quality_report';
+
+export type ConversationMessage = {
+    id: string;
+    type: ConversationMessageType;
+    title?: string;
+    prompt?: string;
+    platform?: PlatformType;
+    result?: { testCases: TestCase[] } | null;
+    qualityReport?: QualityReport;
+    error?: string | null;
+    aiMeta?: AiGenerationMeta;
+    aiOptions?: AiGenerationOptions;
+    automationRun?: AutomationRunRecord;
+    defectId?: string;
+    memoryRecordId?: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
 export type ConversationSession = {
     id: string;
     title?: string;
     prompt: string;
     platform: PlatformType;
+    messages?: ConversationMessage[];
     result: { testCases: TestCase[] } | null;
+    qualityReport?: QualityReport;
     error: string | null;
     aiMeta?: AiGenerationMeta;
     aiOptions?: AiGenerationOptions;

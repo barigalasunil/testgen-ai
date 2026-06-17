@@ -11,16 +11,15 @@ import { AutomationSidebarContent } from "../AutomationSidebarContent";
 import { ApiTestingWorkspace } from "@/src/modules/api-testing/ApiTestingWorkspace";
 import { DefectStudio } from "@/src/modules/defect-studio/DefectStudio";
 import { MemoryVaultPanel } from "@/src/modules/memory-vault/MemoryVaultPanel";
+import { TraceabilityMatrixPanel } from "@/src/modules/traceability/TraceabilityMatrixPanel";
 import { 
   X, 
   RefreshCw, 
-  Settings, 
   AlertCircle,
   Plus,
   Send,
   Wifi,
   WifiOff,
-  Server,
   Bot
 } from "lucide-react";
 
@@ -46,11 +45,9 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         modelLoadError,
         selectedModel, setSelectedModel,
         provider, setProvider,
-        providerStatus,
         providerStatusInfo,
         platformType, setPlatformType,
         scriptCode,
-        scriptFileName,
         isGeneratingScript,
         isRunningAutomation,
         executionLogs,
@@ -78,7 +75,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
         handleGenerateScript,
         handleRunGeneratedScript,
         handleExecuteSuite,
-        copyTableData,
+        copyTestCaseData,
         handleCopyScript,
         handleDownloadScript,
         attachedDocuments,
@@ -105,25 +102,39 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
     const isOllama = provider === 'ollama';
     const ollamaHasChatModels = isOllama && Array.isArray(providerStatusInfo.chatModels) && providerStatusInfo.chatModels.length > 0;
     const ollamaReachableNoModels = isOllama && !providerStatusInfo.connected && providerStatusInfo.chatModels && providerStatusInfo.chatModels.length === 0;
+    const conversationMessages = currentThread?.messages?.length
+        ? currentThread.messages
+        : currentThread?.result || currentThread?.error
+            ? [{
+                id: currentThread.id,
+                type: "generated_test_cases" as const,
+                title: currentThread.title,
+                prompt: currentThread.prompt,
+                platform: currentThread.platform,
+                result: currentThread.result,
+                qualityReport: currentThread.qualityReport,
+                error: currentThread.error,
+                aiOptions: currentThread.aiOptions,
+                aiMeta: currentThread.aiMeta,
+                createdAt: currentThread.createdAt,
+                updatedAt: currentThread.updatedAt,
+            }]
+            : [];
 
     let statusClasses: string;
-    let statusDotClass: string;
     let statusText: string;
 
     if (isOllama && !providerStatusInfo.connected && providerStatusInfo.chatModels) {
         statusClasses = 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/30';
-        statusDotClass = 'bg-amber-500';
         statusText = `Ollama Local Not Ready — No generation models found`;
     } else if (providerStatusInfo.connected) {
         statusClasses = 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900/30';
-        statusDotClass = 'bg-green-500';
         const label = providerOptions.find(o => o.value === provider)?.label || 'AI Provider';
         statusText = isOllama
             ? `Ollama Local Online (${providerStatusInfo.chatModels?.length || 0} model${(providerStatusInfo.chatModels?.length || 0) !== 1 ? 's' : ''})`
             : `${label} Online`;
     } else {
         statusClasses = 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/30';
-        statusDotClass = 'bg-red-500';
         const label = providerOptions.find(o => o.value === provider)?.label || 'AI Provider';
         statusText = isOllama ? 'Ollama Local Offline' : `${label} Offline`;
     }
@@ -349,9 +360,13 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                 />
                             )}
 
+                            {activePanel === 'traceability' && (
+                                <TraceabilityMatrixPanel />
+                            )}
+
                             {activePanel === 'testcases' && (
                                 <div className="flex flex-col min-h-full">
-                                    {!currentThread?.prompt ? (
+                                    {!currentThread?.prompt && conversationMessages.length === 0 ? (
                                         <div className="flex-1 flex items-center justify-center p-8 bg-gray-50/50 dark:bg-gray-950/50">
                                             <div className="max-w-md w-full text-center space-y-6">
                                                 <div className="w-16 h-16 bg-[#10A37F]/10 dark:bg-[#10A37F]/20 rounded-2xl flex items-center justify-center mx-auto ring-8 ring-[#10A37F]/5">
@@ -359,7 +374,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                                 </div>
                                                 <div className="space-y-2">
                                                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">Start your first workspace</h3>
-                                                    <p className="text-gray-500 dark:text-gray-400 text-sm">Enter a prompt below describing a feature, and I'll generate comprehensive test cases for you.</p>
+                                                    <p className="text-gray-500 dark:text-gray-400 text-sm">Enter a prompt below describing a feature, and I&apos;ll generate comprehensive test cases for you.</p>
                                                 </div>
                                                 <div className="grid grid-cols-1 gap-2 pt-2">
                                                     {['"Login form with email and password"', '"Shopping cart checkout flow"', '"User profile API validation"'].map((suggestion) => (
@@ -376,65 +391,102 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                         </div>
                                     ) : (
                                         <div className="p-4 md:p-8 space-y-8 max-w-6xl mx-auto w-full">
-                                            {/* User Prompt */}
-                                            <div className="flex gap-4 group">
-                                                <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-800 flex items-center justify-center shrink-0 shadow-sm border border-gray-300 dark:border-gray-700">
-                                                    <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">User</span>
-                                                </div>
-                                                <div className="flex-1 pt-1">
-                                                    <p className="text-gray-800 dark:text-gray-200 font-medium leading-relaxed">{currentThread.prompt}</p>
-                                                </div>
-                                            </div>
-
-                                            {/* Assistant Result */}
-                                            {(currentThread.result || currentThread.error) && (
-                                                <div className="flex gap-4">
-                                                    <div className="w-8 h-8 rounded-lg bg-[#10A37F] flex items-center justify-center shrink-0 shadow-md shadow-[#10A37F]/20">
-                                                        <Bot className="w-4 h-4 text-white" />
+                                            {conversationMessages.map((message) => (
+                                                <div key={message.id} className="space-y-4">
+                                                    <div className="flex gap-4 group">
+                                                        <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-800 flex items-center justify-center shrink-0 shadow-sm border border-gray-300 dark:border-gray-700">
+                                                            <span className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">User</span>
+                                                        </div>
+                                                        <div className="flex-1 pt-1">
+                                                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                                                                {message.aiOptions?.jiraStoryId && (
+                                                                    <span className="rounded-md bg-[#10A37F]/10 px-2 py-0.5 text-[11px] font-bold text-[#10A37F]">
+                                                                        {message.aiOptions.jiraStoryId}
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-[11px] font-medium text-gray-400">
+                                                                    {new Date(message.createdAt).toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-gray-800 dark:text-gray-200 font-medium leading-relaxed">{message.prompt || message.title}</p>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex-1 pt-1 space-y-6">
-                                                        {currentThread.error ? (
-                                                            <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 p-5 text-sm text-red-700 dark:text-red-300 shadow-sm">
-                                                                <div className="flex items-start gap-3">
-                                                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                                                                    <div className="min-w-0 flex-1">
-                                                                        <p className="font-semibold">Generation failed</p>
-                                                                        <p className="mt-1 text-red-600 dark:text-red-300">{currentThread.error}</p>
-                                                                        <button
-                                                                            onClick={() => handleSend(currentThread.prompt, currentThread.aiOptions)}
-                                                                            disabled={loading}
-                                                                            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-60"
-                                                                        >
-                                                                            <RefreshCw className="h-3.5 w-3.5" />
-                                                                            Retry
-                                                                        </button>
+
+                                                    <div className="flex gap-4">
+                                                        <div className="w-8 h-8 rounded-lg bg-[#10A37F] flex items-center justify-center shrink-0 shadow-md shadow-[#10A37F]/20">
+                                                            <Bot className="w-4 h-4 text-white" />
+                                                        </div>
+                                                        <div className="flex-1 pt-1 space-y-6">
+                                                            {message.error ? (
+                                                                <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 p-5 text-sm text-red-700 dark:text-red-300 shadow-sm">
+                                                                    <div className="flex items-start gap-3">
+                                                                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                                                        <div className="min-w-0 flex-1">
+                                                                            <p className="font-semibold">Generation failed</p>
+                                                                            <p className="mt-1 text-red-600 dark:text-red-300">{message.error}</p>
+                                                                            <button
+                                                                                onClick={() => handleSend(message.prompt || currentThread?.prompt || "", message.aiOptions)}
+                                                                                disabled={loading}
+                                                                                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-60"
+                                                                            >
+                                                                                <RefreshCw className="h-3.5 w-3.5" />
+                                                                                Retry
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden min-h-[400px]">
-                                                                <ChatMessage
-                                                                    role="assistant"
-                                                                    isTable
-                                                                    tableData={currentThread.result || undefined}
-                                                                    jiraStoryId={currentThread.aiOptions?.jiraStoryId || ''}
-                                                                    platformType={currentThread.platform}
-                                                                    onCopy={copyTableData}
-                                                                    onRegenerate={() => handleSend(currentThread.prompt, currentThread.aiOptions)}
-                                                                    onGenerateScript={handleGenerateScript}
-                                                                    onRunAutomation={handleRunGeneratedScript}
-                                                                    onCopyScript={handleCopyScript}
-                                                                    onDownloadScript={handleDownloadScript}
-                                                                    hasGeneratedScript={!!scriptCode}
-                                                                    isGeneratingScript={isGeneratingScript}
-                                                                    isRunningAutomation={isRunningAutomation}
-                                                                    onOpenJira={handleOpenJira}
-                                                                />
-                                                            </div>
-                                                        )}
+                                                            ) : message.result ? (
+                                                                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden min-h-[400px]">
+                                                                    <ChatMessage
+                                                                        role="assistant"
+                                                                        isTable
+                                                                        tableData={message.result}
+                                                                        qualityReport={message.qualityReport}
+                                                                        jiraStoryId={message.aiOptions?.jiraStoryId || ''}
+                                                                        platformType={message.platform || currentThread?.platform || "web"}
+                                                                        onCopy={() => copyTestCaseData(message.result?.testCases)}
+                                                                        onRegenerate={() => handleSend(message.prompt || currentThread?.prompt || "", message.aiOptions)}
+                                                                        onGenerateScript={handleGenerateScript}
+                                                                        onRunAutomation={handleRunGeneratedScript}
+                                                                        onCopyScript={handleCopyScript}
+                                                                        onDownloadScript={handleDownloadScript}
+                                                                        hasGeneratedScript={!!scriptCode}
+                                                                        isGeneratingScript={isGeneratingScript}
+                                                                        isRunningAutomation={isRunningAutomation}
+                                                                        onOpenJira={handleOpenJira}
+                                                                    />
+                                                                </div>
+                                                            ) : message.type === "automation_run" && message.automationRun ? (
+                                                                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                                                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                                        <div>
+                                                                            <p className="text-sm font-bold text-gray-900 dark:text-white">{message.title || "Automation Run"}</p>
+                                                                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                                                                Status: {message.automationRun.status} - Passed: {message.automationRun.passed ?? 0} - Failed: {message.automationRun.failed ?? 0}
+                                                                            </p>
+                                                                        </div>
+                                                                        <span className="rounded-full bg-[#10A37F]/10 px-2 py-1 text-xs font-bold text-[#10A37F]">
+                                                                            {message.automationRun.suite || "generated"}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="mt-4 flex flex-wrap gap-2">
+                                                                        {[
+                                                                            ["Playwright", message.automationRun.playwrightReportUrl],
+                                                                            ["Allure", message.automationRun.allureReportUrl],
+                                                                            ["Healing", message.automationRun.healingReportUrl],
+                                                                            ["Logs", message.automationRun.logUrl],
+                                                                        ].map(([label, url]) => url ? (
+                                                                            <a key={label} href={String(url)} target="_blank" rel="noreferrer" className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+                                                                                {label}
+                                                                            </a>
+                                                                        ) : null)}
+                                                                    </div>
+                                                                </div>
+                                                            ) : null}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            )}
+                                            ))}
                                             <div ref={messagesEndRef} className="h-40" />
                                         </div>
                                     )}

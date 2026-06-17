@@ -56,8 +56,66 @@ function getProjectRoot(): string {
 }
 
 function makeRunId(prefix: string) {
-    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
-    return `${prefix}-${stamp}`;
+    const now = new Date();
+    const stamp = [
+        String(now.getDate()).padStart(2, '0'),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getFullYear()),
+        String(now.getHours()).padStart(2, '0'),
+        String(now.getMinutes()).padStart(2, '0'),
+    ].join('');
+    const label = prefix
+        .replace(/[^a-z0-9]/gi, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join('') || 'Automation';
+    return `${stamp}_${label}`;
+}
+
+function removeDirectoryIfSafe(path: string, root: string) {
+    const relativePath = relative(root, path);
+    if (!relativePath || relativePath.startsWith('..')) return false;
+    if (!existsSync(path)) return false;
+    rmSync(path, { recursive: true, force: true });
+    return true;
+}
+
+function cleanupUnreferencedReportArtifacts(currentRunId: string) {
+    const rootDir = getProjectRoot();
+    const automationReportsDir = join(rootDir, 'automation', 'reports');
+    const publicReportsDir = join(rootDir, 'public', 'automation-reports');
+    const reportSubdirs = ['playwright-html', 'allure-results', 'allure-report', 'healing', 'logs', 'screenshots', 'traces'];
+    const deleted: string[] = [];
+
+    for (const subdir of reportSubdirs) {
+        const baseDir = join(automationReportsDir, subdir);
+        if (!existsSync(baseDir)) continue;
+        for (const item of readdirSync(baseDir)) {
+            const itemPath = join(baseDir, item);
+            if (item === currentRunId || !statSync(itemPath).isDirectory()) continue;
+            const publicCounterpart = join(publicReportsDir, item);
+            if (existsSync(publicCounterpart)) continue;
+            if (removeDirectoryIfSafe(itemPath, automationReportsDir)) deleted.push(relative(automationReportsDir, itemPath));
+        }
+    }
+
+    if (existsSync(publicReportsDir)) {
+        for (const item of readdirSync(publicReportsDir)) {
+            const itemPath = join(publicReportsDir, item);
+            if (item === currentRunId || !statSync(itemPath).isDirectory()) continue;
+            const hasLinkedArtifact = [
+                join(itemPath, 'playwright-html', 'index.html'),
+                join(itemPath, 'allure-report', 'index.html'),
+                join(itemPath, 'execution.log'),
+                join(itemPath, 'healing-report.md'),
+            ].some(existsSync);
+            if (hasLinkedArtifact) continue;
+            if (removeDirectoryIfSafe(itemPath, publicReportsDir)) deleted.push(relative(publicReportsDir, itemPath));
+        }
+    }
+
+    return deleted;
 }
 
 function makeArtifacts(runId: string): RunArtifacts {
@@ -121,7 +179,7 @@ function addMemoryLog(logs: string[], message: string) {
 }
 
 function suiteLabel(suite: SuiteName) {
-    return `${PROJECT_APP_NAME} ${suite}`;
+    return suite.charAt(0).toUpperCase() + suite.slice(1);
 }
 
 function publishReports(artifacts: RunArtifacts) {
@@ -140,6 +198,10 @@ function publishReports(artifacts: RunArtifacts) {
         }
         if (existsSync(artifacts.logPath)) {
             copyFileSync(artifacts.logPath, join(artifacts.publicRunDir, 'execution.log'));
+        }
+        const deleted = cleanupUnreferencedReportArtifacts(artifacts.runId);
+        if (deleted.length) {
+            console.info('[AUTOMATION] Cleaned unreferenced report artifact folders:', deleted.join(', '));
         }
     } catch (error) {
         console.warn('[AUTOMATION] Report publishing failed:', error instanceof Error ? error.message : String(error));
@@ -566,7 +628,7 @@ function writeAllureRunMetadata(params: {
         type: 'playwright',
         buildName: params.suiteName,
         buildUrl: PROJECT_BASE_URL,
-        reportName: `${params.suiteApp} ${params.suiteName}`,
+        reportName: `${params.artifacts.runId}`,
         reportUrl: params.artifacts.allureReportUrl,
     }, null, 2), 'utf-8');
 }

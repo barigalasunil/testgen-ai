@@ -1,40 +1,264 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-<<<<<<< HEAD
-import { Database, Eye, Search, Trash2, Link2, X } from "lucide-react";
-=======
-import { Database, Eye, Search, Trash2, Link2 } from "lucide-react";
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+    Activity,
+    Bug,
+    Database,
+    Eye,
+    FileCode2,
+    FileText,
+    FlaskConical,
+    Link2,
+    Search,
+    ShieldCheck,
+    Trash2,
+    X,
+} from "lucide-react";
 import {
     deleteMemoryVaultRecord,
     loadMemoryVaultRecords,
     MemorySourceType,
     MemoryVaultRecord,
+    migrateMemoryVaultRunNames,
 } from "@/src/services/memory-vault/memory-vault.service";
 
 const sourceLabels: Record<MemorySourceType, string> = {
-    jira_story: "Jira Story",
-    generated_test_cases: "Generated Test Cases",
+    jira_story: "Story",
+    generated_test_cases: "Test Cases",
     defect: "Defect",
-<<<<<<< HEAD
-    defect_converted_test_case: "Defect Converted Test Case",
-=======
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
+    defect_converted_test_case: "Test Cases",
+    quality_report: "Quality",
     api_spec: "API Spec",
     api_test_cases: "API Test Cases",
-    automation_summary: "Automation Summary",
-    document_metadata: "Document Metadata",
+    automation_summary: "Automation",
+    document_metadata: "Document",
 };
 
+const sourceIcons: Record<MemorySourceType, typeof FileText> = {
+    jira_story: FileText,
+    generated_test_cases: FlaskConical,
+    defect: Bug,
+    defect_converted_test_case: FlaskConical,
+    quality_report: ShieldCheck,
+    api_spec: FileCode2,
+    api_test_cases: FileCode2,
+    automation_summary: Activity,
+    document_metadata: FileText,
+};
+
+const badgeColors: Record<MemorySourceType, string> = {
+    jira_story: "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300",
+    generated_test_cases: "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300",
+    defect: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300",
+    defect_converted_test_case: "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300",
+    quality_report: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300",
+    api_spec: "bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300",
+    api_test_cases: "bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300",
+    automation_summary: "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
+    document_metadata: "bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+};
+
+const contextDestinations = [
+    { label: "Test Case Generation", value: "testcases" },
+    { label: "Automation Hub", value: "automation" },
+    { label: "API Lab", value: "api-testing" },
+    { label: "Defect Studio", value: "defect-studio" },
+] as const;
+
 type MemoryVaultPanelProps = {
-<<<<<<< HEAD
     onUseAsContext: (record: MemoryVaultRecord, destination?: "testcases" | "automation" | "api-testing" | "defect-studio") => void;
-=======
-    onUseAsContext: (record: MemoryVaultRecord) => void;
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     attachedContextId?: string | null;
 };
+
+function asArray(value: unknown): string[] {
+    return Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : [];
+}
+
+function jiraIdFor(record: MemoryVaultRecord) {
+    return String(
+        record.metadata?.jiraId ||
+        record.metadata?.jiraStoryId ||
+        record.metadata?.generatedFromStoryId ||
+        record.metadata?.storyId ||
+        record.metadata?.key ||
+        asArray(record.metadata?.linkedStoryIds)[0] ||
+        ""
+    );
+}
+
+function recordPrimaryId(record: MemoryVaultRecord) {
+    return jiraIdFor(record) || String(record.metadata?.issueKey || record.metadata?.runId || record.metadata?.testCaseId || record.title);
+}
+
+function compactAutomationRunId(value: string) {
+    const raw = String(value || "").trim();
+    const normalized = raw.match(/\d{12}_(?:Smoke|Sanity|Regression|Generated|SMK|SAN|REG)/i)?.[0] || raw;
+    return normalized
+        .replace(/_Smoke$/i, "_SMK")
+        .replace(/_Sanity$/i, "_SAN")
+        .replace(/_Regression$/i, "_REG");
+}
+
+function displayRecordId(record: MemoryVaultRecord) {
+    if (record.sourceType === "automation_summary") {
+        return compactAutomationRunId(String(record.metadata?.runId || recordPrimaryId(record)));
+    }
+    return recordPrimaryId(record);
+}
+
+function shouldShowSubtitle(record: MemoryVaultRecord, displayTitle: string) {
+    if (record.sourceType === "automation_summary") return false;
+    return record.title.trim() !== displayTitle.trim();
+}
+
+function compactDate(value: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return [
+        String(date.getDate()).padStart(2, "0"),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getFullYear()).slice(-2),
+    ].join("/");
+}
+
+function recordSearchText(record: MemoryVaultRecord) {
+    return [
+        record.projectKey,
+        sourceLabels[record.sourceType],
+        record.title,
+        jiraIdFor(record),
+        record.metadata?.issueKey,
+        record.metadata?.summary,
+        record.metadata?.scenario,
+        record.metadata?.testCaseId,
+        record.metadata?.runId,
+        record.content,
+    ].join(" ").toLowerCase();
+}
+
+function linkedRecordIds(record: MemoryVaultRecord) {
+    return [
+        ...asArray(record.metadata?.linkedStoryIds),
+        ...asArray(record.metadata?.linkedAcceptanceCriteriaIds),
+        ...asArray(record.metadata?.linkedTestCaseIds),
+        ...asArray(record.metadata?.linkedDefectIds),
+        ...asArray(record.metadata?.linkedAutomationRunIds),
+    ];
+}
+
+function eventLabel(record: MemoryVaultRecord) {
+    if (record.sourceType === "jira_story") return "Stored Jira story";
+    if (record.sourceType === "generated_test_cases") return "Generated test cases";
+    if (record.sourceType === "defect_converted_test_case") return "Converted defect to test case";
+    if (record.sourceType === "defect") return "Created defect";
+    if (record.sourceType === "automation_summary") return `Executed ${String(record.metadata?.runId || record.title || "automation")}`;
+    if (record.sourceType === "quality_report") return "Created quality report";
+    if (record.sourceType === "api_spec") return "Stored API specification";
+    if (record.sourceType === "api_test_cases") return "Generated API test cases";
+    return "Stored document";
+}
+
+function DetailBlock({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+        <section className="border-b border-slate-200 pb-5 last:border-b-0 dark:border-slate-800">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{title}</h3>
+            <div className="mt-3 text-sm leading-7 text-slate-700 dark:text-slate-200">{children}</div>
+        </section>
+    );
+}
+
+function MemoryDetailsModal({
+    record,
+    linkedRecords,
+    onClose,
+}: {
+    record: MemoryVaultRecord;
+    linkedRecords: MemoryVaultRecord[];
+    onClose: () => void;
+}) {
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") onClose();
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onClose]);
+
+    const timeline = [record, ...linkedRecords]
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const linkedTestCases = asArray(record.metadata?.linkedTestCaseIds);
+    const linkedDefects = asArray(record.metadata?.linkedDefectIds);
+    const linkedAutomationRuns = asArray(record.metadata?.linkedAutomationRunIds);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <section className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                    <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-wide text-[#10A37F]">{sourceLabels[record.sourceType]}</p>
+                        <h2 className="mt-1 truncate text-xl font-bold text-slate-900 dark:text-white">{recordPrimaryId(record)}</h2>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{record.title}</p>
+                    </div>
+                    <button onClick={onClose} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900" aria-label="Close details">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5">
+                    <DetailBlock title="Full Content">
+                        <p className="whitespace-pre-wrap">{record.content || "No content stored."}</p>
+                    </DetailBlock>
+
+                    <DetailBlock title="Linked Jira Story">
+                        <p>{jiraIdFor(record) || "No linked Jira story."}</p>
+                    </DetailBlock>
+
+                    <DetailBlock title="Linked Test Cases">
+                        {linkedTestCases.length ? <p>{linkedTestCases.join(", ")}</p> : <p>No linked test cases.</p>}
+                    </DetailBlock>
+
+                    <DetailBlock title="Linked Defects">
+                        {linkedDefects.length ? <p>{linkedDefects.join(", ")}</p> : <p>No linked defects.</p>}
+                    </DetailBlock>
+
+                    <DetailBlock title="Linked Automation Runs">
+                        {linkedAutomationRuns.length ? <p>{linkedAutomationRuns.join(", ")}</p> : <p>No linked automation runs.</p>}
+                    </DetailBlock>
+
+                    <DetailBlock title="Related Memory Vault Records">
+                        {linkedRecords.length ? (
+                            <ul className="space-y-2">
+                                {linkedRecords.map(item => (
+                                    <li key={item.id}><strong>{sourceLabels[item.sourceType]}</strong> - {item.title}</li>
+                                ))}
+                            </ul>
+                        ) : <p>No related records found.</p>}
+                    </DetailBlock>
+
+                    <DetailBlock title="Timeline">
+                        <div className="border-l border-slate-200 pl-4 dark:border-slate-800">
+                            {timeline.map(item => (
+                                <div key={item.id} className="relative pb-4">
+                                    <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#10A37F] dark:border-slate-950" />
+                                    <p className="text-xs font-bold text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>
+                                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">{eventLabel(item)}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.title}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </DetailBlock>
+                </div>
+
+                <div className="flex justify-end border-t border-slate-200 px-5 py-4 dark:border-slate-800">
+                    <button onClick={onClose} className="h-9 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">
+                        Close
+                    </button>
+                </div>
+            </section>
+        </div>
+    );
+}
 
 export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVaultPanelProps) {
     const [records, setRecords] = useState<MemoryVaultRecord[]>([]);
@@ -42,16 +266,15 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
     const [sourceType, setSourceType] = useState<MemorySourceType | "all">("all");
     const [query, setQuery] = useState("");
     const [viewRecord, setViewRecord] = useState<MemoryVaultRecord | null>(null);
-<<<<<<< HEAD
     const [deleteRecord, setDeleteRecord] = useState<MemoryVaultRecord | null>(null);
     const [contextRecord, setContextRecord] = useState<MemoryVaultRecord | null>(null);
-=======
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 
-    const refresh = () => setRecords(loadMemoryVaultRecords());
+    const refresh = () => {
+        migrateMemoryVaultRunNames();
+        setRecords(loadMemoryVaultRecords());
+    };
 
     useEffect(() => {
-<<<<<<< HEAD
         const timeout = window.setTimeout(() => refresh(), 0);
         const handler = () => refresh();
         window.addEventListener("tcgen-memory-vault-updated", handler);
@@ -70,15 +293,11 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-=======
-        refresh();
-        const handler = () => refresh();
-        window.addEventListener("tcgen-memory-vault-updated", handler);
-        return () => window.removeEventListener("tcgen-memory-vault-updated", handler);
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     }, []);
 
-    const projectKeys = useMemo(() => Array.from(new Set(records.map(item => item.projectKey))).sort(), [records]);
+    const projectOptions = useMemo(() => {
+        return Array.from(new Set(records.map(record => record.projectKey).filter(Boolean))).sort();
+    }, [records]);
 
     const filteredRecords = useMemo(() => {
         const needle = query.trim().toLowerCase();
@@ -86,262 +305,171 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
             if (projectKey !== "all" && record.projectKey !== projectKey) return false;
             if (sourceType !== "all" && record.sourceType !== sourceType) return false;
             if (!needle) return true;
-            return [
-                record.projectKey,
-                sourceLabels[record.sourceType],
-                record.title,
-                record.content,
-            ].join(" ").toLowerCase().includes(needle);
+            return recordSearchText(record).includes(needle);
         });
     }, [projectKey, query, records, sourceType]);
 
+    const linkedRecordsFor = useCallback((record: MemoryVaultRecord) => {
+        const jiraId = jiraIdFor(record);
+        const ids = new Set(linkedRecordIds(record));
+        const linkedStoryId = String(record.metadata?.linkedMemoryStoryId || "");
+        const generatedTestCaseMemoryId = String(record.metadata?.generatedTestCaseMemoryId || "");
+        return records.filter(item => {
+            if (item.id === record.id) return false;
+            if (item.id === linkedStoryId || item.id === generatedTestCaseMemoryId) return true;
+            if (item.metadata?.linkedMemoryStoryId === record.id) return true;
+            if (item.metadata?.generatedTestCaseMemoryId === record.id) return true;
+            if (ids.has(recordPrimaryId(item)) || ids.has(item.id)) return true;
+            if (jiraId && (
+                item.metadata?.jiraId === jiraId ||
+                item.metadata?.jiraStoryId === jiraId ||
+                item.metadata?.storyId === jiraId ||
+                item.metadata?.generatedFromStoryId === jiraId ||
+                item.title.includes(jiraId)
+            )) return true;
+            return false;
+        });
+    }, [records]);
+
     const handleDelete = (record: MemoryVaultRecord) => {
-<<<<<<< HEAD
         deleteMemoryVaultRecord(record.id);
-        if (viewRecord?.id === record.id) setViewRecord(null);
         setDeleteRecord(null);
         refresh();
     };
 
-    const jiraIdFor = (record: MemoryVaultRecord) => String(
-        record.metadata?.jiraId ||
-        record.metadata?.jiraStoryId ||
-        record.metadata?.generatedFromStoryId ||
-        record.metadata?.storyId ||
-        ""
-    );
-
-    const linkedRecordsFor = (record: MemoryVaultRecord) => {
-        const jiraId = jiraIdFor(record);
-        const testCaseIds = Array.isArray(record.metadata?.testCases)
-            ? (record.metadata.testCases as { testCaseId?: string }[]).map(item => item.testCaseId).filter(Boolean)
-            : [];
-        if (record.sourceType === "jira_story") {
-            return records.filter(item =>
-                item.id !== record.id &&
-                (item.metadata?.linkedMemoryStoryId === record.id ||
-                    item.metadata?.generatedFromStoryId === jiraId ||
-                    item.metadata?.storyId === jiraId ||
-                    item.metadata?.jiraId === jiraId)
-            );
-        }
-        if (record.sourceType === "generated_test_cases") {
-            return records.filter(item =>
-                item.id !== record.id &&
-                (item.id === record.metadata?.linkedMemoryStoryId ||
-                    item.metadata?.generatedTestCaseMemoryId === record.id ||
-                    item.metadata?.storyId === jiraId ||
-                    item.metadata?.linkedMemoryStoryId === record.metadata?.linkedMemoryStoryId ||
-                    (typeof item.metadata?.testCaseId === "string" && testCaseIds.includes(item.metadata.testCaseId)))
-            );
-        }
-        if (record.sourceType === "automation_summary") {
-            const runId = String(record.metadata?.runId || "");
-            return records.filter(item => item.id !== record.id && item.metadata?.runId === runId);
-        }
-        const linkedStoryId = String(record.metadata?.linkedMemoryStoryId || "");
-        return records.filter(item =>
-            item.id === linkedStoryId ||
-            (item.sourceType === "jira_story" && String(item.metadata?.jiraId || item.metadata?.key || item.title) === jiraId)
-        );
-    };
-
-    const linkedToLabel = (record: MemoryVaultRecord) => {
-        if (record.sourceType === "generated_test_cases") {
-            const jiraId = String(record.metadata?.generatedFromStoryId || record.metadata?.jiraId || record.metadata?.jiraStoryId || "");
-            return jiraId ? `${jiraId} Jira Story` : "No linked story";
-        }
-        if (record.sourceType === "defect_converted_test_case") {
-            return record.metadata?.sourceDefectId ? `${String(record.metadata.sourceDefectId)} Defect` : "Source defect";
-        }
-        if (record.sourceType === "jira_story") {
-            const count = linkedRecordsFor(record).filter(item => item.sourceType === "generated_test_cases").length;
-            return `${count} Generated Test Case Set${count === 1 ? "" : "s"}`;
-        }
-        const linked = linkedRecordsFor(record)[0];
-        return linked ? linked.title : "None";
-    };
-
-    const linkedStats = viewRecord ? (() => {
-        const linked = linkedRecordsFor(viewRecord);
-        return {
-            generatedTestCases: linked.filter(item => item.sourceType === "generated_test_cases").length,
-            defects: linked.filter(item => item.sourceType === "defect").length,
-            automationRuns: viewRecord.sourceType === "automation_summary"
-                ? 1
-                : linked.filter(item => item.sourceType === "automation_summary").length,
-            linkedStory: viewRecord.sourceType === "generated_test_cases"
-                ? linked.find(item => item.sourceType === "jira_story")?.title || String(viewRecord.metadata?.generatedFromStoryId || "")
-                : "",
-        };
-    })() : null;
-
-    const recordClass = (record: MemoryVaultRecord) => record.sourceType === "defect_converted_test_case"
-        ? "bg-violet-50/70 dark:bg-violet-950/20"
-        : "";
-
-=======
-        if (!window.confirm(`Delete "${record.title}" from Memory Vault?`)) return;
-        deleteMemoryVaultRecord(record.id);
-        if (viewRecord?.id === record.id) setViewRecord(null);
-        refresh();
-    };
-
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     return (
-        <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-5">
-            <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#10A37F]/10 text-[#10A37F]">
-                        <Database className="h-5 w-5" />
-                    </div>
+        <div className="flex h-full min-h-0 flex-col bg-white text-slate-900 dark:bg-gray-950 dark:text-slate-100">
+            <header className="border-b border-slate-200 px-4 py-4 dark:border-slate-800 md:px-6">
+                <div className="flex items-center gap-2">
+                    <Database className="h-5 w-5 text-[#10A37F]" />
                     <div>
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Memory Vault</h2>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Project-isolated knowledge for future test generation.</p>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Memory Vault</h2>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Searchable knowledge index for stories, test assets, defects, runs, and reports.</p>
                     </div>
                 </div>
+            </header>
 
-                <div className="grid gap-3 md:grid-cols-[180px_220px_1fr]">
-                    <select value={projectKey} onChange={event => setProjectKey(event.target.value)} className="h-10 rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-semibold text-gray-700 outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">
+            <section className="border-b border-slate-200 px-4 py-3 dark:border-slate-800 md:px-6">
+                <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_180px_240px]">
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                        <input
+                            value={query}
+                            onChange={event => setQuery(event.target.value)}
+                            placeholder="Search Memory Vault"
+                            className="h-9 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950"
+                        />
+                    </div>
+                    <select
+                        value={projectKey}
+                        onChange={event => setProjectKey(event.target.value)}
+                        className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm outline-none focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950"
+                    >
                         <option value="all">All Projects</option>
-                        {projectKeys.map(key => <option key={key} value={key}>{key}</option>)}
+                        {projectOptions.map(project => <option key={project} value={project}>{project}</option>)}
                     </select>
-                    <select value={sourceType} onChange={event => setSourceType(event.target.value as MemorySourceType | "all")} className="h-10 rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-semibold text-gray-700 outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200">
+                    <select
+                        value={sourceType}
+                        onChange={event => setSourceType(event.target.value as MemorySourceType | "all")}
+                        className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm outline-none focus:border-[#10A37F] dark:border-slate-700 dark:bg-slate-950"
+                    >
                         <option value="all">All Source Types</option>
                         {Object.entries(sourceLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                     </select>
-                    <div className="relative">
-                        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search records" className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm outline-none focus:border-[#10A37F] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200" />
-                    </div>
                 </div>
             </section>
 
-            <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-<<<<<<< HEAD
-                <div className="grid grid-cols-[110px_160px_1fr_180px_150px_220px] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
-                    <div>Project Key</div>
-                    <div>Source Type</div>
-                    <div>Title / ID</div>
-                    <div>Linked To</div>
-=======
-                <div className="grid grid-cols-[120px_170px_1fr_160px_220px] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
-                    <div>Project Key</div>
-                    <div>Source Type</div>
-                    <div>Title / ID</div>
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
-                    <div>Created Date</div>
-                    <div>Actions</div>
+            <main className="min-h-0 flex-1 overflow-auto p-4 md:p-6">
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                    <table className="w-full table-fixed divide-y divide-slate-100 text-sm dark:divide-slate-800/50">
+                        <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+                            <tr>
+                                <th className="w-[90px] px-3 py-2.5">Key</th>
+                                <th className="w-[92px] px-3 py-2.5">Type</th>
+                                <th className="w-auto min-w-[180px] px-3 py-2.5">Title / ID</th>
+                                <th className="w-[140px] px-3 py-2.5">Linked Story</th>
+                                <th className="w-[74px] px-3 py-2.5">Links</th>
+                                <th className="w-[100px] px-3 py-2.5">Date</th>
+                                <th className="sticky right-0 w-[136px] bg-slate-50 px-3 py-2.5 dark:bg-slate-900/70">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800/30 dark:bg-slate-950">
+                            {filteredRecords.length ? filteredRecords.map(record => {
+                                const Icon = sourceIcons[record.sourceType];
+                                const linkedCount = linkedRecordsFor(record).length;
+                                const displayTitle = displayRecordId(record);
+                                const linkedStory = jiraIdFor(record);
+                                return (
+                                    <tr key={record.id} className="group h-11 hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                                        <td className="truncate px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300" title={record.projectKey}>{record.projectKey}</td>
+                                        <td className="px-3 py-1.5">
+                                            <span className={`inline-flex max-w-[76px] items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium leading-4 ${badgeColors[record.sourceType]}`}>
+                                                <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                                <span className="truncate">{sourceLabels[record.sourceType]}</span>
+                                            </span>
+                                        </td>
+                                        <td className="max-w-0 px-3 py-1.5">
+                                            <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-white" title={displayTitle}>{displayTitle}</div>
+                                            {shouldShowSubtitle(record, displayTitle) ? (
+                                                <div className="truncate text-[11px] text-slate-500 dark:text-slate-400" title={record.title}>{record.title}</div>
+                                            ) : null}
+                                            {attachedContextId === record.id ? <div className="mt-0.5 text-[10px] font-bold text-[#10A37F]">Context Attached</div> : null}
+                                        </td>
+                                        <td className="truncate px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400" title={jiraIdFor(record) || "Not linked"}>{jiraIdFor(record) || "Not linked"}</td>
+                                        <td className="px-3 py-1.5">
+                                            <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                                                <span className="text-[11px]" role="img" aria-label="links">🔗</span>
+                                                {linkedCount}
+                                            </span>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400">{new Date(record.createdAt).toLocaleDateString()}</td>
+                                        <td className="sticky right-0 bg-white px-3 py-1.5 dark:bg-slate-950">
+                                            <div className="flex items-center gap-px rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800/50">
+                                                <button onClick={() => setViewRecord(record)} className="inline-flex items-center justify-center rounded px-1.5 py-1 text-slate-500 hover:bg-white hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200" title="View details">
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </button>
+                                                <span className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+                                                <button onClick={() => setContextRecord(record)} className="inline-flex items-center justify-center rounded px-1.5 py-1 text-slate-500 hover:bg-white hover:text-[#10A37F] dark:hover:bg-slate-700 dark:hover:text-[#10A37F]" title="Use as context">
+                                                    <Link2 className="h-3.5 w-3.5" />
+                                                </button>
+                                                <span className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+                                                <button onClick={() => setDeleteRecord(record)} className="inline-flex items-center justify-center rounded px-1.5 py-1 text-slate-500 hover:bg-white hover:text-red-600 dark:hover:bg-slate-700 dark:hover:text-red-400" title="Delete record">
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            }) : (
+                                <tr>
+                                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500 dark:text-slate-400">No Memory Vault records found.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-                <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {filteredRecords.length ? filteredRecords.map(record => (
-<<<<<<< HEAD
-                        <article key={record.id} className={`grid grid-cols-[110px_160px_1fr_180px_150px_220px] items-center gap-3 px-4 py-3 text-sm ${recordClass(record)}`}>
-=======
-                        <article key={record.id} className="grid grid-cols-[120px_170px_1fr_160px_220px] items-center gap-3 px-4 py-3 text-sm">
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
-                            <div className="font-bold text-[#10A37F]">{record.projectKey}</div>
-                            <div className="text-gray-600 dark:text-gray-300">{sourceLabels[record.sourceType]}</div>
-                            <div className="min-w-0">
-                                <p className="truncate font-semibold text-gray-900 dark:text-white">{record.title}</p>
-                                {attachedContextId === record.id && <p className="mt-0.5 text-xs font-semibold text-[#10A37F]">Attached to next generation</p>}
-                            </div>
-<<<<<<< HEAD
-                            <div className="truncate text-xs font-semibold text-gray-600 dark:text-gray-300">{linkedToLabel(record)}</div>
-=======
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
-                            <div className="text-xs text-gray-500">{new Date(record.createdAt).toLocaleString()}</div>
-                            <div className="flex flex-wrap gap-2">
-                                <button onClick={() => setViewRecord(record)} className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
-                                    <Eye className="h-3.5 w-3.5" /> View
-                                </button>
-<<<<<<< HEAD
-                                <button onClick={() => setContextRecord(record)} className="inline-flex items-center gap-1.5 rounded-md border border-[#10A37F]/30 px-2.5 py-1.5 text-xs font-bold text-[#10A37F] hover:bg-[#10A37F]/10">
-                                    <Link2 className="h-3.5 w-3.5" /> Use as Context
-                                </button>
-                                <button onClick={() => setDeleteRecord(record)} className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/20">
-=======
-                                <button onClick={() => onUseAsContext(record)} className="inline-flex items-center gap-1.5 rounded-md border border-[#10A37F]/30 px-2.5 py-1.5 text-xs font-bold text-[#10A37F] hover:bg-[#10A37F]/10">
-                                    <Link2 className="h-3.5 w-3.5" /> Use as Context
-                                </button>
-                                <button onClick={() => handleDelete(record)} className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/20">
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
-                                    <Trash2 className="h-3.5 w-3.5" /> Delete
-                                </button>
-                            </div>
-                        </article>
-                    )) : (
-                        <div className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">No Memory Vault records found.</div>
-                    )}
-                </div>
-            </section>
+            </main>
 
             {viewRecord && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <section className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
-                        <div className="flex items-start justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-800">
-                            <div>
-                                <h3 className="font-bold text-gray-900 dark:text-white">{viewRecord.title}</h3>
-                                <p className="mt-1 text-xs text-gray-500">{viewRecord.projectKey} - {sourceLabels[viewRecord.sourceType]}</p>
-                            </div>
-<<<<<<< HEAD
-                            <button onClick={() => setViewRecord(null)} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close view modal">
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-                        <div className="max-h-[60vh] overflow-auto">
-                            {linkedStats && (
-                                <div className="border-b border-gray-200 p-4 text-sm dark:border-gray-800">
-                                    <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Linked Records</p>
-                                    <div className="grid gap-2 sm:grid-cols-3">
-                                        {linkedStats.linkedStory ? (
-                                            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950">
-                                                <div className="text-sm font-bold text-gray-900 dark:text-white">{linkedStats.linkedStory}</div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">Linked Jira Story</div>
-                                            </div>
-                                        ) : null}
-                                        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950">
-                                            <div className="text-lg font-bold text-gray-900 dark:text-white">{linkedStats.generatedTestCases}</div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Generated Test Case Set{linkedStats.generatedTestCases === 1 ? "" : "s"}</div>
-                                        </div>
-                                        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950">
-                                            <div className="text-lg font-bold text-gray-900 dark:text-white">{linkedStats.defects}</div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Defects</div>
-                                        </div>
-                                        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950">
-                                            <div className="text-lg font-bold text-gray-900 dark:text-white">{linkedStats.automationRuns}</div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Automation Runs</div>
-                                        </div>
-                                    </div>
-                                    {linkedRecordsFor(viewRecord).length > 0 && (
-                                        <div className="mt-3 space-y-1">
-                                            {linkedRecordsFor(viewRecord).map(record => (
-                                                <button key={record.id} onClick={() => setViewRecord(record)} className="block w-full rounded-md px-2 py-1 text-left text-xs font-semibold text-[#10A37F] hover:bg-[#10A37F]/10">
-                                                    {sourceLabels[record.sourceType]} - {record.title}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            <pre className="whitespace-pre-wrap p-4 text-xs leading-6 text-gray-700 dark:text-gray-200">{viewRecord.content}</pre>
-                        </div>
-                    </section>
-                </div>
+                <MemoryDetailsModal
+                    record={viewRecord}
+                    linkedRecords={linkedRecordsFor(viewRecord)}
+                    onClose={() => setViewRecord(null)}
+                />
             )}
 
             {deleteRecord && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <section className="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
-                        <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-800">
-                            <h3 className="font-bold text-gray-900 dark:text-white">Delete Memory Record</h3>
-                            <button onClick={() => setDeleteRecord(null)} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close delete modal"><X className="h-4 w-4" /></button>
+                    <section className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+                        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
+                            <h3 className="font-bold text-slate-900 dark:text-white">Delete Memory Record</h3>
+                            <button onClick={() => setDeleteRecord(null)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900" aria-label="Close delete modal"><X className="h-4 w-4" /></button>
                         </div>
-                        <div className="p-4 text-sm text-gray-600 dark:text-gray-300">
+                        <div className="p-4 text-sm text-slate-600 dark:text-slate-300">
                             Delete <strong>{deleteRecord.title}</strong> from Memory Vault?
                         </div>
-                        <div className="flex justify-end gap-2 border-t border-gray-200 p-4 dark:border-gray-800">
-                            <button onClick={() => setDeleteRecord(null)} className="h-9 rounded-lg border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
+                        <div className="flex justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-800">
+                            <button onClick={() => setDeleteRecord(null)} className="h-9 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">Cancel</button>
                             <button onClick={() => handleDelete(deleteRecord)} className="h-9 rounded-lg bg-red-600 px-3 text-sm font-bold text-white hover:bg-red-700">Delete</button>
                         </div>
                     </section>
@@ -350,38 +478,33 @@ export function MemoryVaultPanel({ onUseAsContext, attachedContextId }: MemoryVa
 
             {contextRecord && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <section className="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
-                        <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-800">
-                            <h3 className="font-bold text-gray-900 dark:text-white">Use Memory Context</h3>
-                            <button onClick={() => setContextRecord(null)} className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close context modal"><X className="h-4 w-4" /></button>
+                    <section className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+                        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
+                            <h3 className="font-bold text-slate-900 dark:text-white">Use Memory Context</h3>
+                            <button onClick={() => setContextRecord(null)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-900" aria-label="Close context modal"><X className="h-4 w-4" /></button>
+                        </div>
+                        <div className="border-b border-slate-200 p-4 text-sm dark:border-slate-800">
+                            <p className="font-semibold text-slate-900 dark:text-white">Attach To</p>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Context Attached: {recordPrimaryId(contextRecord)}</p>
                         </div>
                         <div className="space-y-2 p-4">
-                            {[
-                                { label: "QA generation", value: "testcases" },
-                                { label: "Automation Hub", value: "automation" },
-                                { label: "API Lab", value: "api-testing" },
-                                { label: "Defect Studio", value: "defect-studio" },
-                            ].map(option => (
+                            {contextDestinations.map(option => (
                                 <button
                                     key={option.value}
                                     onClick={() => {
-                                        onUseAsContext(contextRecord, option.value as "testcases" | "automation" | "api-testing" | "defect-studio");
+                                        onUseAsContext(contextRecord, option.value);
                                         setContextRecord(null);
                                     }}
-                                    className="block w-full rounded-lg border border-gray-200 px-3 py-2 text-left text-sm font-bold text-gray-700 hover:border-[#10A37F]/40 hover:bg-[#10A37F]/10 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-[#10A37F]/10"
+                                    className="flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm font-bold text-slate-700 hover:border-[#10A37F]/40 hover:bg-[#10A37F]/10 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#10A37F]/10"
                                 >
+                                    <span className="h-3 w-3 rounded-full border border-slate-400" />
                                     {option.label}
                                 </button>
                             ))}
                         </div>
-                        <div className="flex justify-end border-t border-gray-200 p-4 dark:border-gray-800">
-                            <button onClick={() => setContextRecord(null)} className="h-9 rounded-lg border border-gray-200 px-3 text-sm font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
+                        <div className="flex justify-end border-t border-slate-200 p-4 dark:border-slate-800">
+                            <button onClick={() => setContextRecord(null)} className="h-9 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900">Cancel</button>
                         </div>
-=======
-                            <button onClick={() => setViewRecord(null)} className="rounded-md px-2 py-1 text-sm font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">Close</button>
-                        </div>
-                        <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap p-4 text-xs leading-6 text-gray-700 dark:text-gray-200">{viewRecord.content}</pre>
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                     </section>
                 </div>
             )}

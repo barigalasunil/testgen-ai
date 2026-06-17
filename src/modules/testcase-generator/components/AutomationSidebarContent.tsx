@@ -227,14 +227,9 @@ export function AutomationSidebarContent({
                 <div className="grid gap-4 md:grid-cols-3">
                     {suites.map((suite) => {
                         const state = automation[suite.key];
-<<<<<<< HEAD
                         const isThisSuiteRunning = state.status === 'running';
                         const anotherSuiteRunning = anySuiteRunning && !isThisSuiteRunning;
                         const suiteDisabled = isThisSuiteRunning || anySuiteRunning;
-=======
-                        const isRunning = state.status === 'running';
-                        const suiteDisabled = isRunning;
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 
                         return (
                             <article key={suite.key} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-slate-800 dark:bg-slate-900/50">

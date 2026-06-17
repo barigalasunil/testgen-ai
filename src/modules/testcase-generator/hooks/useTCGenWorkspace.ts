@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { AutomationExecutionSummary, AutomationRunRecord, AutomationTarget, HistoryItem, SuiteExecution, SuiteKey, TestCase, AiGenerationOptions, AiGenerationMeta, WorkspacePanel, WorkspaceSectionHeader } from "../types";
+import { AutomationExecutionSummary, AutomationRunRecord, AutomationTarget, ConversationMessage, HistoryItem, SuiteExecution, SuiteKey, TestCase, AiGenerationOptions, AiGenerationMeta, WorkspacePanel, WorkspaceSectionHeader } from "../types";
 import { generateTestCases, fetchModels } from "../services";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import { getSavedModel, saveModel, getSavedProvider, saveProvider, loadProviderSettings } from "@/src/services/ai/ai-config.service";
@@ -9,18 +9,24 @@ import { fetchJiraStory } from "@/src/services/jira/jira.service";
 import { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
 import {
     buildMemoryContextBlock,
-<<<<<<< HEAD
     memoryIdForGeneratedTestCases,
     memoryIdForJiraStory,
+    memoryIdForQualityReport,
     MemoryVaultRecord,
     normalizeJiraId,
-=======
-    MemoryVaultRecord,
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     normalizeProjectKey,
     projectKeyFromText,
     upsertMemoryVaultRecord,
 } from "@/src/services/memory-vault/memory-vault.service";
+import { buildQualityReport, saveQualityReportToMemory } from "@/src/services/quality/quality-intelligence.service";
+import {
+    extractAcceptanceCriteria,
+    linkAutomationRunTraceability,
+    linkGeneratedTestCases,
+    mapTestCaseToAcceptanceCriteria,
+    traceabilityMetadataLinks,
+    upsertStoryTraceability,
+} from "@/src/services/traceability/traceability.service";
 
 const AUTO_MODEL = "auto";
 const GENERATION_STEPS = [
@@ -58,6 +64,10 @@ const SECTION_HEADERS: Record<WorkspacePanel, WorkspaceSectionHeader> = {
         title: "Memory Vault",
         subtitle: "Store and reuse project knowledge for generation.",
     },
+    traceability: {
+        title: "Traceability Matrix",
+        subtitle: "Trace stories through acceptance criteria, tests, defects, automation, and reports.",
+    },
 };
 
 const initialAutomationState: Record<SuiteKey, SuiteExecution> = {
@@ -80,6 +90,53 @@ function generateWorkspaceName(prompt: string): string {
         .slice(0, 3)
         .map(w => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
+}
+
+function buildWorkspaceTitle(prompt: string, jiraStoryId?: string) {
+    const jiraId = normalizeJiraId(jiraStoryId || extractJiraId(prompt));
+    const cleanedPrompt = prompt
+        .replace(jiraId, "")
+        .replace(/https?:\/\/[^\s"'<>),]+/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    const storyTitle = cleanedPrompt
+        .split(/[\n.]/)[0]
+        ?.replace(/^(generate|create|write|test cases? for|tests? for)\s+/i, "")
+        .trim();
+    if (jiraId && storyTitle) return `${jiraId} ${storyTitle}`.slice(0, 80);
+    if (jiraId) return jiraId;
+    return storyTitle ? storyTitle.slice(0, 80) : generateWorkspaceName(prompt);
+}
+
+function messageId() {
+    return `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeSessionMessages(session: HistoryItem): ConversationMessage[] {
+    if (Array.isArray(session.messages) && session.messages.length > 0) return session.messages;
+    if (!session.result && !session.error) return [];
+    const now = session.updatedAt || session.createdAt || new Date().toISOString();
+    return [{
+        id: `msg-${session.id}`,
+        type: "generated_test_cases",
+        title: session.aiOptions?.jiraStoryId || session.title || "Generated Test Cases",
+        prompt: session.prompt,
+        platform: session.platform,
+        result: session.result,
+        qualityReport: session.qualityReport,
+        error: session.error,
+        aiMeta: session.aiMeta,
+        aiOptions: session.aiOptions,
+        createdAt: session.createdAt || now,
+        updatedAt: now,
+    }];
+}
+
+function normalizeSession(session: HistoryItem): HistoryItem {
+    return {
+        ...session,
+        messages: normalizeSessionMessages(session),
+    };
 }
 
 type AutomationRunResponse = {
@@ -281,7 +338,7 @@ export function useTCGenWorkspace() {
             const saved = localStorage.getItem("testgen-sessions");
             if (saved) {
                 try {
-                    const parsed = JSON.parse(saved) as HistoryItem[];
+                    const parsed = (JSON.parse(saved) as HistoryItem[]).map(normalizeSession);
                     if (parsed.length > 0) {
                         setSessions(parsed);
                         setActiveId(prev => prev ?? parsed[0].id);
@@ -403,7 +460,7 @@ export function useTCGenWorkspace() {
     }, [provider, providerSettings.ollamaBaseUrl]);
 
     useEffect(() => {
-        localStorage.setItem("testgen-sessions", JSON.stringify(sessions));
+        localStorage.setItem("testgen-sessions", JSON.stringify(sessions.map(normalizeSession)));
     }, [sessions]);
 
     const activeGenerationSteps = generationHasJira
@@ -574,22 +631,15 @@ export function useTCGenWorkspace() {
         setAttachedDocuments(prev => prev.filter(doc => doc.name !== name));
     };
 
-<<<<<<< HEAD
     const handleUseMemoryAsContext = (record: MemoryVaultRecord, destination: WorkspacePanel | 'testcases' = 'testcases') => {
         setAttachedMemoryContext(record);
         setActivePanel(destination);
-=======
-    const handleUseMemoryAsContext = (record: MemoryVaultRecord) => {
-        setAttachedMemoryContext(record);
-        setActivePanel('testcases');
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
     };
 
     const handleClearMemoryContext = () => {
         setAttachedMemoryContext(null);
     };
 
-<<<<<<< HEAD
     const ensureJiraStoryInMemory = async (jiraStoryId?: string) => {
         const jiraId = normalizeJiraId(jiraStoryId);
         if (!jiraId) return null;
@@ -619,22 +669,33 @@ export function useTCGenWorkspace() {
                 originalJiraUrl: "",
             },
         });
+        upsertStoryTraceability({
+            storyId: jiraId,
+            projectKey,
+            acceptanceCriteria: "",
+        });
         return record.id;
     };
 
     const saveGeneratedTestCasesToMemory = async (params: {
-=======
-    const saveGeneratedTestCasesToMemory = (params: {
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
         prompt: string;
         result: ParsedTestCaseResult;
         jiraStoryId?: string;
         sessionTitle?: string;
     }) => {
-<<<<<<< HEAD
         const jiraId = normalizeJiraId(params.jiraStoryId);
         const projectKey = projectKeyFromText(jiraId || params.prompt);
-        const linkedMemoryStoryId = await ensureJiraStoryInMemory(jiraId);
+        await ensureJiraStoryInMemory(jiraId);
+        const acceptanceCriteria = extractAcceptanceCriteria(
+            attachedMemoryContext?.metadata?.acceptanceCriteria ? String(attachedMemoryContext.metadata.acceptanceCriteria) : "",
+            jiraId
+        );
+        const mappedTestCases = params.result.testCases.map(testCase => ({
+            ...testCase,
+            linkedRequirementId: jiraId || testCase.linkedRequirementId,
+            projectKey,
+            linkedAcceptanceCriteriaIds: jiraId ? mapTestCaseToAcceptanceCriteria(testCase, acceptanceCriteria) : [],
+        }));
         upsertMemoryVaultRecord({
             id: memoryIdForGeneratedTestCases(jiraId, params.sessionTitle),
             projectKey,
@@ -646,22 +707,46 @@ export function useTCGenWorkspace() {
                 jiraId,
                 jiraStoryId: jiraId,
                 generatedFromStoryId: jiraId || undefined,
-                linkedMemoryStoryId,
-                testCases: params.result.testCases,
-=======
-        const projectKey = projectKeyFromText(params.jiraStoryId || params.prompt);
-        upsertMemoryVaultRecord({
-            projectKey,
-            sourceType: "generated_test_cases",
-            title: params.jiraStoryId || params.sessionTitle || generateWorkspaceName(params.prompt),
-            content: JSON.stringify(params.result.testCases, null, 2),
-            metadata: {
-                jiraStoryId: params.jiraStoryId,
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
+                testCases: mappedTestCases,
                 prompt: params.prompt,
                 count: params.result.testCases.length,
+                ...traceabilityMetadataLinks({
+                    storyId: jiraId,
+                    acceptanceCriteriaIds: mappedTestCases.flatMap(testCase => testCase.linkedAcceptanceCriteriaIds || []),
+                    testCaseIds: mappedTestCases.map(testCase => testCase.testCaseId),
+                }),
             },
         });
+        linkGeneratedTestCases({
+            storyId: jiraId,
+            projectKey,
+            testCases: mappedTestCases,
+        });
+    };
+
+    const saveQualityReport = (params: {
+        prompt: string;
+        result: ParsedTestCaseResult;
+        jiraStoryId?: string;
+        sessionTitle?: string;
+        memoryContextRecord?: MemoryVaultRecord | null;
+        automationRuns?: AutomationRunRecord[];
+        acceptanceCriteria?: string;
+    }) => {
+        const report = buildQualityReport({
+            requirement: params.prompt,
+            acceptanceCriteria: params.acceptanceCriteria,
+            jiraStoryId: params.jiraStoryId,
+            sessionTitle: params.sessionTitle,
+            testCases: params.result.testCases,
+            automationRuns: params.automationRuns,
+            memoryContext: params.memoryContextRecord,
+        });
+        const saved = saveQualityReportToMemory(report, params.jiraStoryId || params.prompt);
+        return {
+            ...report,
+            id: saved.id || memoryIdForQualityReport(params.jiraStoryId, params.sessionTitle) || report.id,
+        };
     };
 
     const saveAttachmentsToMemory = (docs: AttachedDocument[], prompt: string) => {
@@ -681,22 +766,16 @@ export function useTCGenWorkspace() {
         });
     };
 
-<<<<<<< HEAD
     const saveAutomationSummaryToMemory = (summary: AutomationRunResponse | AutomationExecutionSummary & { status?: string; suite?: string }, prompt?: string, session?: HistoryItem | null) => {
         if (!summary.runId) return;
         const storyId = session?.aiOptions?.jiraStoryId || "";
         const generatedTestCaseMemoryId = memoryIdForGeneratedTestCases(storyId, session?.title);
         const projectKey = projectKeyFromText(storyId || prompt || summary.runId);
-=======
-    const saveAutomationSummaryToMemory = (summary: AutomationRunResponse | AutomationExecutionSummary & { status?: string; suite?: string }, prompt?: string) => {
-        if (!summary.runId) return;
-        const projectKey = projectKeyFromText(prompt || summary.runId);
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
         upsertMemoryVaultRecord({
             id: `automation-${summary.runId}`,
             projectKey,
             sourceType: "automation_summary",
-            title: `${summary.suite || "generated"} - ${summary.runId}`,
+            title: `${summary.runId}`,
             content: [
                 `Run ID: ${summary.runId}`,
                 `Suite: ${summary.suite || "generated"}`,
@@ -713,18 +792,29 @@ export function useTCGenWorkspace() {
                 runId: summary.runId,
                 suite: summary.suite || "generated",
                 status: summary.status,
-<<<<<<< HEAD
+                passed: summary.passed ?? 0,
+                failed: summary.failed ?? 0,
                 storyId,
-                linkedMemoryStoryId: storyId ? memoryIdForJiraStory(storyId) : undefined,
                 generatedTestCaseMemoryId,
                 generatedTestCaseIds: session?.result?.testCases?.map(testCase => testCase.testCaseId) || [],
-=======
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                 playwrightReportUrl: summary.playwrightReportUrl,
                 allureReportUrl: summary.allureReportUrl,
                 healingReportUrl: summary.healingReportUrl,
                 logUrl: summary.logUrl,
+                ...traceabilityMetadataLinks({
+                    storyId,
+                    testCaseIds: session?.result?.testCases?.map(testCase => testCase.testCaseId) || [],
+                    automationRunIds: summary.runId ? [summary.runId] : [],
+                }),
             },
+        });
+        linkAutomationRunTraceability({
+            runId: summary.runId,
+            storyId,
+            suite: summary.suite || "generated",
+            passed: summary.passed,
+            failed: summary.failed,
+            linkedTestCaseIds: session?.result?.testCases?.map(testCase => testCase.testCaseId) || [],
         });
     };
 
@@ -739,6 +829,7 @@ export function useTCGenWorkspace() {
         const memoryContext = attachedMemoryContext && normalizeProjectKey(attachedMemoryContext.projectKey) === requestProjectKey
             ? buildMemoryContextBlock(attachedMemoryContext)
             : undefined;
+        const memoryContextRecord = memoryContext ? attachedMemoryContext : null;
         setGenerationHasJira(Boolean(promptJiraStoryId || overrideOptions?.jiraStoryId));
         setGenerationFailed(false);
         setActivityIndex(0);
@@ -765,8 +856,9 @@ export function useTCGenWorkspace() {
 
         const targetId = activeId ?? Date.now().toString();
         const now = new Date().toISOString();
-        const smartName = generateWorkspaceName(currentPrompt);
+        const smartName = buildWorkspaceTitle(currentPrompt, generationOptions.jiraStoryId);
         const initialTargetUrl = extractTargetUrl(currentPrompt);
+        const nextMessageId = messageId();
 
         if (!activeId) {
             setActiveId(targetId);
@@ -775,7 +867,9 @@ export function useTCGenWorkspace() {
                 title: smartName,
                 prompt: currentPrompt,
                 platform: generationOptions.platformType,
+                messages: [],
                 result: null,
+                qualityReport: undefined,
                 error: null,
                 aiOptions: generationOptions,
                 aiMeta: {
@@ -807,17 +901,16 @@ export function useTCGenWorkspace() {
                 s.id === targetId
                     ? {
                         ...s,
-                        prompt: currentPrompt,
+                        prompt: s.prompt || currentPrompt,
                         platform: generationOptions.platformType,
-                        result: null,
-                        error: null,
+                        messages: normalizeSessionMessages(s),
                         generatedScript: undefined,
                         scriptFileName: undefined,
                         automationTarget: {
                             ...(s.automationTarget || { sessionId: targetId }),
                             sessionId: targetId,
                             jiraStoryId: generationOptions.jiraStoryId,
-                            sessionTitle: s.title,
+                            sessionTitle: s.title || smartName,
                             targetUrl: initialTargetUrl || s.automationTarget?.targetUrl,
                             targetUrlSource: initialTargetUrl ? 'jira_story' : s.automationTarget?.targetUrlSource,
                             generatedTestCaseIds: [],
@@ -829,6 +922,7 @@ export function useTCGenWorkspace() {
                             provider: generationOptions.provider,
                             message: generationOptions.provider === 'auto' ? "Auto fallback enabled" : `Using: ${generationOptions.provider}`,
                         },
+                        title: s.title === "New Workspace" || !s.title ? smartName : s.title,
                         updatedAt: now
                     }
                     : s
@@ -883,13 +977,44 @@ export function useTCGenWorkspace() {
                 parsedError = data.result.raw;
             }
 
+            const qualityReport = parsedResult?.testCases?.length
+                ? saveQualityReport({
+                    prompt: currentPrompt,
+                    result: parsedResult,
+                    jiraStoryId: generationOptions.jiraStoryId,
+                    sessionTitle: smartName,
+                    memoryContextRecord,
+                    automationRuns: sessions.find(session => session.id === targetId)?.automationRuns,
+                    acceptanceCriteria: generationOptions.acceptanceCriteria,
+                })
+                : undefined;
+
             setSessions(prev => prev.map(s =>
                 s.id === targetId
                     ? {
                         ...s,
                         prompt: currentPrompt,
                         platform: generationOptions.platformType,
+                        messages: [
+                            ...normalizeSessionMessages(s),
+                            {
+                                id: nextMessageId,
+                                type: "generated_test_cases",
+                                title: generationOptions.jiraStoryId || smartName,
+                                prompt: currentPrompt,
+                                platform: generationOptions.platformType,
+                                result: parsedResult,
+                                qualityReport,
+                                error: parsedError,
+                                aiOptions: generationOptions,
+                                aiMeta: data.meta,
+                                memoryRecordId: qualityReport?.id,
+                                createdAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString(),
+                            },
+                        ],
                         result: parsedResult,
+                        qualityReport,
                         error: parsedError,
                         aiOptions: generationOptions,
                         aiMeta: data.meta,
@@ -899,16 +1024,13 @@ export function useTCGenWorkspace() {
                             aiOptions: generationOptions,
                             result: parsedResult,
                         }),
+                        title: s.title === "New Workspace" || !s.title ? smartName : s.title,
                         updatedAt: new Date().toISOString()
                     }
                     : s
             ));
             if (parsedResult?.testCases?.length) {
-<<<<<<< HEAD
                 await saveGeneratedTestCasesToMemory({
-=======
-                saveGeneratedTestCasesToMemory({
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                     prompt: currentPrompt,
                     result: parsedResult,
                     jiraStoryId: generationOptions.jiraStoryId,
@@ -934,6 +1056,24 @@ export function useTCGenWorkspace() {
                 s.id === targetId
                     ? {
                         ...s,
+                        messages: [
+                            ...normalizeSessionMessages(s),
+                            {
+                                id: nextMessageId,
+                                type: "generated_test_cases",
+                                title: generationOptions.jiraStoryId || smartName,
+                                prompt: currentPrompt,
+                                platform: generationOptions.platformType,
+                                result: null,
+                                error: msg,
+                                aiOptions: generationOptions,
+                                aiMeta: payload?.meta || { requestedModel: generationOptions.model, provider: generationOptions.provider, message: msg },
+                                createdAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString(),
+                            },
+                        ],
+                        prompt: currentPrompt,
+                        platform: generationOptions.platformType,
                         result: null,
                         error: msg,
                         aiOptions: generationOptions,
@@ -1122,22 +1262,53 @@ export function useTCGenWorkspace() {
                                 const data = JSON.parse(line.slice('__RESULT__:'.length));
                                 if (data.type === 'summary') {
                                     setExecutionSummary(data);
-<<<<<<< HEAD
                                     saveAutomationSummaryToMemory(data, currentThread?.prompt, currentThread);
-=======
-                                    saveAutomationSummaryToMemory(data, currentThread?.prompt);
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
+                                    if (currentThread?.id) {
+                                        setSessions(prev => prev.map(s =>
+                                            s.id === currentThread.id
+                                                ? {
+                                                    ...s,
+                                                    messages: [
+                                                        ...normalizeSessionMessages(s),
+                                                        {
+                                                            id: messageId(),
+                                                            type: "automation_run",
+                                                            title: `${data.runId || new Date().toLocaleTimeString()}`,
+                                                            prompt: currentThread.prompt,
+                                                            platform: currentThread.platform,
+                                                            automationRun: {
+                                                                runId: data.runId || `run-${Date.now()}`,
+                                                                suite: "generated",
+                                                                status: data.status === "completed" ? "passed" : data.status,
+                                                                passed: data.passed,
+                                                                failed: data.failed,
+                                                                durationMs: data.durationMs,
+                                                                playwrightReportUrl: data.playwrightReportUrl || data.reportUrl || null,
+                                                                allureReportUrl: data.allureReportUrl || null,
+                                                                healingReportUrl: data.healingReportUrl || null,
+                                                                logUrl: data.logUrl || null,
+                                                            },
+                                                            aiOptions: currentThread.aiOptions,
+                                                            createdAt: new Date().toISOString(),
+                                                            updatedAt: new Date().toISOString(),
+                                                        },
+                                                    ],
+                                                    updatedAt: new Date().toISOString(),
+                                                }
+                                                : s
+                                        ));
+                                    }
                                     if (data.playwrightReportUrl || data.reportUrl) setReportUrl(data.playwrightReportUrl || data.reportUrl);
-                                    showAutomationToast({
-                                        type: data.status === 'partial_success' ? 'partial_success' : data.failed > 0 ? 'failed' : 'success',
-                                        message: data.failed > 0
-                                            ? `Generated script failed. ${data.passed} passed, ${data.failed} failed.`
-                                            : data.status === 'partial_success'
-                                                ? `Generated script completed with report warnings. ${data.passed} passed, ${data.failed} failed.`
-                                                : `Generated script completed. ${data.passed} passed, ${data.failed} failed.`,
-                                        reportUrl: data.playwrightReportUrl || data.reportUrl,
-                                        persistent: data.failed > 0 || data.status === 'partial_success' || Boolean(data.playwrightReportUrl || data.reportUrl),
-                                    });
+            showAutomationToast({
+                type: data.status === 'partial_success' ? 'partial_success' : data.failed > 0 ? 'failed' : 'success',
+                message: data.failed > 0
+                    ? `${data.runId} failed. ${data.passed} passed, ${data.failed} failed.`
+                    : data.status === 'partial_success'
+                        ? `${data.runId} completed with report warnings. ${data.passed} passed, ${data.failed} failed.`
+                        : `${data.runId} completed. ${data.passed} passed, ${data.failed} failed.`,
+                reportUrl: data.playwrightReportUrl || data.reportUrl,
+                persistent: data.failed > 0 || data.status === 'partial_success' || Boolean(data.playwrightReportUrl || data.reportUrl),
+            });
                                     if (data.failed > 0) {
                                         addLog(`✕ ${data.failed} failed, ${data.passed} passed — ${data.total} total`);
                                     } else {
@@ -1169,13 +1340,10 @@ export function useTCGenWorkspace() {
         const targetId = activeId;
         const currentThread = sessions.find(s => s.id === targetId);
         focusAutomationLogs();
-<<<<<<< HEAD
         setExecutionLogs([]);
         setExecutionSummary(null);
         setPassedTests([]);
         setFailedTests([]);
-=======
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
         const startedAt = new Date().toISOString();
         const runningState: SuiteExecution = { status: 'running', lastRunAt: startedAt };
 
@@ -1233,18 +1401,14 @@ export function useTCGenWorkspace() {
             showAutomationToast({
                 type: payload.status === 'partial_success' ? 'partial_success' : suiteState.status === 'failed' ? 'failed' : 'success',
                 message: suiteState.status === 'failed'
-                    ? `${suite} suite failed. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`
+                    ? `${payload.runId} failed. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`
                     : payload.status === 'partial_success'
-                        ? `${suite} suite completed with report warnings. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`
-                        : `${suite} suite completed. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`,
+                        ? `${payload.runId} completed with report warnings. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`
+                        : `${payload.runId} completed. ${payload.passed ?? 0} passed, ${payload.failed ?? 0} failed.`,
                 reportUrl: payload.playwrightReportUrl || payload.reportUrl,
                 persistent: suiteState.status === 'failed' || payload.status === 'partial_success' || Boolean(payload.playwrightReportUrl || payload.reportUrl),
             });
-<<<<<<< HEAD
             saveAutomationSummaryToMemory({ ...payload, suite }, currentThread?.prompt, currentThread);
-=======
-            saveAutomationSummaryToMemory({ ...payload, suite }, currentThread?.prompt);
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 
             if (targetId) {
                 setSessions(prev => prev.map(s =>
@@ -1282,6 +1446,40 @@ export function useTCGenWorkspace() {
                                     ...(s.automationRuns || []),
                                 ].slice(0, 20)
                                 : s.automationRuns,
+                            messages: payload.runId
+                                ? [
+                                    ...normalizeSessionMessages(s),
+                                    {
+                                        id: messageId(),
+                                        type: "automation_run",
+                                        title: `${payload.runId}`,
+                                        prompt: s.prompt,
+                                        platform: s.platform,
+                                        automationRun: {
+                                            runId: payload.runId,
+                                            suite,
+                                            targetUrl: payload.targetUrl,
+                                            browser: payload.browser,
+                                            mode: payload.mode,
+                                            status: payload.status === 'completed' ? 'passed' : payload.status,
+                                            startedAt: payload.startedAt,
+                                            finishedAt: payload.finishedAt,
+                                            durationMs: payload.durationMs,
+                                            passed: payload.passed,
+                                            failed: payload.failed,
+                                            logs: payload.logs,
+                                            playwrightReportUrl: payload.playwrightReportUrl || payload.reportUrl || null,
+                                            allureReportUrl: payload.allureReportUrl || null,
+                                            healingReportUrl: payload.healingReportUrl || null,
+                                            logUrl: payload.logUrl || null,
+                                            errors: payload.errors,
+                                        },
+                                        aiOptions: s.aiOptions,
+                                        createdAt: finishedAt,
+                                        updatedAt: finishedAt,
+                                    },
+                                ]
+                                : normalizeSessionMessages(s),
                             automationTarget: s.automationTarget ? { ...s.automationTarget, latestRunId: payload.runId } : s.automationTarget,
                             updatedAt: finishedAt,
                         }
@@ -1321,13 +1519,17 @@ export function useTCGenWorkspace() {
         }
     };
 
-    const copyTableData = () => {
-        const currentThread = sessions.find(s => s.id === activeId);
-        if (!currentThread?.result) return;
-        const text = currentThread.result.testCases.map(tc =>
+    const copyTestCaseData = (testCases?: TestCase[]) => {
+        if (!testCases?.length) return;
+        const text = testCases.map(tc =>
             `ID: ${tc.testCaseId}\nTitle: ${tc.scenarioTitle}\nType: ${tc.testType}\nPriority: ${tc.priority}\nPreconditions: ${tc.preconditions}\nTest Data: ${tc.testData}\nSteps: ${tc.testSteps}\nExpected: ${tc.expectedResult}`
         ).join("\n\n---\n\n");
         navigator.clipboard.writeText(text);
+    };
+
+    const copyTableData = () => {
+        const currentThread = sessions.find(s => s.id === activeId);
+        copyTestCaseData(currentThread?.result?.testCases);
     };
 
     const handleCopyScript = async () => {
@@ -1408,6 +1610,7 @@ export function useTCGenWorkspace() {
         handleRunGeneratedScript,
         handleExecuteSuite,
         copyTableData,
+        copyTestCaseData,
         handleCopyScript,
         handleDownloadScript,
         saveProvider,

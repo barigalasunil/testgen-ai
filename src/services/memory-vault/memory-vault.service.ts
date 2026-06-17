@@ -4,10 +4,8 @@ export type MemorySourceType =
     | "jira_story"
     | "generated_test_cases"
     | "defect"
-<<<<<<< HEAD
     | "defect_converted_test_case"
-=======
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
+    | "quality_report"
     | "api_spec"
     | "api_test_cases"
     | "automation_summary"
@@ -42,7 +40,6 @@ export function projectKeyFromText(text?: string | null, fallback?: string | nul
     return normalizeProjectKey(issue || fallback);
 }
 
-<<<<<<< HEAD
 export function normalizeJiraId(value?: string | null) {
     return String(value || "").trim().toUpperCase().match(/[A-Z][A-Z0-9]+-\d+/)?.[0] || "";
 }
@@ -58,8 +55,12 @@ export function memoryIdForGeneratedTestCases(jiraId?: string | null, fallbackId
     return fallbackId ? `mv_testcases_${fallbackId.replace(/[^a-zA-Z0-9_]/g, "_")}` : "";
 }
 
-=======
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
+export function memoryIdForQualityReport(jiraId?: string | null, fallbackId?: string | null) {
+    const normalized = normalizeJiraId(jiraId);
+    if (normalized) return `mv_quality_${normalized.replace("-", "_")}`;
+    return fallbackId ? `mv_quality_${fallbackId.replace(/[^a-zA-Z0-9_]/g, "_")}` : "";
+}
+
 export function loadMemoryVaultRecords(): MemoryVaultRecord[] {
     if (!canUseStorage()) return [];
     try {
@@ -78,6 +79,38 @@ function saveRecords(records: MemoryVaultRecord[]) {
     window.dispatchEvent(new CustomEvent("tcgen-memory-vault-updated"));
 }
 
+function asStringArray(value: unknown): string[] {
+    return Array.isArray(value) ? Array.from(new Set(value.map(item => String(item)).filter(Boolean))) : [];
+}
+
+function normalizeTraceabilityMetadata(metadata?: Record<string, unknown>): Record<string, unknown> {
+    const next = { ...(metadata || {}) };
+    const storyId = normalizeJiraId(
+        String(next.jiraId || next.jiraStoryId || next.generatedFromStoryId || next.storyId || next.key || "")
+    );
+    const testCaseIds = [
+        ...asStringArray(next.linkedTestCaseIds),
+        ...asStringArray(next.generatedTestCaseIds),
+        String(next.testCaseId || ""),
+        ...(
+            Array.isArray(next.testCases)
+                ? (next.testCases as { testCaseId?: unknown }[]).map(testCase => String(testCase.testCaseId || ""))
+                : []
+        ),
+    ].filter(Boolean);
+    const defectId = String(next.issueKey || next.sourceDefectId || next.defectId || "");
+    const automationRunId = String(next.runId || "");
+
+    return {
+        ...next,
+        linkedStoryIds: Array.from(new Set([...asStringArray(next.linkedStoryIds), storyId].filter(Boolean))),
+        linkedAcceptanceCriteriaIds: asStringArray(next.linkedAcceptanceCriteriaIds),
+        linkedTestCaseIds: Array.from(new Set(testCaseIds)),
+        linkedDefectIds: Array.from(new Set([...asStringArray(next.linkedDefectIds), defectId].filter(Boolean))),
+        linkedAutomationRunIds: Array.from(new Set([...asStringArray(next.linkedAutomationRunIds), automationRunId].filter(Boolean))),
+    };
+}
+
 export function upsertMemoryVaultRecord(input: Omit<MemoryVaultRecord, "id" | "createdAt" | "projectKey"> & {
     id?: string;
     projectKey?: string | null;
@@ -89,7 +122,7 @@ export function upsertMemoryVaultRecord(input: Omit<MemoryVaultRecord, "id" | "c
         sourceType: input.sourceType,
         title: input.title.trim() || "Untitled Memory",
         content: input.content,
-        metadata: input.metadata,
+        metadata: normalizeTraceabilityMetadata(input.metadata),
         createdAt: input.createdAt || new Date().toISOString(),
     };
     const records = loadMemoryVaultRecords();
@@ -107,7 +140,6 @@ export function findMemoryVaultRecord(id?: string | null) {
     return loadMemoryVaultRecords().find(item => item.id === id) || null;
 }
 
-<<<<<<< HEAD
 export function memoryIdForDefectConvertedTestCase(defectId?: string | null) {
     const normalized = String(defectId || "").trim().toUpperCase();
     return normalized ? `mv_defect_tc_${normalized.replace(/[^A-Z0-9_]/g, "_")}` : "";
@@ -173,8 +205,51 @@ export function upsertDefectConvertedTestCase(input: {
     });
 }
 
-=======
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
+const OLD_RUN_ID_PATTERN = /^([a-z]+)-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/;
+function oldRunIdToNew(oldRunId: string): string | null {
+    const match = oldRunId.match(OLD_RUN_ID_PATTERN);
+    if (!match) return null;
+    const suite = match[1];
+    const yyyy = match[2], mm = match[3], dd = match[4];
+    const hh = match[5], min = match[6];
+    const capitalized = suite.charAt(0).toUpperCase() + suite.slice(1).toLowerCase();
+    return `${dd}${mm}${yyyy}${hh}${min}_${capitalized}`;
+}
+
+export function migrateMemoryVaultRunNames(): number {
+    if (!canUseStorage()) return 0;
+    const records = loadMemoryVaultRecords();
+    let migrated = 0;
+    const updated = records.map(record => {
+        if (record.sourceType !== "automation_summary") return record;
+        const meta = record.metadata || {};
+        const oldRunId = String(meta.runId || "");
+        const newRunId = oldRunIdToNew(oldRunId);
+        if (!newRunId || newRunId === oldRunId) return record;
+
+        const updateUrl = (url: unknown): string | undefined => {
+            const s = String(url || "");
+            return s ? s.replace(oldRunId, newRunId) : undefined;
+        };
+
+        migrated++;
+        return {
+            ...record,
+            title: record.title.replace(oldRunId, newRunId),
+            metadata: {
+                ...meta,
+                runId: newRunId,
+                playwrightReportUrl: updateUrl(meta.playwrightReportUrl),
+                allureReportUrl: updateUrl(meta.allureReportUrl),
+                healingReportUrl: updateUrl(meta.healingReportUrl),
+                logUrl: updateUrl(meta.logUrl),
+            },
+        };
+    });
+    if (migrated > 0) saveRecords(updated);
+    return migrated;
+}
+
 export function buildMemoryContextBlock(record: MemoryVaultRecord) {
     return [
         "MEMORY VAULT CONTEXT:",

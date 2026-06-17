@@ -153,8 +153,8 @@ export async function fetchJiraStory(storyId: string) {
     }
     const data = await res.json();
     if (data?.success) {
-<<<<<<< HEAD
         const { memoryIdForJiraStory, upsertMemoryVaultRecord, projectKeyFromText } = await import('@/src/services/memory-vault/memory-vault.service');
+        const { upsertStoryTraceability } = await import('@/src/services/traceability/traceability.service');
         const jiraId = data.key || data.storyId || storyId;
         const projectKey = projectKeyFromText(jiraId);
         upsertMemoryVaultRecord({
@@ -164,22 +164,11 @@ export async function fetchJiraStory(storyId: string) {
             title: jiraId,
             content: [
                 `Jira Story: ${jiraId}`,
-=======
-        const { upsertMemoryVaultRecord, projectKeyFromText } = await import('@/src/services/memory-vault/memory-vault.service');
-        upsertMemoryVaultRecord({
-            id: `jira-story-${storyId}`,
-            projectKey: projectKeyFromText(storyId),
-            sourceType: 'jira_story',
-            title: data.key || storyId,
-            content: [
-                `Jira Story: ${data.key || storyId}`,
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                 data.summary ? `Summary: ${data.summary}` : '',
                 data.description ? `Description:\n${data.description}` : '',
                 data.acceptanceCriteria ? `Acceptance Criteria:\n${data.acceptanceCriteria}` : '',
             ].filter(Boolean).join('\n\n'),
             metadata: {
-<<<<<<< HEAD
                 projectKey,
                 jiraId,
                 summary: data.summary || '',
@@ -188,12 +177,15 @@ export async function fetchJiraStory(storyId: string) {
                 originalJiraUrl: data.issueUrl || data.url || '',
                 key: jiraId,
                 url: data.issueUrl || data.url,
-=======
-                key: data.key || storyId,
-                url: data.url,
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                 status: data.status,
             },
+        });
+        upsertStoryTraceability({
+            storyId: jiraId,
+            projectKey,
+            summary: data.summary || '',
+            description: data.description || '',
+            acceptanceCriteria: data.acceptanceCriteria || '',
         });
     }
     return data;

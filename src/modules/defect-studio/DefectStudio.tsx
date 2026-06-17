@@ -5,12 +5,9 @@ import { Bug, Loader2, Pencil, Sparkles } from "lucide-react";
 import { createDefect, DefectPayload, fetchJiraStory, reviewDefectWithAi } from "@/src/services/jira/jira.service";
 import { extractJiraId } from "@/src/orchestrators/jira-orchestrator";
 import type { AiProviderId, ProviderSettings } from "@/src/services/ai/provider-orchestrator";
-<<<<<<< HEAD
-import { memoryIdForJiraStory, projectKeyFromText, upsertDefectConvertedTestCase, upsertMemoryVaultRecord } from "@/src/services/memory-vault/memory-vault.service";
+import { projectKeyFromText, upsertDefectConvertedTestCase, upsertMemoryVaultRecord } from "@/src/services/memory-vault/memory-vault.service";
+import { linkDefectTraceability, traceabilityMetadataLinks } from "@/src/services/traceability/traceability.service";
 import { DefectToast, DefectToastState } from "./DefectToast";
-=======
-import { projectKeyFromText, upsertMemoryVaultRecord } from "@/src/services/memory-vault/memory-vault.service";
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
 
 const priorities = ["", "Lowest", "Low", "Medium", "High", "Highest"];
 const severities = ["", "Low", "Medium", "High", "Critical", "Blocker"];
@@ -198,16 +195,10 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
             const explicitStoryId = await resolveStoryIdForCreate();
             const data = await createDefect({ ...payload, storyId: explicitStoryId || undefined });
             if (!data.success) throw new Error(data.error || "Jira defect creation failed");
-<<<<<<< HEAD
             const projectKey = projectKeyFromText(explicitStoryId || data.issueKey);
             upsertMemoryVaultRecord({
                 id: data.issueKey ? `defect-${data.issueKey}` : undefined,
                 projectKey,
-=======
-            upsertMemoryVaultRecord({
-                id: data.issueKey ? `defect-${data.issueKey}` : undefined,
-                projectKey: projectKeyFromText(explicitStoryId || data.issueKey),
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                 sourceType: "defect",
                 title: data.issueKey || payload.summary,
                 content: [
@@ -224,11 +215,18 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
                     issueType: data.issueType || payload.issueType,
                     priority: payload.priority,
                     severity: payload.severity,
-<<<<<<< HEAD
                     storyId: explicitStoryId || undefined,
-                    linkedMemoryStoryId: explicitStoryId ? memoryIdForJiraStory(explicitStoryId) : undefined,
                     reviewedMode,
+                    ...traceabilityMetadataLinks({
+                        storyId: explicitStoryId,
+                        defectIds: data.issueKey ? [data.issueKey] : [],
+                    }),
                 },
+            });
+            linkDefectTraceability({
+                defectId: data.issueKey,
+                storyId: explicitStoryId,
+                summary: payload.summary,
             });
             upsertDefectConvertedTestCase({
                 defectId: data.issueKey,
@@ -243,12 +241,6 @@ export function DefectStudio({ provider, model, providerSettings }: DefectStudio
                 storyId: explicitStoryId || undefined,
             });
             setToast({
-=======
-                    reviewedMode,
-                },
-            });
-            setNotice({
->>>>>>> c56888bdab4c6085510f52574d81eb26297163bf
                 type: "success",
                 message: `${data.issueType || payload.issueType || "Bug"} created successfully`,
                 issueKey: data.issueKey,

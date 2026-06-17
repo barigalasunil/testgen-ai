@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { 
     AlertCircle, CheckCircle2, Copy, ExternalLink, FileText,
-    Bug, FileSpreadsheet, FileJson, Tag, RefreshCw, ThumbsUp, Link,
-    ShieldCheck, Play, Sparkles, Download, Terminal
+    Bug, FileSpreadsheet, FileJson, Tag, RefreshCw,
+    ShieldCheck, Play, BarChart3
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TestCase } from "../types";
+import { QualityReport, TestCase } from "../types";
 import { exportExcel, exportCsv, exportJson } from "@/src/services/export/export.service";
 import { saveTestCasesToJira } from "@/src/services/jira/jira.service";
 
@@ -21,6 +21,7 @@ interface JiraResult {
 
 interface TestCaseTableProps {
     data: { testCases: TestCase[] };
+    qualityReport?: QualityReport;
     jiraStoryId?: string;
     platformType?: 'web' | 'mobile' | 'api' | 'automation';
     onCopy: () => void;
@@ -38,24 +39,22 @@ interface TestCaseTableProps {
 
 export function TestCaseTable({
     data,
+    qualityReport,
     jiraStoryId,
-    platformType,
     onCopy,
     onRegenerate,
     onGenerateScript,
     onRunAutomation,
-    onCopyScript,
-    onDownloadScript,
     hasGeneratedScript,
     isGeneratingScript,
     isRunningAutomation,
     onOpenJira,
 }: TestCaseTableProps) {
-    const [liked, setLiked] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [showQualityReport, setShowQualityReport] = useState(false);
 
-    const [defects, setDefects] = useState<Record<string, string>>({});
+    const [defects] = useState<Record<string, string>>({});
 
     useEffect(() => {
         // Traceability visualization logic handled via props
@@ -208,6 +207,150 @@ export function TestCaseTable({
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {showQualityReport && qualityReport && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="max-h-[86vh] w-full max-w-4xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-slate-900">
+                        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-800">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Quality Report</h3>
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    Traceability matrix, RAGAS-style evaluation, and improvement suggestions.
+                                </p>
+                            </div>
+                            <button onClick={() => setShowQualityReport(false)} className="rounded-md px-2 py-1 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+                                Close
+                            </button>
+                        </div>
+                        <div className="max-h-[72vh] space-y-5 overflow-auto p-5 text-sm">
+                            <section className="grid gap-3 md:grid-cols-4">
+                                {[
+                                    ["Quality Score", `${qualityReport.qualityScore.overall}%`],
+                                    ["Requirement Coverage", `${qualityReport.qualityScore.requirementCoverage}%`],
+                                    ["RAGAS Faithfulness", qualityReport.ragasScore.available ? `${qualityReport.ragasScore.faithfulness}%` : "Not available"],
+                                    ["Hallucination Risk", qualityReport.ragasScore.hallucinationRisk],
+                                ].map(([label, value]) => (
+                                    <div key={label} className="rounded-lg border border-gray-200 bg-slate-50 px-3 py-2 dark:border-gray-800 dark:bg-slate-950">
+                                        <div className="text-xs font-bold uppercase text-slate-500">{label}</div>
+                                        <div className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{value}</div>
+                                    </div>
+                                ))}
+                            </section>
+
+                            <section>
+                                <h4 className="mb-2 text-xs font-bold uppercase text-slate-500">AC to Test Case Mapping</h4>
+                                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
+                                    {qualityReport.acToTestCaseMapping.map((row, index) => (
+                                        <div key={`${row.acceptanceCriterion}-${index}`} className="grid gap-2 border-b border-gray-100 p-3 last:border-b-0 dark:border-gray-800 md:grid-cols-[1fr_220px]">
+                                            <div className="text-slate-700 dark:text-slate-300">{row.acceptanceCriterion}</div>
+                                            <div className="font-mono text-xs font-bold text-[#10A37F]">{row.testCaseIds.join(", ") || "No mapped test cases"}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            <section className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <h4 className="mb-2 text-xs font-bold uppercase text-slate-500">Missing Coverage</h4>
+                                    <ul className="space-y-2">
+                                        {(qualityReport.missingCoverage.length ? qualityReport.missingCoverage : ["None detected"]).map(item => (
+                                            <li key={item} className="rounded-lg border border-gray-200 px-3 py-2 text-slate-700 dark:border-gray-800 dark:text-slate-300">{item}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 className="mb-2 text-xs font-bold uppercase text-slate-500">Duplicate Scenarios</h4>
+                                    <ul className="space-y-2">
+                                        {(qualityReport.duplicateScenarios.length ? qualityReport.duplicateScenarios : [{ scenario: "None detected", testCaseIds: [] }]).map(item => (
+                                            <li key={`${item.scenario}-${item.testCaseIds.join("-")}`} className="rounded-lg border border-gray-200 px-3 py-2 text-slate-700 dark:border-gray-800 dark:text-slate-300">
+                                                {item.scenario}
+                                                {item.testCaseIds.length ? <span className="ml-2 font-mono text-xs text-[#10A37F]">{item.testCaseIds.join(", ")}</span> : null}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </section>
+
+                            <section>
+                                <h4 className="mb-2 text-xs font-bold uppercase text-slate-500">RAGAS-style Evaluation</h4>
+                                {!qualityReport.ragasScore.available ? (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
+                                        RAGAS Score not available — no retrieved context used.
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-2 md:grid-cols-5">
+                                        {[
+                                            ["Context Relevance", qualityReport.ragasScore.contextRelevance],
+                                            ["Context Precision", qualityReport.ragasScore.contextPrecision],
+                                            ["Context Recall", qualityReport.ragasScore.contextRecall],
+                                            ["Faithfulness", qualityReport.ragasScore.faithfulness],
+                                            ["Answer Relevance", qualityReport.ragasScore.answerRelevance],
+                                        ].map(([label, value]) => (
+                                            <div key={label} className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
+                                                <div className="text-xs font-bold text-slate-500">{label}</div>
+                                                <div className="mt-1 text-base font-bold text-slate-900 dark:text-white">{value}%</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </section>
+
+                            <section>
+                                <h4 className="mb-2 text-xs font-bold uppercase text-slate-500">Improvement Suggestions</h4>
+                                <ul className="space-y-2">
+                                    {qualityReport.improvementSuggestions.map(item => (
+                                        <li key={item} className="rounded-lg border border-gray-200 px-3 py-2 text-slate-700 dark:border-gray-800 dark:text-slate-300">{item}</li>
+                                    ))}
+                                </ul>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {qualityReport && (
+                <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-slate-900">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                            <div>
+                                <div className="text-[10px] font-bold uppercase text-slate-500">Quality Score</div>
+                                <div className="text-lg font-bold text-slate-900 dark:text-white">{qualityReport.qualityScore.overall}%</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold uppercase text-slate-500">Requirement Coverage</div>
+                                <div className="text-lg font-bold text-slate-900 dark:text-white">{qualityReport.qualityScore.requirementCoverage}%</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold uppercase text-slate-500">RAGAS Faithfulness</div>
+                                <div className="text-lg font-bold text-slate-900 dark:text-white">{qualityReport.ragasScore.available ? `${qualityReport.ragasScore.faithfulness}%` : "N/A"}</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold uppercase text-slate-500">Context Relevance</div>
+                                <div className="text-lg font-bold text-slate-900 dark:text-white">{qualityReport.ragasScore.available ? `${qualityReport.ragasScore.contextRelevance}%` : "N/A"}</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold uppercase text-slate-500">Hallucination Risk</div>
+                                <div className={cn(
+                                    "text-lg font-bold",
+                                    qualityReport.ragasScore.hallucinationRisk === "Low" ? "text-emerald-600 dark:text-emerald-400" :
+                                        qualityReport.ragasScore.hallucinationRisk === "Medium" ? "text-amber-600 dark:text-amber-400" :
+                                            "text-red-600 dark:text-red-400"
+                                )}>{qualityReport.ragasScore.hallucinationRisk}</div>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setShowQualityReport(true)}
+                            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#10A37F] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#0d8c6d]"
+                        >
+                            <BarChart3 className="h-4 w-4" />
+                            View Quality Report
+                        </button>
+                    </div>
+                    {!qualityReport.ragasScore.available && (
+                        <p className="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-300">RAGAS Score not available — no retrieved context used.</p>
+                    )}
                 </div>
             )}
 
