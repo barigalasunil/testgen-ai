@@ -171,6 +171,7 @@ export function AutomationSidebarContent({
     const latestAllureUrl = executionSummary?.allureReportUrl || null;
     const latestHealingUrl = executionSummary?.healingReportUrl || null;
     const latestLogUrl = executionSummary?.logUrl || null;
+    const latestHealingStatus = executionSummary?.healingStatus || null;
     const resolvedReportUrl = latestPlaywrightUrl;
     const hasResults = Boolean(executionSummary);
     const displayLogs = executionLogs;
@@ -327,7 +328,23 @@ export function AutomationSidebarContent({
                     </button>
                 </Card>
 
-                <Card title="Healing Center" description={latestHealingUrl ? 'Open the latest self-healing evidence report.' : 'Healing report appears after a run.'} status={latestHealingUrl ? 'Healing report available' : 'No healing report'}>
+                <Card title="Self-Healing" description={latestHealingUrl ? 'Review the latest actionable healing result.' : 'Healing report appears after a failed run.'} status={latestHealingStatus || (latestHealingUrl ? 'Healing report available' : 'No healing report')}>
+                    {executionSummary && (
+                        <div className="mb-3 grid grid-cols-3 gap-2 text-center text-xs">
+                            <div className="rounded-md bg-slate-50 p-2 dark:bg-slate-800">
+                                <div className="font-bold text-slate-900 dark:text-slate-100">{executionSummary.failedTestsCount ?? executionSummary.failed ?? 0}</div>
+                                <div className="text-slate-500 dark:text-slate-500">Failed</div>
+                            </div>
+                            <div className="rounded-md bg-emerald-50 p-2 dark:bg-emerald-900/10">
+                                <div className="font-bold text-emerald-700 dark:text-emerald-400">{executionSummary.autoHealedCount ?? 0}</div>
+                                <div className="text-emerald-700 dark:text-emerald-400">Healed</div>
+                            </div>
+                            <div className="rounded-md bg-amber-50 p-2 dark:bg-amber-900/10">
+                                <div className="font-bold text-amber-700 dark:text-amber-400">{executionSummary.manualReviewCount ?? 0}</div>
+                                <div className="text-amber-700 dark:text-amber-400">Review</div>
+                            </div>
+                        </div>
+                    )}
                     {latestHealingUrl ? (
                         <a href={latestHealingUrl} target="_blank" rel="noreferrer" className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600">
                             <Wrench className="h-4 w-4" />
@@ -429,6 +446,8 @@ export function AutomationSidebarContent({
                                     <div><span className="font-semibold text-slate-900 dark:text-slate-100">End:</span> {formatTimestamp(run.finishedAt)}</div>
                                     <div><span className="font-semibold text-slate-900 dark:text-slate-100">Passed:</span> {run.passed ?? 0}</div>
                                     <div><span className="font-semibold text-slate-900 dark:text-slate-100">Failed:</span> {run.failed ?? 0}</div>
+                                    {run.healingStatus && <div><span className="font-semibold text-slate-900 dark:text-slate-100">Healing:</span> {run.healingStatus}</div>}
+                                    {run.healedScriptPath && <div className="truncate md:col-span-2"><span className="font-semibold text-slate-900 dark:text-slate-100">Healed Script:</span> {run.healedScriptPath}</div>}
                                 </div>
                                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
                                     {run.playwrightReportUrl ? (

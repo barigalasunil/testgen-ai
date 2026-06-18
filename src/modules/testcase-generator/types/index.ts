@@ -52,6 +52,11 @@ export type AutomationRunRecord = {
     allureReportUrl?: string | null;
     healingReportUrl?: string | null;
     logUrl?: string | null;
+    healingStatus?: 'Auto-Healed' | 'Partially Healed' | 'Needs Manual Review' | 'Not Healable' | string;
+    failedTestsCount?: number;
+    autoHealedCount?: number;
+    manualReviewCount?: number;
+    healedScriptPath?: string;
     errors?: {
         execution?: string;
         playwrightReport?: string;
@@ -125,6 +130,8 @@ export type SuiteExecution = {
     output?: string;
     stderr?: string;
     failedTests?: string[];
+    healingStatus?: string;
+    healedScriptPath?: string;
     targetUrl?: string;
     browser?: string;
 };
@@ -140,6 +147,11 @@ export type AutomationExecutionSummary = {
     healingReportUrl?: string;
     logUrl?: string;
     runId?: string;
+    healingStatus?: string;
+    failedTestsCount?: number;
+    autoHealedCount?: number;
+    manualReviewCount?: number;
+    healedScriptPath?: string;
 };
 
 export type AiGenerationMeta = {

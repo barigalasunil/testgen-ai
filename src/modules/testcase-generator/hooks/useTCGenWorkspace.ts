@@ -161,6 +161,26 @@ type AutomationRunResponse = {
     passed?: number;
     failed?: number;
     failedTests?: string[];
+    healingStatus?: string;
+    failedTestsCount?: number;
+    autoHealedCount?: number;
+    manualReviewCount?: number;
+    healedScriptPath?: string;
+    healingEvent?: {
+        sourceType: "self_healing_event";
+        runId: string;
+        suite: string;
+        testTitle: string;
+        failureType: string;
+        originalLocator?: string;
+        healedLocator?: string;
+        finalStatus: string;
+        confidence: number;
+        linkedAutomationRunId: string;
+        linkedStoryId?: string;
+        healedScriptPath?: string;
+        createdAt: string;
+    };
     errors?: AutomationRunRecord['errors'];
     output?: string;
     stderr?: string;
@@ -794,6 +814,9 @@ export function useTCGenWorkspace() {
                 status: summary.status,
                 passed: summary.passed ?? 0,
                 failed: summary.failed ?? 0,
+                healingAttempted: Boolean(summary.healingStatus),
+                healingStatus: summary.healingStatus,
+                healedScriptPath: summary.healedScriptPath,
                 storyId,
                 generatedTestCaseMemoryId,
                 generatedTestCaseIds: session?.result?.testCases?.map(testCase => testCase.testCaseId) || [],
@@ -814,8 +837,41 @@ export function useTCGenWorkspace() {
             suite: summary.suite || "generated",
             passed: summary.passed,
             failed: summary.failed,
+            status: summary.status,
+            healingAttempted: Boolean(summary.healingStatus),
+            healingStatus: summary.healingStatus,
+            healedScriptPath: summary.healedScriptPath,
             linkedTestCaseIds: session?.result?.testCases?.map(testCase => testCase.testCaseId) || [],
         });
+
+        if ("healingEvent" in summary && summary.healingEvent) {
+            const event = summary.healingEvent;
+            upsertMemoryVaultRecord({
+                id: `self-healing-${event.runId}-${event.failureType}`,
+                projectKey,
+                sourceType: "self_healing_event",
+                title: `Self-Healing Event ${event.runId}`,
+                content: [
+                    `Run ID: ${event.runId}`,
+                    `Suite: ${event.suite}`,
+                    `Test: ${event.testTitle}`,
+                    `Failure Type: ${event.failureType}`,
+                    `Final Status: ${event.finalStatus}`,
+                    `Confidence: ${event.confidence}`,
+                    event.originalLocator ? `Original Locator: ${event.originalLocator}` : "",
+                    event.healedLocator ? `Healed Locator: ${event.healedLocator}` : "",
+                    event.healedScriptPath ? `Healed Script: ${event.healedScriptPath}` : "",
+                ].filter(Boolean).join("\n"),
+                createdAt: event.createdAt,
+                metadata: {
+                    ...event,
+                    storyId: storyId || event.linkedStoryId,
+                    linkedAutomationRunIds: [event.linkedAutomationRunId],
+                    linkedStoryIds: storyId || event.linkedStoryId ? [storyId || event.linkedStoryId] : [],
+                    linkedTestCaseIds: session?.result?.testCases?.map(testCase => testCase.testCaseId) || [],
+                },
+            });
+        }
     };
 
     const handleSend = async (overridePrompt?: string, overrideOptions?: Partial<AiGenerationOptions>) => {
@@ -1236,6 +1292,9 @@ export function useTCGenWorkspace() {
                     jiraStoryId: storyId,
                     targetUrl,
                     headed,
+                    provider,
+                    model: currentThread?.aiOptions?.model || selectedModel,
+                    providerSettings,
                 }),
             });
 
@@ -1287,6 +1346,11 @@ export function useTCGenWorkspace() {
                                                                 allureReportUrl: data.allureReportUrl || null,
                                                                 healingReportUrl: data.healingReportUrl || null,
                                                                 logUrl: data.logUrl || null,
+                                                                healingStatus: data.healingStatus,
+                                                                failedTestsCount: data.failedTestsCount,
+                                                                autoHealedCount: data.autoHealedCount,
+                                                                manualReviewCount: data.manualReviewCount,
+                                                                healedScriptPath: data.healedScriptPath,
                                                             },
                                                             aiOptions: currentThread.aiOptions,
                                                             createdAt: new Date().toISOString(),
@@ -1361,7 +1425,14 @@ export function useTCGenWorkspace() {
             const response = await fetch('/api/automation/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ suite, headed }),
+                body: JSON.stringify({
+                    suite,
+                    headed,
+                    provider,
+                    model: currentThread?.aiOptions?.model || selectedModel,
+                    providerSettings,
+                    jiraStoryId: currentThread?.aiOptions?.jiraStoryId || "",
+                }),
             });
             const payload = (await response.json()) as AutomationRunResponse;
             const finishedAt = payload.finishedAt || new Date().toISOString();
@@ -1379,6 +1450,8 @@ export function useTCGenWorkspace() {
                 output: payload.output,
                 stderr: payload.stderr,
                 failedTests: payload.failedTests,
+                healingStatus: payload.healingStatus,
+                healedScriptPath: payload.healedScriptPath,
                 targetUrl: payload.targetUrl,
                 browser: payload.browser,
             };
@@ -1393,6 +1466,11 @@ export function useTCGenWorkspace() {
                 healingReportUrl: payload.healingReportUrl || undefined,
                 logUrl: payload.logUrl || undefined,
                 runId: payload.runId || undefined,
+                healingStatus: payload.healingStatus,
+                failedTestsCount: payload.failedTestsCount,
+                autoHealedCount: payload.autoHealedCount,
+                manualReviewCount: payload.manualReviewCount,
+                healedScriptPath: payload.healedScriptPath,
             });
             setReportUrl(payload.playwrightReportUrl || payload.reportUrl || null);
             setPassedTests([]);
@@ -1441,6 +1519,11 @@ export function useTCGenWorkspace() {
                                         allureReportUrl: payload.allureReportUrl || null,
                                         healingReportUrl: payload.healingReportUrl || null,
                                         logUrl: payload.logUrl || null,
+                                        healingStatus: payload.healingStatus,
+                                        failedTestsCount: payload.failedTestsCount,
+                                        autoHealedCount: payload.autoHealedCount,
+                                        manualReviewCount: payload.manualReviewCount,
+                                        healedScriptPath: payload.healedScriptPath,
                                         errors: payload.errors,
                                     },
                                     ...(s.automationRuns || []),
@@ -1472,6 +1555,11 @@ export function useTCGenWorkspace() {
                                             allureReportUrl: payload.allureReportUrl || null,
                                             healingReportUrl: payload.healingReportUrl || null,
                                             logUrl: payload.logUrl || null,
+                                            healingStatus: payload.healingStatus,
+                                            failedTestsCount: payload.failedTestsCount,
+                                            autoHealedCount: payload.autoHealedCount,
+                                            manualReviewCount: payload.manualReviewCount,
+                                            healedScriptPath: payload.healedScriptPath,
                                             errors: payload.errors,
                                         },
                                         aiOptions: s.aiOptions,

@@ -1,3 +1,0 @@
-"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
-"","6119","healable timing local probe","chromium","2026-06-15","failed","2026-06-15","","_healed_generated-20260615-153954.spec.ts","",""
-"","394","healable timing local probe","chromium","2026-06-15","failed","2026-06-15","","_generated_local-timing-probe.spec.ts","",""

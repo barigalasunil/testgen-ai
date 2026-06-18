@@ -126,7 +126,12 @@ function TraceabilityDetailsModal({ view, onClose }: { view: TraceabilityStoryVi
                         {view.linkedAssets.automationRuns.length ? (
                             <ul className="space-y-2">
                                 {view.linkedAssets.automationRuns.map(run => (
-                                    <li key={run.runId}><strong>{run.runId}</strong>{run.suite ? ` - ${run.suite}` : ""}</li>
+                                    <li key={run.runId}>
+                                        <strong>{run.runId}</strong>{run.suite ? ` - ${run.suite}` : ""}
+                                        {run.status ? ` - ${run.status}` : ""}
+                                        {run.healingAttempted ? ` - healing ${run.healingStatus || "attempted"}` : ""}
+                                        {run.healedScriptPath ? <div className="truncate text-xs text-slate-500 dark:text-slate-400">Healed script: {run.healedScriptPath}</div> : null}
+                                    </li>
                                 ))}
                             </ul>
                         ) : <p>No linked automation runs found.</p>}

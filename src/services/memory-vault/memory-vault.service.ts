@@ -9,6 +9,7 @@ export type MemorySourceType =
     | "api_spec"
     | "api_test_cases"
     | "automation_summary"
+    | "self_healing_event"
     | "document_metadata";
 
 export type MemoryVaultRecord = {

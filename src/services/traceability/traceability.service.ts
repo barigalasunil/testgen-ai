@@ -48,6 +48,10 @@ export type TraceabilityAutomationRun = {
     suite?: string;
     passed?: number;
     failed?: number;
+    status?: string;
+    healingAttempted?: boolean;
+    healingStatus?: string;
+    healedScriptPath?: string;
 };
 
 export type TraceabilityQualityReport = {
@@ -335,6 +339,10 @@ export function linkAutomationRunTraceability(params: {
     suite?: string;
     passed?: number;
     failed?: number;
+    status?: string;
+    healingAttempted?: boolean;
+    healingStatus?: string;
+    healedScriptPath?: string;
 }) {
     const storyId = normalizeJiraId(params.storyId);
     const runId = toText(params.runId);
@@ -349,6 +357,10 @@ export function linkAutomationRunTraceability(params: {
             suite: params.suite,
             passed: params.passed,
             failed: params.failed,
+            status: params.status,
+            healingAttempted: params.healingAttempted,
+            healingStatus: params.healingStatus,
+            healedScriptPath: params.healedScriptPath,
         }, item => item.runId),
     });
 }
@@ -448,7 +460,28 @@ function mergeFromMemory(stored: TraceabilityRecord, records: MemoryVaultRecord[
                 suite: toText(record.metadata?.suite) || undefined,
                 passed: Number(record.metadata?.passed ?? 0),
                 failed: Number(record.metadata?.failed ?? 0),
+                status: toText(record.metadata?.status) || undefined,
+                healingAttempted: Boolean(record.metadata?.healingAttempted),
+                healingStatus: toText(record.metadata?.healingStatus) || undefined,
+                healedScriptPath: toText(record.metadata?.healedScriptPath) || undefined,
             }, item => item.runId);
+        }
+
+        if (record.sourceType === "self_healing_event") {
+            const runId = toText(record.metadata?.runId) || toText(record.metadata?.linkedAutomationRunId);
+            if (runId) {
+                merged.automationRuns = upsertById(merged.automationRuns, {
+                    runId,
+                    storyId,
+                    linkedTestCaseIds: normalizeArray(record.metadata?.linkedTestCaseIds),
+                    suite: toText(record.metadata?.suite) || undefined,
+                    failed: 1,
+                    status: "failed",
+                    healingAttempted: true,
+                    healingStatus: toText(record.metadata?.finalStatus) || undefined,
+                    healedScriptPath: toText(record.metadata?.healedScriptPath) || undefined,
+                }, item => item.runId);
+            }
         }
 
         if (record.sourceType === "quality_report") {
