@@ -1,0 +1,3 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","847","generated heal verification should pass after locator healing","chromium","2026-09-02","passed","2026-09-02","","_healed_heal-verify.healed.spec.ts","",""
+"","15871","generated heal verification should pass after locator healing","chromium","2026-09-02","failed","2026-09-02","","_generated_heal-verify.spec.ts","",""

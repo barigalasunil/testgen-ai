@@ -1,0 +1,32 @@
+{
+  "url": "https://www.saucedemo.com/",
+  "buttons": [
+    "Login"
+  ],
+  "inputs": [
+    "user-name:user-name:text",
+    "password:password:password",
+    "login-button:login-button:submit"
+  ],
+  "labels": [],
+  "placeholders": [
+    "Username",
+    "Password"
+  ],
+  "links": [],
+  "headings": [
+    "Accepted usernames are:",
+    "Password for all users:"
+  ],
+  "ariaLabels": [],
+  "testIds": [
+    "login-container",
+    "username",
+    "password",
+    "login-button",
+    "login-credentials-container",
+    "login-credentials",
+    "login-password"
+  ],
+  "textCandidates": []
+}

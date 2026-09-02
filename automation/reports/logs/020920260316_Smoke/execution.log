@@ -1,0 +1,27 @@
+Run ID: 020920260316_Smoke
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: smoke
+Suite app: SauceDemo
+Mode: Headless
+Status: initialized
+Status: environment validated
+Selected suite: Smoke
+Browser launch mode: headless
+Starting Playwright execution from tests/smoke
+Status: passed
+Healing skipped: no failed tests.
+Playwright report generated
+Generating Allure report...
+Allure report generated
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+Running 6 tests using 1 worker
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✓  1 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success (758ms)
+  ✓  2 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail (630ms)
+  ✓  3 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success (582ms)
+  ✓  4 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success (5.9s)
+  ✓  5 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success (735ms)
+  ✓  6 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success (625ms)
+  6 passed (10.5s)
+npm warn allow-scripts .npmrc allow-scripts setting is being ignored because --allow-scripts was passed on the command line

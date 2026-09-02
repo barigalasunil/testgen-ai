@@ -442,6 +442,7 @@ export function ClassicWorkspaceLayout({ workspace }: LayoutProps) {
                                                                         isTable
                                                                         tableData={message.result}
                                                                         qualityReport={message.qualityReport}
+                                                                        warning={message.warning || undefined}
                                                                         jiraStoryId={message.aiOptions?.jiraStoryId || ''}
                                                                         platformType={message.platform || currentThread?.platform || "web"}
                                                                         onCopy={() => copyTestCaseData(message.result?.testCases)}

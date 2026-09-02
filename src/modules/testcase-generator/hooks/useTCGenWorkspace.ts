@@ -1062,6 +1062,7 @@ export function useTCGenWorkspace() {
                                 result: parsedResult,
                                 qualityReport,
                                 error: parsedError,
+                                warning: typeof (data as GenerateApiResponse).meta?.jiraWarning === 'string' ? (data as GenerateApiResponse).meta?.jiraWarning : null,
                                 aiOptions: generationOptions,
                                 aiMeta: data.meta,
                                 memoryRecordId: qualityReport?.id,

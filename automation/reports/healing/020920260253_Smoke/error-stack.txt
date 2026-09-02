@@ -1,0 +1,303 @@
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+
+Running 6 tests using 1 worker
+
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  1 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success (1ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  2 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success (retry #1) (1ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  3 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail (2ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  4 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail (retry #1) (1ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  5 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success (1ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  6 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success (retry #1) (1ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  7 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success (1ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  8 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success (retry #1) (1ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  9 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success (2ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  10 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success (retry #1) (1ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  11 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success (2ms)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  12 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success (retry #1) (1ms)
+
+
+  1) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success 
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium-retry1\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail 
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium-retry1\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success 
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium-retry1\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success 
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium-retry1\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success 
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium-retry1\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success 
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\Qualitrix\AppData\Local\ms-playwright\chromium_headless_shell-1223\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium-retry1\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260253_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6 failed
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success 
+
+npm warn allow-scripts .npmrc allow-scripts setting is being ignored because --allow-scripts was passed on the command line

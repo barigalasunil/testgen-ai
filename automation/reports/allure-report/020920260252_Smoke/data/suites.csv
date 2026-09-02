@@ -1,0 +1,7 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","1","login for locked_out_user should fail","chromium","2026-09-02","failed","2026-09-02","SauceDemo Smoke","smoke\login.spec.ts","",""
+"","2","login for visual_user should success","chromium","2026-09-02","failed","2026-09-02","SauceDemo Smoke","smoke\login.spec.ts","",""
+"","1","login for performance_glitch_user should success","chromium","2026-09-02","failed","2026-09-02","SauceDemo Smoke","smoke\login.spec.ts","",""
+"","1","login for error_user should success","chromium","2026-09-02","failed","2026-09-02","SauceDemo Smoke","smoke\login.spec.ts","",""
+"","1","login for problem_user should success","chromium","2026-09-02","failed","2026-09-02","SauceDemo Smoke","smoke\login.spec.ts","",""
+"","1","login for standard_user should success","chromium","2026-09-02","failed","2026-09-02","SauceDemo Smoke","smoke\login.spec.ts","",""

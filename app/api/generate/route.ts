@@ -269,6 +269,7 @@ export async function POST(req: Request) {
                 type: isAutomationMode ? 'automation' : type,
                 platformType,
                 jiraStoryId: jiraId,
+                jiraWarning: resolvedPrompt.warning,
                 fallbackUsed,
                 attempts,
                 failedChunks,

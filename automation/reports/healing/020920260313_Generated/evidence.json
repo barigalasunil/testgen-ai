@@ -1,0 +1,37 @@
+{
+  "testTitle": "generated heal verification should pass after locator healing",
+  "specFilePath": "automation\\scripts\\generated\\heal-verify.spec.ts",
+  "failedLineNumber": 3,
+  "errorMessage": "TimeoutError: locator.click: Timeout 15000ms exceeded.",
+  "stackTrace": "Running 1 test using 1 worker\n\n  ✘  1 [chromium] › tests\\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing (16.0s)\n  ✘  2 [chromium] › tests\\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing (retry #1) (15.9s)\n\n\n  1) [chromium] › tests\\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing \n\n    TimeoutError: locator.click: Timeout 15000ms exceeded.\n    Call log:\n    \u001b[2m  - waiting for locator('#login-button-broken')\u001b[22m\n\n\n      5 |     await page.locator('#user-name').fill('standard_user');\n      6 |     await page.locator('#password').fill('secret_sauce');\n    > 7 |     await page.locator('#login-button-broken').click();\n        |                                                ^\n      8 |     await expect(page).toHaveURL(/inventory\\.html/);\n      9 | });\n        at D:\\TCGen-Buddy\\automation\\tests\\_generated_heal-verify.spec.ts:7:48\n\n    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────\n    reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\\test-failed-1.png\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────\n    reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\\video.webm\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    Error Context: reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\\error-context.md\n\n    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────\n    reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\\trace.zip\n    Usage:\n\n        npx playwright show-trace reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\\trace.zip\n\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────\n\n    TimeoutError: locator.click: Timeout 15000ms exceeded.\n    Call log:\n    \u001b[2m  - waiting for locator('#login-button-broken')\u001b[22m\n\n\n      5 |     await page.locator('#user-name').fill('standard_user');\n      6 |     await page.locator('#password').fill('secret_sauce');\n    > 7 |     await page.locator('#login-button-broken').click();\n        |                                                ^\n      8 |     await expect(page).toHaveURL(/inventory\\.html/);\n      9 | });\n        at D:\\TCGen-Buddy\\automation\\tests\\_generated_heal-verify.spec.ts:7:48\n\n    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────\n    reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\\test-failed-1.png\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────\n    reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\\video.webm\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n    Error Context: reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\\error-context.md\n\n    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────\n    reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\\trace.zip\n    Usage:\n\n        npx playwright show-trace reports\\traces\\020920260313_Generated\\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\\trace.zip\n\n    ────────────────────────────────────────────────────────────────────────────────────────────────\n\n  1 failed\n    [chromium] › tests\\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing \n\nnpm warn allow-scripts .npmrc allow-scripts setting is being ignored because --allow-scripts was passed on the command line",
+  "screenshotPath": "automation\\reports\\healing\\020920260313_Generated\\evidence\\1-test-failed-1.png",
+  "tracePath": "automation\\reports\\healing\\020920260313_Generated\\evidence\\1-trace.zip",
+  "videoPath": "automation\\reports\\healing\\020920260313_Generated\\evidence\\1-video.webm",
+  "currentUrl": "https://www.saucedemo.com",
+  "browser": "chromium",
+  "suite": "generated",
+  "runId": "020920260313_Generated",
+  "screenshots": [
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\1-test-failed-1.png",
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\2-test-failed-1.png",
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\3-91ed1f4f31597c3b2bc272bde04c1985161b9c2b.png"
+  ],
+  "traces": [
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\1-trace.zip",
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\2-trace.zip",
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\3-1a7cd95b3e301337629f381e1c1cca22dda3f611.zip",
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\4-399c8c235a740b87dafe1ca071f23f0764241f5a.zip"
+  ],
+  "videos": [
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\1-video.webm",
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\2-video.webm",
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\3-512efb37c13a1c3bb0c5ff17e25c2a99fd3d9354.webm",
+    "automation\\reports\\healing\\020920260313_Generated\\evidence\\4-cc5b0827577c34cbf720c4037f24a0afe549818d.webm"
+  ],
+  "errorStackPath": "automation\\reports\\healing\\020920260313_Generated\\error-stack.txt",
+  "evidenceJsonPath": "automation\\reports\\healing\\020920260313_Generated\\evidence.json",
+  "testTitles": [
+    "generated heal verification should pass after locator healing"
+  ],
+  "failedLocator": "'#login-button-broken'"
+}

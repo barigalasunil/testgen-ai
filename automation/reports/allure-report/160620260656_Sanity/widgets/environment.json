@@ -1,1 +1,0 @@
-[{"values":["sanity-20260616-065623"],"name":"RUN_ID"},{"values":["sanity"],"name":"SUITE_NAME"},{"values":["SauceDemo"],"name":"SUITE_APP"},{"values":["chromium"],"name":"BROWSER_NAME"},{"values":["headless"],"name":"HEADLESS_MODE"}]

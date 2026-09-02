@@ -5,6 +5,7 @@ export interface ResolvedJiraContext {
     jiraStoryId: string | null;
     projectKey: string;
     prompt: string;
+    warning?: string;
     story?: {
         summary: string;
         description: string;
@@ -36,6 +37,7 @@ export async function resolveTestCasePrompt(prompt: string): Promise<ResolvedJir
             jiraStoryId,
             projectKey: deriveProjectKey(jiraStoryId),
             prompt,
+            warning: message,
         };
     }
     if (!jiraResult?.success) {
@@ -43,6 +45,7 @@ export async function resolveTestCasePrompt(prompt: string): Promise<ResolvedJir
             jiraStoryId,
             projectKey: deriveProjectKey(jiraStoryId),
             prompt,
+            warning: typeof jiraResult?.error === 'string' ? jiraResult.error : 'Jira story lookup failed.',
         };
     }
 

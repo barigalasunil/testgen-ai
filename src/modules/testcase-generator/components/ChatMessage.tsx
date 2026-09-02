@@ -1,6 +1,7 @@
 "use client";
 
-import { Bot, User } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Bot, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TestCaseTable } from "./TestCaseTable";
 import { QualityReport, TestCase } from "../types";
@@ -19,6 +20,7 @@ interface ChatMessageProps {
     isTable?: boolean;
     tableData?: { testCases: TestCase[] };
     qualityReport?: QualityReport;
+    warning?: string;
     jiraStoryId?: string;
     platformType?: "web" | "mobile" | "api" | "automation";
     onCopy?: () => void;
@@ -40,6 +42,7 @@ export function ChatMessage({
     isTable, 
     tableData, 
     qualityReport,
+    warning,
     jiraStoryId,
     platformType,
     onCopy, 
@@ -55,6 +58,7 @@ export function ChatMessage({
     onOpenJira,
 }: ChatMessageProps) {
     const isAssistant = role === "assistant";
+    const [warningDismissed, setWarningDismissed] = useState(false);
     return (
         <div className={cn(
             "w-full py-6 text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-800 transition-colors duration-200", 
@@ -73,6 +77,24 @@ export function ChatMessage({
                     )}
                 </div>
                 <div className="flex-1 overflow-hidden min-w-0 flex flex-col justify-start min-h-[30px]">
+                    {warning && !warningDismissed ? (
+                        <div className="mb-4 rounded-2xl border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 dark:border-yellow-900/30 p-4 text-sm text-yellow-800 dark:text-yellow-400">
+                            <div className="flex items-start gap-3">
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-semibold">Jira story not available</p>
+                                    <p className="mt-1 text-yellow-700 dark:text-yellow-300">{warning}</p>
+                                </div>
+                                <button
+                                    onClick={() => setWarningDismissed(true)}
+                                    className="shrink-0 rounded p-1 text-yellow-600 hover:bg-yellow-100 dark:text-yellow-400 dark:hover:bg-yellow-900/20"
+                                    aria-label="Dismiss warning"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
                     {isLoading ? (
                         <div className="flex items-center gap-1.5 h-7">
                             <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-700 animate-pulse" />

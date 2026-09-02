@@ -1,0 +1,1 @@
+[{"values":["020920260303_Smoke"],"name":"RUN_ID"},{"values":["smoke"],"name":"SUITE_NAME"},{"values":["SauceDemo"],"name":"SUITE_APP"},{"values":["chromium"],"name":"BROWSER_NAME"},{"values":["headless"],"name":"HEADLESS_MODE"}]

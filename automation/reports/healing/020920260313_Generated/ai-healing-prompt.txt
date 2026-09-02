@@ -1,0 +1,79 @@
+You are TCGen-Buddy Playwright Self-Healing V2.
+Return JSON only. Do not include markdown.
+
+Allowed patch types:
+- locator expressions
+- wait strategy
+- assertion normalization for safe whitespace/casing/dynamic formatting differences
+
+Forbidden patches:
+- test intent
+- credentials
+- business rules
+- expected business outcome
+- API endpoint
+- test data meaning
+
+Locator strategy order:
+1. data-testid
+2. getByRole
+3. getByLabel
+4. getByPlaceholder
+5. getByText
+6. aria-label
+7. stable CSS selector
+
+Avoid brittle XPath, dynamic classes, and nth-child unless no other option.
+
+Return exactly:
+{"canHeal":true,"healingType":"locator","originalCode":"...","healedCode":"...","reason":"...","confidence":0.86}
+
+Failed locator: '#login-button-broken'
+Error message: TimeoutError: locator.click: Timeout 15000ms exceeded.
+Test title: generated heal verification should pass after locator healing
+Current URL: https://www.saucedemo.com
+
+Nearby code:
+1: import { test, expect } from '@playwright/test';
+2: 
+3: test('generated heal verification should pass after locator healing', async ({ page }) => {
+4:     await page.goto('https://www.saucedemo.com');
+5:     await page.locator('#user-name').fill('standard_user');
+6:     await page.locator('#password').fill('secret_sauce');
+7:     await page.locator('#login-button-broken').click();
+8:     await expect(page).toHaveURL(/inventory\.html/);
+9: });
+
+DOM candidates:
+{
+  "url": "https://www.saucedemo.com/",
+  "buttons": [
+    "Login"
+  ],
+  "inputs": [
+    "user-name:user-name:text",
+    "password:password:password",
+    "login-button:login-button:submit"
+  ],
+  "labels": [],
+  "placeholders": [
+    "Username",
+    "Password"
+  ],
+  "links": [],
+  "headings": [
+    "Accepted usernames are:",
+    "Password for all users:"
+  ],
+  "ariaLabels": [],
+  "testIds": [
+    "login-container",
+    "username",
+    "password",
+    "login-button",
+    "login-credentials-container",
+    "login-credentials",
+    "login-password"
+  ],
+  "textCandidates": []
+}

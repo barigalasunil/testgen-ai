@@ -1,0 +1,483 @@
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+
+Running 6 tests using 1 worker
+
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  1 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success (16.0s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  2 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success (retry #1) (15.9s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  3 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail (15.8s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  4 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail (retry #1) (15.9s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  5 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success (15.9s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  6 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success (retry #1) (15.9s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  7 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success (15.8s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  8 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success (retry #1) (15.9s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  9 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success (16.0s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  10 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success (retry #1) (15.9s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  11 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success (15.9s)
+[CSV PARSER] Found at: D:\TCGen-Buddy\automation\data\login-data.csv
+  ✘  12 [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success (retry #1) (15.9s)
+
+
+  1) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-54591-tandard-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-be9d8-locked-out-user-should-fail-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-27e98-problem-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-943ab--glitch-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-3f096-r-error-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success 
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-test="login-button-broken"]')[22m
+
+
+       at ..\pages\login.page.ts:25
+
+      23 |     await this.usernameInput.fill(username);
+      24 |     await this.passwordInput.fill(password);
+    > 25 |     await this.loginButton.click();
+         |                            ^
+      26 |   }
+      27 |
+      28 |   async expectLoggedIn() {
+        at LoginPage.login (D:\TCGen-Buddy\automation\pages\login.page.ts:25:28)
+        at D:\TCGen-Buddy\automation\tests\smoke\login.spec.ts:12:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace reports\traces\020920260303_Smoke\smoke-login-SauceDemo-Smok-71e1d--visual-user-should-success-chromium-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6 failed
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for standard_user should success 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for locked_out_user should fail 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for problem_user should success 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for performance_glitch_user should success 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for error_user should success 
+    [chromium] › tests\smoke\login.spec.ts:10:9 › SauceDemo Smoke › login for visual_user should success 
+
+npm warn allow-scripts .npmrc allow-scripts setting is being ignored because --allow-scripts was passed on the command line

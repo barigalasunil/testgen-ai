@@ -162,6 +162,7 @@ export type AiGenerationMeta = {
     providerUsed?: string;
     fallbackUsed?: boolean;
     message?: string;
+    jiraWarning?: string;
     attempts?: {
         model: string;
         status: 'success' | 'failed' | 'skipped';
@@ -205,6 +206,7 @@ export type ConversationMessage = {
     result?: { testCases: TestCase[] } | null;
     qualityReport?: QualityReport;
     error?: string | null;
+    warning?: string | null;
     aiMeta?: AiGenerationMeta;
     aiOptions?: AiGenerationOptions;
     automationRun?: AutomationRunRecord;

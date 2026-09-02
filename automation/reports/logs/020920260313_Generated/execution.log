@@ -1,0 +1,135 @@
+Run ID: 020920260313_Generated
+Target URL: https://www.saucedemo.com
+Browser: chromium
+Suite: generated
+Suite app: Generated Script
+Mode: Headless
+Status: initialized
+Launching chromium...
+Script: heal-verify.spec.ts
+Run ID: 020920260313_Generated
+Launching automation execution...
+Running generated Playwright script...
+[Healing] Healing started
+Status: failed
+[Healing] Failure classified: LOCATOR_NOT_FOUND
+[Healing] Locator failure detected
+[Healing] DOM candidates collected: 15
+[Healing] Re-running failed test (attempt 1/3)
+[Healing] AI suggested replacement locator
+[Healing] Healed script saved
+[Healing] Locator healed: await page.locator('#login-button-broken').click(); -> await page.getByTestId('login-button').click();
+[Healing] Auto-Healed
+Playwright report generated
+Generating Allure report...
+Healing status: AUTO_HEALED
+Running 1 test using 1 worker
+Allure report generated
+  ✘  1 [chromium] › tests\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing (16.0s)
+  ✘  2 [chromium] › tests\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing (retry #1) (15.9s)
+  1) [chromium] › tests\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing 
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('#login-button-broken')[22m
+      5 |     await page.locator('#user-name').fill('standard_user');
+      6 |     await page.locator('#password').fill('secret_sauce');
+    > 7 |     await page.locator('#login-button-broken').click();
+        |                                                ^
+      8 |     await expect(page).toHaveURL(/inventory\.html/);
+      9 | });
+        at D:\TCGen-Buddy\automation\tests\_generated_heal-verify.spec.ts:7:48
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\error-context.md
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\trace.zip
+    Usage:
+        npx playwright show-trace reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('#login-button-broken')[22m
+      5 |     await page.locator('#user-name').fill('standard_user');
+      6 |     await page.locator('#password').fill('secret_sauce');
+    > 7 |     await page.locator('#login-button-broken').click();
+        |                                                ^
+      8 |     await expect(page).toHaveURL(/inventory\.html/);
+      9 | });
+        at D:\TCGen-Buddy\automation\tests\_generated_heal-verify.spec.ts:7:48
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\error-context.md
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\trace.zip
+    Usage:
+        npx playwright show-trace reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+  1 failed
+    [chromium] › tests\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing 
+npm warn allow-scripts .npmrc allow-scripts setting is being ignored because --allow-scripts was passed on the command line
+Passed: 1
+Failed: 0
+Playwright HTML Report: /automation-reports/020920260313_Generated/playwright-html/index.html
+Healing Report: /automation-reports/020920260313_Generated/healing-report.md
+Allure Report: /automation-reports/020920260313_Generated/allure-report/index.html
+  ✘  1 [chromium] › tests\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing (16.0s)
+Running 1 test using 1 worker
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+  1) [chromium] › tests\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing 
+    Call log:
+    [2m  - waiting for locator('#login-button-broken')[22m
+    > 7 |     await page.locator('#login-button-broken').click();
+      6 |     await page.locator('#password').fill('secret_sauce');
+        |                                                ^
+  ✘  2 [chromium] › tests\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing (retry #1) (15.9s)
+      5 |     await page.locator('#user-name').fill('standard_user');
+      8 |     await expect(page).toHaveURL(/inventory\.html/);
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+        at D:\TCGen-Buddy\automation\tests\_generated_heal-verify.spec.ts:7:48
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+      9 | });
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Usage:
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\error-context.md
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\trace.zip
+        npx playwright show-trace reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium\trace.zip
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+    Call log:
+    [2m  - waiting for locator('#login-button-broken')[22m
+      5 |     await page.locator('#user-name').fill('standard_user');
+    TimeoutError: locator.click: Timeout 15000ms exceeded.
+        |                                                ^
+    > 7 |     await page.locator('#login-button-broken').click();
+      6 |     await page.locator('#password').fill('secret_sauce');
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+      8 |     await expect(page).toHaveURL(/inventory\.html/);
+        at D:\TCGen-Buddy\automation\tests\_generated_heal-verify.spec.ts:7:48
+      9 | });
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Error Context: reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\error-context.md
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\video.webm
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\trace.zip
+        npx playwright show-trace reports\traces\020920260313_Generated\_generated_heal-verify-gen-4d35b--pass-after-locator-healing-chromium-retry1\trace.zip
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+    Usage:
+  1 failed
+    [chromium] › tests\_generated_heal-verify.spec.ts:3:5 › generated heal verification should pass after locator healing 
+npm warn allow-scripts .npmrc allow-scripts setting is being ignored because --allow-scripts was passed on the command line

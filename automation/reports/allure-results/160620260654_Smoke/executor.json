@@ -1,8 +1,0 @@
-{
-  "name": "TCGen-Buddy Automation Hub",
-  "type": "playwright",
-  "buildName": "smoke",
-  "buildUrl": "https://www.saucedemo.com",
-  "reportName": "SauceDemo smoke",
-  "reportUrl": "/automation-reports/smoke-20260616-065453/allure-report/index.html"
-}
